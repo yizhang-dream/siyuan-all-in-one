@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest an improvement or workflow.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow
+      description: What are you trying to do in SiYuan/OpenNotebook?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What would make the workflow better?
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Similar plugins, prompts, NotebookLM workflows, screenshots, or papers.
+

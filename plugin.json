@@ -1,0 +1,54 @@
+{
+  "name": "siyuan-all-in-one",
+  "author": "zyz",
+  "url": "https://github.com/zyz/siyuan-all-in-one",
+  "version": "1.0.0",
+  "minAppVersion": "3.2.0",
+  "disabledInPublish": true,
+  "backends": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker"
+  ],
+  "frontends": [
+    "desktop",
+    "mobile",
+    "browser-desktop",
+    "browser-mobile",
+    "desktop-window"
+  ],
+  "displayName": {
+    "default": "All-in-One Flashcards",
+    "zh_CN": "知识闪卡 All-in-One"
+  },
+  "description": {
+    "default": "Concept-centered SM-2 flashcards with AI generation, OpenNotebook integration, and bidirectional concept mindmaps.",
+    "zh_CN": "以概念为中心的 SM-2 闪卡插件，集成 AI 候选生成、OpenNotebook 资源检索和双向概念导图。"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh_CN": "README_zh_CN.md"
+  },
+  "funding": {
+    "openCollective": "",
+    "patreon": "",
+    "github": "",
+    "custom": []
+  },
+  "keywords": [
+    "flashcards",
+    "spaced repetition",
+    "SM-2",
+    "AI",
+    "mindmap",
+    "闪卡",
+    "间隔重复",
+    "思维导图",
+    "概念图谱",
+    "OpenNotebook"
+  ]
+}

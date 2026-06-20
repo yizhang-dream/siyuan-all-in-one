@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dev/
+release/
+.deploy-backups/
+.env
+.env.*
+*.zip
+*.db
+*.stackdump
+NUL
+_temp_*
+*.log
+.DS_Store
+Thumbs.db

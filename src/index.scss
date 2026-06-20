@@ -1,0 +1,53 @@
+/*
+ * siyuan-all-in-one — 全局样式
+ * 字号/字体/行高全部跟随 SiYuan 主题变量，自动适配暗色/亮色主题和用户字号设置。
+ *
+ * 字号 token 体系（基于 SiYuan --b3-font-size 派生）：
+ *   --aio-fs-xs   极小（徽章/角色标签）
+ *   --aio-fs-sm   小（辅助 meta/hint）
+ *   --aio-fs-base 正文（跟随 SiYuan 用户字号）
+ *   --aio-fs-md   略大（标题/卡片正文）
+ *   --aio-fs-lg   大（面板标题 h2）
+ *   --aio-fs-xl   超大（统计数字）
+ */
+
+.all-in-one-app {
+    /* 字号 token：--aio-fs-live 由 index.ts 从 SiYuan DOM 实时注入到 :root。
+       这里不做定义，直接从 :root 继承，避免自引用导致无效值。 */
+    --aio-fs-xs: calc(var(--aio-fs-live, 14px) - 4px);
+    --aio-fs-sm: calc(var(--aio-fs-live, 14px) - 2px);
+    --aio-fs-base: var(--aio-fs-live, 14px);
+    --aio-fs-md: calc(var(--aio-fs-live, 14px) + 1px);
+    --aio-fs-lg: calc(var(--aio-fs-live, 14px) + 4px);
+    --aio-fs-xl: calc(var(--aio-fs-live, 14px) + 8px);
+
+    font-family: var(--aio-ff-live, var(--b3-font-family));
+    font-size: var(--aio-fs-base);
+    line-height: var(--aio-lh-live, 1.625);
+    color: var(--b3-theme-on-background);
+    word-break: break-word;
+    overflow-wrap: break-word;
+
+    button {
+        font-family: var(--aio-ff-live, var(--b3-font-family));
+        cursor: pointer;
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+
+    code, pre {
+        font-family: var(--b3-font-family-code, monospace);
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb {
+        background: var(--b3-scrollbar-color);
+        border-radius: 3px;
+        &:hover { background: var(--b3-scrollbar-hover-color); }
+    }
+    ::-webkit-scrollbar-track { background: transparent; }
+}
+
+.b3-button--small {
+    font-size: var(--aio-fs-sm, 12px) !important;
+    padding: 4px 8px !important;
+}
