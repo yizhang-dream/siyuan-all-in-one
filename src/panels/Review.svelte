@@ -136,7 +136,9 @@
   $: currentCard = dueCards[currentIndex];
   $: hasMore = currentIndex < dueCards.length;
   $: remainingToday = dailyLimit - currentIndex;
-  $: totalFiltered = dueCards.length; // 实际加载的卡片数（受限于 dailyLimit）
+  $: totalFiltered = dueCards.length;
+  $: drillCount = dueCards.filter((card) => card?.status === 'drill').length;
+  $: isDrillCard = currentCard?.status === 'drill';
   $: if (queue?.key && queue.key !== appliedQueueKey && queue.key !== dismissedQueueKey) refresh();
 
   function exitFilteredQueue() {
@@ -228,12 +230,18 @@
       <div class="review-bar">
         <div class="review-bar-fill" style="width: {((currentIndex + 1) / dueCards.length) * 100}%"></div>
       </div>
+      {#if drillCount > 0}
+        <span class="review-drill-badge" title="连续 2 次遗忘进入机械练习">
+          <svg><use xlink:href="#iconRefresh"></use></svg>
+          {drillCount} 张机械练习
+        </span>
+      {/if}
     </div>
 
     <div class="review-card" class:flipped on:click={() => !flipped && flip()} on:keydown={handleReviewCardKeydown} role="button" tabindex="0" bind:this={reviewCardEl}>
       <div class="review-card-inner">
         <div class="review-card-front">
-          <div class="review-card-label">问题</div>
+          <div class="review-card-label">问题{#if isDrillCard} <span class="review-drill-chip">机械练习</span>{/if}</div>
           <div class="review-card-text">{@html renderToHTML(currentCard.question)}</div>
           {#if currentCard.hint}
             <div class="review-card-hint review-card-hint--front">
@@ -337,6 +345,18 @@
     width: 100%; max-width: 720px; display: flex; align-items: center; gap: 8px; font-size: var(--aio-fs-sm); color: var(--b3-theme-on-surface);
     .review-bar { flex: 1; height: 4px; background: var(--b3-theme-surface-lighter); border-radius: 2px; overflow: hidden; }
     .review-bar-fill { height: 100%; background: var(--b3-theme-primary); border-radius: 2px; transition: width 0.3s; }
+  }
+  .review-drill-badge {
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--b3-theme-warning-lightest); color: var(--b3-theme-warning);
+    font-size: var(--aio-fs-xs); white-space: nowrap;
+    svg { width: 12px; height: 12px; }
+  }
+  .review-drill-chip {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--b3-theme-warning); color: #fff;
+    font-size: var(--aio-fs-xs); vertical-align: middle;
   }
 
   .review-card {
