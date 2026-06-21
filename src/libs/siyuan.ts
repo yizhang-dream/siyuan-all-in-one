@@ -34,7 +34,7 @@ async function safeApi(endpoint: string, payload: any): Promise<any> {
  */
 export async function createDoc(notebookId: string, title: string): Promise<string> {
     // 确保标题有效，防止创建空标题文档
-    const safeTitle = title?.trim() || '知识闪卡';
+    const safeTitle = sanitizeDocTitle(title) || '知识闪卡';
     // 用 createDocWithMd 创建，path 参数决定文档标题
     const resp = await safeApi('/api/filetree/createDocWithMd', {
         notebook: notebookId,
@@ -103,6 +103,20 @@ export async function insertBlock(
     return ops[0]?.id || '';
 }
 
+export async function setBlockAttrs(id: string, attrs: Record<string, string>): Promise<void> {
+    if (!id) return;
+    await safeApi('/api/attr/setBlockAttrs', { id, attrs });
+}
+
+export async function updateBlock(id: string, markdown: string): Promise<void> {
+    if (!id || !markdown.trim()) return;
+    await safeApi('/api/block/updateBlock', {
+        dataType: 'markdown',
+        data: markdown,
+        id,
+    });
+}
+
 /**
  * 获取文档最后一个子块 id（用于链式追加）。
  */
@@ -141,11 +155,8 @@ export async function writeMindmapBlock(
         // 树形展开需要比纯列表更多的空间
         const estimatedHeight = Math.max(400, Math.min(3000, numLines * 55 + 100));
         // SiYuan 块通过 style 属性控制高度（与用户拖拽调整大小相同机制）
-        await safeApi('/api/attr/setBlockAttrs', {
-            id: blockId,
-            attrs: {
-                style: `height: ${estimatedHeight}px; overflow-y: auto;`,
-            },
+        await setBlockAttrs(blockId, {
+            style: `height: ${estimatedHeight}px; overflow-y: auto;`,
         });
     }
 }
@@ -201,7 +212,7 @@ export function openDoc(docId: string, app: any): void {
 export async function saveToSiyuan(content: string, title?: string): Promise<string> {
     if (!content.trim()) return '';
 
-    const docTitle = title || stripMath(content).replace(/[#*`\n\r\$\$]/g, '').slice(0, 50).trim() || '知识闪卡';
+    const docTitle = sanitizeDocTitle(title || stripMath(content).replace(/[#*`\n\r\$\$]/g, '').slice(0, 50)) || '知识闪卡';
     const notebookId = await ensureNotebook('知识闪卡');
     const docId = await createDoc(notebookId, docTitle);
 
@@ -211,6 +222,14 @@ export async function saveToSiyuan(content: string, title?: string): Promise<str
     }
 
     return docId;
+}
+
+export function sanitizeDocTitle(title: string = ''): string {
+    return String(title || '')
+        .replace(/[\\/:*?"<>|#\[\]\n\r\t]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80);
 }
 
 // ─── 公式转换（移植自 backup_to_siyuan.py） ──────────────

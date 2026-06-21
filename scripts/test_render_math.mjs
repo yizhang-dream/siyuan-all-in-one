@@ -19,10 +19,24 @@ import { conceptsToMindmap } from '../src/libs/render/concept-mindmap';
 assert.equal(escapeHTML('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
 
 const fallbackHtml = renderToHTML('Line 1\\n$E = mc^2$ and \\\\(a+b\\\\)');
-assert.match(fallbackHtml, /Line 1<br>/);
+assert.equal(fallbackHtml, '<p>Line 1 $E = mc^2$ and \\\\(a+b\\\\)</p>');
 assert.match(fallbackHtml, /\\$E = mc\\^2\\$/);
 assert.match(fallbackHtml, /\\\\\\(a\\+b\\\\\\)/);
 assert.doesNotMatch(fallbackHtml, /<script|<img/i);
+
+const markdownHtml = renderToHTML([
+  '# Heading',
+  '',
+  '- **strong** item',
+  '- \`code\` item',
+  '',
+  'See [link](https://example.test).',
+].join('\\n'));
+assert.match(markdownHtml, /<h1>Heading<\\/h1>/);
+assert.match(markdownHtml, /<ul>/);
+assert.match(markdownHtml, /<strong>strong<\\/strong>/);
+assert.match(markdownHtml, /<code>code<\\/code>/);
+assert.match(markdownHtml, /<a href="https:\\/\\/example\\.test"/);
 
 (globalThis as any).window = {
   Lute: {
@@ -88,6 +102,7 @@ assert.doesNotMatch(conceptMap.markdown, /\\n\\$\\$/);
 console.log(JSON.stringify({
   escaped: true,
   fallbackMathPreserved: true,
+  fallbackMarkdown: true,
   lutePreferred: true,
   inlineMindmapMath: true,
 }, null, 2));

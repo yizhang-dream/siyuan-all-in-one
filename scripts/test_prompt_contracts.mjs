@@ -63,15 +63,23 @@ for (const prompt of prompts) {
   assert.match(prompt, /STRICT OUTPUT CONTRACT/);
   assert.match(prompt, /Return one JSON object only/);
   assert.match(prompt, /sourceRefs/);
+  assert.match(prompt, /Evidence budget/);
   assert.match(prompt, /uncertain|warnings/);
 }
 
 assert.match(prompts[2], /FLASHCARD QUALITY CONTRACT/);
 assert.match(prompts[2], /Test one idea per card/);
+assert.match(prompts[2], /Do not ask questions whose answer is absent from sourceRefs/);
+assert.match(prompts[2], /Do not turn a heading into a card/);
+assert.match(prompts[1], /RELATION RUBRIC/);
+assert.ok(prompts[1].includes('parent_child: use only for true type/subtype'));
+assert.ok(prompts[1].includes('related: use only as a weak fallback'));
 
 console.log(JSON.stringify({
   prompts: prompts.length,
   hasQualityContract: prompts[2].includes('FLASHCARD QUALITY CONTRACT'),
+  hasEvidenceBudget: prompts.every((prompt) => prompt.includes('Evidence budget')),
+  hasRelationRubric: prompts[1].includes('RELATION RUBRIC'),
 }, null, 2));
 `, 'utf8');
 

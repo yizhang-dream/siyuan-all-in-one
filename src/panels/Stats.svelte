@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { showMessage, confirm } from 'siyuan';
 
   export let cardStore: any;
+  export let openImportPanel: () => void = () => {};
 
   let stats = { total: 0, new: 0, due: 0, learning: 0, reviewing: 0, decks: [] as any[] };
 
@@ -10,47 +10,6 @@
 
   function refresh() {
     stats = cardStore.getStats();
-  }
-
-  async function exportCards() {
-    const data = cardStore.exportCards();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `flashcards-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showMessage(`已导出 ${data.length} 张卡片`);
-  }
-
-  async function importCards() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e: any) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        if (!Array.isArray(data)) { showMessage('无效文件：需要 JSON 数组'); return; }
-        const result = cardStore.importCards(data);
-        await cardStore.save();
-        refresh();
-        showMessage(`导入完成：新增 ${result.added}，更新 ${result.updated}`);
-      } catch (err: any) { showMessage(`导入失败：${err.message}`); }
-    };
-    input.click();
-  }
-
-  function clearAll() {
-    confirm('⚠️', '确定删除所有卡片吗？此操作不可撤销。', () => {
-      cardStore.clear();
-      cardStore.save();
-      refresh();
-      showMessage('已清空');
-    });
   }
 </script>
 
@@ -86,10 +45,15 @@
 
   <!-- 数据管理 -->
   <h3>数据管理</h3>
-  <div class="stats-actions">
-    <button class="b3-button b3-button--outline" on:click={exportCards}>导出</button>
-    <button class="b3-button b3-button--outline" on:click={importCards}>导入</button>
-    <button class="b3-button b3-button--outline stats-danger" on:click={clearAll}>清空全部</button>
+  <div class="stats-data-panel">
+    <div>
+      <strong>备份、迁移与恢复</strong>
+      <p>统一在导入与导出面板处理卡片、概念图和导图关联，避免只迁移卡片造成链接丢失。</p>
+    </div>
+    <button class="b3-button b3-button--outline stats-link-button" on:click={openImportPanel}>
+      <svg><use xlink:href="#iconDownload"></use></svg>
+      打开导入导出
+    </button>
   </div>
 </div>
 
@@ -123,6 +87,44 @@
   .deck-bar-fill { height: 100%; background: var(--b3-theme-primary); border-radius: 4px; transition: width 0.3s; }
   .deck-count { font-size: var(--aio-fs-sm); width: 30px; text-align: right; flex-shrink: 0; }
 
-  .stats-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .stats-danger { color: var(--b3-card-error-color) !important; }
+  .stats-data-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+
+    strong {
+      display: block;
+      font-size: var(--aio-fs-base);
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin: 0;
+      font-size: var(--aio-fs-sm);
+      line-height: 1.5;
+      color: var(--b3-theme-on-surface);
+      opacity: 0.72;
+    }
+  }
+
+  .stats-link-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+
+    svg { width: 14px; height: 14px; }
+  }
+
+  @media (max-width: 720px) {
+    .stats-data-panel {
+      align-items: stretch;
+      flex-direction: column;
+    }
+  }
 </style>

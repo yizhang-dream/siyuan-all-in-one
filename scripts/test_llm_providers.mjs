@@ -19,6 +19,7 @@ import {
   callLLM,
   extractLLMContent,
   fetchProviderModels,
+  getProviderCapabilities,
   resolveLLMConfig,
 } from '../src/libs/llm';
 
@@ -55,11 +56,31 @@ assert.equal(resolveLLMConfig(appConfig, 'volcano', 'doubao-seed').endpoint, 'ht
 assert.equal(resolveLLMConfig(appConfig, 'zhipu', 'glm-4-plus').endpoint, 'https://open.bigmodel.cn/api/paas/v4/chat/completions');
 assert.equal(resolveLLMConfig(appConfig, 'local', 'qwen2.5').endpoint, 'http://localhost:11434/v1/chat/completions');
 
+assert.deepEqual(getProviderCapabilities('gemini'), {
+  structuredOutputStrategy: 'gemini-native',
+  structuredOutputLabel: 'JSON 原生',
+  usesNativeJsonConstraint: true,
+  fallbackOnUnsupported: true,
+});
+assert.deepEqual(getProviderCapabilities('anthropic'), {
+  structuredOutputStrategy: 'prompt-only',
+  structuredOutputLabel: 'JSON 提示词',
+  usesNativeJsonConstraint: false,
+  fallbackOnUnsupported: false,
+});
+assert.deepEqual(getProviderCapabilities('local'), {
+  structuredOutputStrategy: 'openai-compatible',
+  structuredOutputLabel: 'JSON mode + 回退',
+  usesNativeJsonConstraint: true,
+  fallbackOnUnsupported: true,
+});
+
 const deepseekRequest = buildLLMRequest(messages, {
   endpoint: 'https://api.deepseek.com/v1/chat/completions',
   model: 'deepseek-chat',
   apiKey: 'ds-key',
   providerId: 'deepseek',
+  responseFormat: 'text',
   maxTokens: 123,
   temperature: 0.2,
   timeout: 1000,
@@ -74,6 +95,7 @@ const openaiNoKeyRequest = buildLLMRequest(messages, {
   model: 'qwen2.5',
   apiKey: '',
   providerId: 'local',
+  responseFormat: 'text',
   maxTokens: 123,
   temperature: 0.2,
   timeout: 1000,
@@ -86,6 +108,7 @@ const geminiRequest = buildLLMRequest(messages, {
   model: 'gemini-2.5-flash',
   apiKey: 'gm-key',
   providerId: 'gemini',
+  responseFormat: 'json_object',
   maxTokens: 456,
   temperature: 0.4,
   timeout: 1000,
@@ -94,12 +117,14 @@ assert.equal(geminiRequest.headers['x-goog-api-key'], 'gm-key');
 assert.equal(geminiRequest.body.systemInstruction.parts[0].text, 'Use strict JSON.');
 assert.deepEqual(geminiRequest.body.contents.map((c: any) => c.role), ['user', 'model']);
 assert.equal(geminiRequest.body.generationConfig.maxOutputTokens, 456);
+assert.equal(geminiRequest.body.generationConfig.responseMimeType, 'application/json');
 
 const anthropicRequest = buildLLMRequest(messages, {
   endpoint: 'https://api.anthropic.com/v1/messages',
   model: 'claude-3-5-sonnet-latest',
   apiKey: 'claude-key',
   providerId: 'anthropic',
+  responseFormat: 'json_object',
   maxTokens: 789,
   temperature: 0.1,
   timeout: 1000,
@@ -109,6 +134,19 @@ assert.equal(anthropicRequest.headers['anthropic-version'], '2023-06-01');
 assert.equal(anthropicRequest.body.system, 'Use strict JSON.');
 assert.deepEqual(anthropicRequest.body.messages.map((m: any) => m.role), ['user', 'assistant']);
 assert.equal(anthropicRequest.body.max_tokens, 789);
+assert.equal('response_format' in anthropicRequest.body, false);
+
+const openaiJsonRequest = buildLLMRequest(messages, {
+  endpoint: 'https://api.openai.com/v1/chat/completions',
+  model: 'gpt-4.1-mini',
+  apiKey: 'openai-key',
+  providerId: 'openai',
+  responseFormat: 'json_object',
+  maxTokens: 321,
+  temperature: 0.2,
+  timeout: 1000,
+});
+assert.deepEqual(openaiJsonRequest.body.response_format, { type: 'json_object' });
 
 assert.equal(
   extractLLMContent({ choices: [{ message: { content: [{ text: 'A' }, { text: 'B' }] } }] }, 'openai'),
@@ -155,6 +193,7 @@ assert.equal(await callLLM(messages, {
   model: 'deepseek-chat',
   apiKey: 'ds-key',
   providerId: 'deepseek',
+  responseFormat: 'text',
   maxTokens: 128,
   temperature: 0.2,
   timeout: 1000,
@@ -166,6 +205,7 @@ assert.equal(await callLLM(messages, {
   model: 'gemini-2.5-flash',
   apiKey: 'gm-key',
   providerId: 'gemini',
+  responseFormat: 'text',
   maxTokens: 128,
   temperature: 0.2,
   timeout: 1000,
@@ -177,6 +217,7 @@ assert.equal(await callLLM(messages, {
   model: 'claude-3-5-sonnet-latest',
   apiKey: 'claude-key',
   providerId: 'anthropic',
+  responseFormat: 'text',
   maxTokens: 128,
   temperature: 0.2,
   timeout: 1000,
@@ -199,6 +240,8 @@ console.log(JSON.stringify({
   endpoints: true,
   requestAdapters: true,
   responseAdapters: true,
+  providerCapabilities: true,
+  structuredOutputAdapters: true,
   callLLMProviderDispatch: true,
   modelListAuth: true,
 }, null, 2));

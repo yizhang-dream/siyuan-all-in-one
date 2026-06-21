@@ -1,6 +1,6 @@
 import type { ConceptCandidate } from '../../types/concept';
 import type { PromptSourceChunk } from './extract-concepts';
-import { buildPromptContract } from './contracts';
+import { buildPromptContract, buildRelationRubric } from './contracts';
 
 export function buildInferRelationsPrompt(
     concepts: ConceptCandidate[],
@@ -25,6 +25,8 @@ export function buildInferRelationsPrompt(
 5. 低置信度或证据不足的关系放入 uncertain。
 6. 输出语言使用 ${language}。
 7. 只输出 JSON，不要 Markdown，不要代码块，不要解释。
+
+${buildRelationRubric()}
 
 输出 JSON schema：
 {

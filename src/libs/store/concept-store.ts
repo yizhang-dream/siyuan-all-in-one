@@ -17,7 +17,7 @@ const VALID_RELATION_TYPES: RelationType[] = [
     'related',
 ];
 
-const VALID_SOURCE_TYPES: SourceRef['type'][] = ['opennotebook', 'siyuan', 'manual', 'pdf', 'url'];
+const VALID_SOURCE_TYPES: SourceRef['type'][] = ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url'];
 
 function genId(prefix: string): string {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -203,6 +203,70 @@ export class ConceptStore {
     clear(): void {
         this.concepts = [];
         this.relations = [];
+    }
+
+    importGraph(rawConcepts: any[] = [], rawRelations: any[] = []): {
+        conceptsAdded: number;
+        conceptsUpdated: number;
+        relationsAdded: number;
+        relationsUpdated: number;
+        relationsSkipped: number;
+    } {
+        let conceptsAdded = 0;
+        let conceptsUpdated = 0;
+        let relationsAdded = 0;
+        let relationsUpdated = 0;
+        let relationsSkipped = 0;
+
+        for (const raw of rawConcepts) {
+            const node = cleanConceptNode(raw);
+            const existing = this.getById(node.id);
+            if (existing) {
+                Object.assign(existing, node);
+                conceptsUpdated++;
+            } else {
+                this.concepts.push(node);
+                conceptsAdded++;
+            }
+        }
+
+        const knownIds = new Set(this.concepts.map((concept) => concept.id));
+        for (const raw of rawRelations) {
+            const relation = cleanRelation(raw);
+            if (!relation.fromId || !relation.toId || !knownIds.has(relation.fromId) || !knownIds.has(relation.toId)) {
+                relationsSkipped++;
+                continue;
+            }
+            const existing = this.relations.find((item) => item.id === relation.id)
+                || this.relations.find((item) => item.fromId === relation.fromId && item.toId === relation.toId && item.type === relation.type);
+            if (existing) {
+                Object.assign(existing, relation);
+                relationsUpdated++;
+            } else {
+                this.relations.push(relation);
+                relationsAdded++;
+            }
+        }
+
+        this.syncRelationLinks();
+        return { conceptsAdded, conceptsUpdated, relationsAdded, relationsUpdated, relationsSkipped };
+    }
+
+    private syncRelationLinks(): void {
+        const byId = new Map(this.concepts.map((concept) => [concept.id, concept]));
+        for (const relation of this.relations) {
+            const from = byId.get(relation.fromId);
+            const to = byId.get(relation.toId);
+            if (!from || !to) continue;
+            if (relation.type === 'parent_child') {
+                if (!from.childIds.includes(to.id)) from.childIds.push(to.id);
+                if (!to.parentIds.includes(from.id)) to.parentIds.push(from.id);
+            }
+            if (relation.type === 'related') {
+                if (!from.relatedIds.includes(to.id)) from.relatedIds.push(to.id);
+                if (!to.relatedIds.includes(from.id)) to.relatedIds.push(from.id);
+            }
+        }
     }
 }
 

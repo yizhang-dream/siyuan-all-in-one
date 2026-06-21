@@ -8,6 +8,19 @@
 import type { SourceRef, CardType } from './concept';
 
 export type CardStatus = 'new' | 'learning' | 'review' | 'buried';
+export type ReviewScheduler = 'sm2' | 'fsrs';
+
+export interface FSRSCardState {
+    stability: number;
+    difficulty: number;
+    retrievability?: number;
+    state: 'new' | 'learning' | 'review' | 'relearning';
+    scheduledDays: number;
+    elapsedDays: number;
+    learningSteps: number;
+    lastReview?: number;
+    lastRating?: number;
+}
 
 /** 单张闪卡 */
 export interface Card {
@@ -21,6 +34,8 @@ export interface Card {
     tags: string[];
     cardType: CardType;
     sourceRefs: SourceRef[];
+    scheduler?: ReviewScheduler;
+    fsrs?: FSRSCardState;
     // SM-2 字段
     due: number;
     interval: number;

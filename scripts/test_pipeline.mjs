@@ -44,6 +44,81 @@ assert.equal(emptyResult.relations.length, 0);
 assert.equal(emptyResult.cards.length, 0);
 assert.equal(emptyResult.warnings.length, 1);
 
+const originalFetch = (globalThis as any).fetch;
+const llmCalls: any[] = [];
+const jsonModeFallbackResponses = [
+  {
+    concepts: [
+      {
+        tempId: 'json-c1',
+        title: 'JSON mode fallback',
+        summary: 'Pipeline retries without native JSON mode when a provider rejects response_format.',
+        confidence: 0.91,
+        sourceRefs: ['json-source'],
+      },
+    ],
+  },
+  { relations: [] },
+  {
+    cards: [
+      {
+        conceptTempId: 'json-c1',
+        cardType: 'qa',
+        front: 'What happens when JSON mode is unsupported?',
+        back: 'The pipeline retries without native JSON mode and still parses strict JSON.',
+        confidence: 0.9,
+        sourceRefs: ['json-source'],
+      },
+    ],
+  },
+];
+(globalThis as any).fetch = async (_url: string, init: any) => {
+  const body = JSON.parse(init.body || '{}');
+  llmCalls.push(body);
+  if (body.response_format?.type === 'json_object') {
+    return {
+      ok: false,
+      status: 400,
+      text: async () => 'unsupported parameter: response_format',
+      json: async () => ({}),
+    };
+  }
+  const payload = jsonModeFallbackResponses.shift() || {};
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
+    text: async () => '',
+  };
+};
+
+const jsonModeFallback = await runPromptPipeline(
+  [
+    {
+      id: 'json-source',
+      text: 'Some OpenAI-compatible providers reject response_format even when they can return JSON by prompt.',
+      type: 'manual',
+    },
+  ],
+  {
+    llmConfig: {
+      endpoint: 'https://example.test/v1/chat/completions',
+      model: 'local-json-ish',
+      providerId: 'local',
+      maxTokens: 2048,
+      temperature: 0.1,
+      timeout: 1000,
+    },
+    targetCardCount: 1,
+  }
+);
+(globalThis as any).fetch = originalFetch;
+
+assert.equal(jsonModeFallback.concepts.length, 1);
+assert.equal(jsonModeFallback.cards.length, 1);
+assert.equal(llmCalls.filter((body) => body.response_format?.type === 'json_object').length, 3);
+assert.equal(llmCalls.filter((body) => !body.response_format).length, 3);
+
 const recovered = await runPromptPipeline(
   [
     {
@@ -452,6 +527,131 @@ const reloadedCards = reloadedCardStore.getAll();
 assert.equal(reloadedCards[0].conceptId, summary.conceptIdByTempId.c2);
 assert.equal(reloadedCards[0].cardType, 'qa');
 assert.equal(reloadedCards[0].sourceRefs.length, 1);
+
+const selfRelationPlugin = new MemoryPlugin();
+const selfRelationConceptStore = new ConceptStore(selfRelationPlugin);
+const selfRelationCardStore = new CardStore(selfRelationPlugin);
+await selfRelationConceptStore.load();
+await selfRelationCardStore.load();
+
+const selfRelationSummary = await confirmPipelineResult(
+  {
+    concepts: [
+      {
+        tempId: 'loop',
+        title: 'Self relation guard',
+        summary: 'Relations should not connect a concept to itself.',
+        sourceRefs: [{ type: 'manual', sourceId: 'self-source', chunkId: 'self-source', quote: 'Self loops are not useful here.' }],
+        confidence: 0.95,
+      },
+    ],
+    relations: [
+      {
+        fromTempId: 'loop',
+        toTempId: 'loop',
+        type: 'related',
+        sourceRefs: [{ type: 'manual', sourceId: 'self-source', chunkId: 'self-source', quote: 'Self loops are not useful here.' }],
+        confidence: 0.95,
+      },
+    ],
+    cards: [],
+    uncertain: [],
+    warnings: [],
+  },
+  selfRelationConceptStore,
+  selfRelationCardStore,
+  {
+    acceptedConceptTempIds: ['loop'],
+    acceptedRelationIndexes: [0],
+    acceptedCardIndexes: [],
+    save: false,
+  }
+);
+assert.equal(selfRelationSummary.createdConcepts.length, 1);
+assert.equal(selfRelationSummary.createdRelations.length, 0);
+assert.equal(selfRelationConceptStore.getRelations().length, 0);
+assert.ok(selfRelationSummary.warnings.some((warning) => warning.includes('self relation')));
+
+const editedPlugin = new MemoryPlugin();
+const editedConceptStore = new ConceptStore(editedPlugin);
+const editedCardStore = new CardStore(editedPlugin);
+await editedConceptStore.load();
+await editedCardStore.load();
+
+const editedResult: PipelineResult = {
+  concepts: [
+    {
+      tempId: 'root',
+      title: '用户改名后的核心概念',
+      summary: '用户在确认前编辑过的摘要。',
+      sourceRefs: [{ type: 'manual', sourceId: 'edited-source', chunkId: 'chunk-1', quote: '核心概念证据' }],
+      confidence: 0.99,
+      tags: ['edited'],
+    },
+    {
+      tempId: 'detail',
+      title: '用户改名后的细节概念',
+      summary: '关系端点会指向这个编辑后的候选。',
+      sourceRefs: [{ type: 'manual', sourceId: 'edited-source', chunkId: 'chunk-2', quote: '细节概念证据' }],
+      confidence: 0.98,
+      tags: ['edited'],
+    },
+  ],
+  relations: [
+    {
+      fromTempId: 'detail',
+      toTempId: 'root',
+      type: 'prerequisite',
+      sourceRefs: [{ type: 'manual', sourceId: 'edited-source', chunkId: 'chunk-3', quote: '用户编辑后的关系证据' }],
+      confidence: 0.97,
+    },
+  ],
+  cards: [
+    {
+      conceptTempId: 'root',
+      cardType: 'compare',
+      front: '这张编辑后的卡片应该关联到哪个概念？',
+      back: '应该关联到用户选择的 root 概念，而不是模型原始建议。',
+      hint: '确认前可编辑归属',
+      sourceRefs: [{ type: 'manual', sourceId: 'edited-source', chunkId: 'chunk-4', quote: '用户编辑后的卡片证据' }],
+      confidence: 0.96,
+    },
+  ],
+  uncertain: [],
+  warnings: [],
+};
+
+const editedSummary = await confirmPipelineResult(editedResult, editedConceptStore, editedCardStore, {
+  acceptedConceptTempIds: ['root', 'detail'],
+  acceptedRelationIndexes: [0],
+  acceptedCardIndexes: [0],
+  deck: '编辑后确认',
+  tags: ['edited-confirmation'],
+});
+
+assert.equal(editedSummary.createdConcepts.length, 2);
+assert.equal(editedSummary.createdRelations.length, 1);
+assert.equal(editedSummary.createdCards.length, 1);
+assert.equal(editedSummary.skippedCards.length, 0);
+
+const rootId = editedSummary.conceptIdByTempId.root;
+const detailId = editedSummary.conceptIdByTempId.detail;
+const editedConcepts = editedConceptStore.getAll();
+const editedRelations = editedConceptStore.getRelations();
+const editedCards = editedCardStore.getAll();
+
+assert.equal(editedConceptStore.getById(rootId)?.title, '用户改名后的核心概念');
+assert.equal(editedConceptStore.getById(detailId)?.title, '用户改名后的细节概念');
+assert.equal(editedRelations.length, 1);
+assert.equal(editedRelations[0].fromId, detailId);
+assert.equal(editedRelations[0].toId, rootId);
+assert.equal(editedRelations[0].type, 'prerequisite');
+assert.equal(editedCards.length, 1);
+assert.equal(editedCards[0].conceptId, rootId);
+assert.equal(editedCards[0].cardType, 'compare');
+assert.equal(editedConceptStore.getById(rootId)?.cardIds.includes(editedCards[0].id), true);
+assert.equal(editedConceptStore.getById(detailId)?.cardIds.includes(editedCards[0].id), false);
+assert.equal(editedConcepts.every((concept) => concept.tags.includes('edited')), true);
 
 console.log(JSON.stringify({
   createdConcepts: summary.createdConcepts.length,

@@ -31,6 +31,9 @@ assert.match(js, /Mindmap|mindmapStore|mindmaps/, 'bundle should contain mindmap
 assert.match(js, /Review|cardStore|cards/, 'bundle should contain review/card code');
 assert.match(js, /Diagnostics|AI 干跑|运行检查/, 'bundle should contain diagnostics panel code');
 assert.match(js, /copy-diagnostic-report|siyuan-all-in-one-diagnostics/, 'bundle should contain copyable diagnostics report code');
+assert.match(js, /structuredOutputStrategy/, 'bundle should contain structured output strategy diagnostics');
+assert.match(js, /jsonFallbackOnUnsupported/, 'bundle should contain JSON fallback diagnostics');
+assert.match(js, /JSON mode \+ 回退|JSON 原生|JSON 提示词/, 'bundle should contain human-readable structured output labels');
 assert.match(js, /sourceRefs|uncertain|warnings/, 'bundle should contain source/warning pipeline fields');
 assert.match(css, /all-in-one|aio-|concept|mindmap|notebook/i, 'bundle CSS should contain plugin styles');
 
@@ -51,6 +54,7 @@ console.log(JSON.stringify({
     review: true,
     diagnostics: true,
     copyableDiagnostics: true,
+    providerStructuredOutputDiagnostics: true,
     sourceRefs: true,
     noConfiguredSecretsInBundle: true,
   },

@@ -83,7 +83,7 @@
   }
 
   async function deleteModel(id: string, name: string) {
-    confirm('⚠️', `确定删除模型「${name}」？`, async () => {
+    confirm('确认删除', `确定删除模型「${name}」？`, async () => {
       if (!client) return;
       try {
         await client.request('DELETE', `/models/${id}`);
@@ -118,8 +118,9 @@
     <section>
       <div class="mp-section-header">
         <h3>模型角色分配</h3>
-        <button class="b3-button b3-button--small b3-button--outline" on:click={autoAssign} disabled={saving === 'auto'}>
-          {saving === 'auto' ? '分配中...' : '🔄 自动分配'}
+        <button class="b3-button b3-button--small b3-button--outline mp-icon-button" on:click={autoAssign} disabled={saving === 'auto'}>
+          <svg><use xlink:href="#iconRefresh"></use></svg>
+          <span>{saving === 'auto' ? '分配中...' : '自动分配'}</span>
         </button>
       </div>
       <p class="mp-hint">为每个功能角色选择模型。未设置的角色会回退到对话模型。</p>
@@ -178,6 +179,8 @@
     border-bottom: 1px solid var(--b3-theme-surface-lighter); padding-bottom: 4px; }
   .mp-count { font-size: var(--aio-fs-sm); opacity: 0.5; font-weight: 400; }
   .mp-section-header { display: flex; align-items: center; justify-content: space-between; }
+  .mp-icon-button { display: inline-flex; align-items: center; gap: 6px; }
+  .mp-icon-button svg { width: 14px; height: 14px; }
   .mp-hint { font-size: var(--aio-fs-xs); opacity: 0.5; margin: 0; }
 
   /* 角色分配行 */

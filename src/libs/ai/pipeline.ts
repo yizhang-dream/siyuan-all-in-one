@@ -256,6 +256,10 @@ export async function confirmPipelineResult(
             ? acceptedRelations.has(index)
             : relation.confidence >= minRelationConfidence;
         if (!shouldAccept) return;
+        if (relation.fromTempId === relation.toTempId) {
+            summary.warnings.push(`Skipped relation ${index}: self relation is not supported`);
+            return;
+        }
 
         const fromId = summary.conceptIdByTempId[relation.fromTempId];
         const toId = summary.conceptIdByTempId[relation.toTempId];
@@ -342,7 +346,13 @@ async function callJsonObject(prompt: string, config?: LLMConfig): Promise<any> 
         },
         { role: 'user', content: prompt },
     ];
-    const content = await callLLM(messages, config);
+    let content = '';
+    try {
+        content = await callLLM(messages, { ...config, responseFormat: 'json_object' });
+    } catch (err: any) {
+        if (!isJsonModeUnsupported(err)) throw err;
+        content = await callLLM(messages, config);
+    }
     try {
         return coerceStepJson(content);
     } catch (err: any) {
@@ -379,6 +389,12 @@ function coerceStepJson(raw: any): any {
         return parseLLMJSON(embeddedText, 'object');
     }
     return raw;
+}
+
+function isJsonModeUnsupported(err: any): boolean {
+    if (!(err instanceof LLMError)) return false;
+    if (![400, 404, 422].includes(err.status)) return false;
+    return /response_format|json|schema|unsupported|unknown parameter|invalid/i.test(err.message || '');
 }
 
 function extractEmbeddedJsonText(raw: Record<string, any>): string {
@@ -735,7 +751,7 @@ function withLowTemperature(config?: LLMConfig, temperature?: number): LLMConfig
 }
 
 function isValidSourceType(value: string): value is SourceRef['type'] {
-    return ['opennotebook', 'siyuan', 'manual', 'pdf', 'url'].includes(value);
+    return ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url'].includes(value);
 }
 
 function clampConfidence(value: any): number {

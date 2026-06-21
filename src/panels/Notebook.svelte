@@ -24,6 +24,7 @@
   let sourceModes: Record<string, ContextMode> = {};
   let noteModes: Record<string, string> = {};
   let loading = false;
+  let notebookError = '';
 
   let models: ONModel[] = [];
   let selectedModel = '';
@@ -61,12 +62,16 @@
       }
       const nb = notebooks.find(n => n.source_count > 0) || notebooks[0];
       if (nb) { selectedNbId = nb.id; await loadAll(); }
-    } catch (e: any) { showMessage('连接失败: ' + e.message); }
+    } catch (e: any) {
+      notebookError = e?.message || String(e);
+      showMessage('连接失败: ' + notebookError);
+    }
   });
 
   async function loadAll() {
     if (!client || !selectedNbId) return;
     loading = true;
+    notebookError = '';
     sourceModes = {}; noteModes = {}; messages = [];
     try {
       const [srcs, nts, sess] = await Promise.all([
@@ -76,7 +81,12 @@
       ]);
       sources = srcs; notes = nts; sessions = sess;
       if (sess.length > 0) selectSession(sess[0].id);
-    } catch { sources = []; notes = []; sessions = []; }
+    } catch (e: any) {
+      sources = [];
+      notes = [];
+      sessions = [];
+      notebookError = e?.message || String(e);
+    }
     loading = false;
   }
 
@@ -309,6 +319,11 @@
           </div>
           {#if loading}
             <div class="nb-hint">加载中...</div>
+          {:else if notebookError}
+            <div class="nb-error">
+              <span>{notebookError}</span>
+              <button class="nb-link" type="button" on:click={() => loadAll()}>重试</button>
+            </div>
           {:else if sources.length === 0}
             <div class="nb-hint">暂无来源</div>
           {:else}
@@ -359,7 +374,10 @@
           </select>
           <div class="nb-chat-top-actions">
             <button class="b3-button b3-button--small b3-button--text" on:click={generateCandidatesFromContext}>生成候选</button>
-            <button class="b3-button b3-button--small b3-button--text" on:click={newSession}>+ 新会话</button>
+            <button class="b3-button b3-button--small b3-button--text nb-icon-button" on:click={newSession}>
+              <svg><use xlink:href="#iconAdd"></use></svg>
+              <span>新会话</span>
+            </button>
           </div>
         </div>
 
@@ -368,7 +386,9 @@
             {#each sessions as s (s.id)}
               <div class="nb-session" class:active-session={currentSessionId === s.id}>
                 <button class="nb-session-title" type="button" on:click={() => selectSession(s.id)} on:dblclick={() => renameSession(s.id)}>{s.title || '未命名'}</button>
-                <button class="nb-session-del" type="button" title="删除会话" on:click={() => delSession(s.id)}>×</button>
+                <button class="nb-session-del" type="button" title="删除会话" aria-label="删除会话" on:click={() => delSession(s.id)}>
+                  <svg><use xlink:href="#iconClose"></use></svg>
+                </button>
               </div>
             {/each}
           </div>
@@ -418,9 +438,22 @@
         <!-- 上下文指示器 -->
         {#if hasCtx}
           <div class="nb-ctx-bar">
-            <span>📄 {srcStats.count} 来源</span>
-            {#if srcStats.insights > 0}<span>💡 {srcStats.insights} 摘要</span>{/if}
-            {#if tokenCount > 0}<span>🔤 {tokenCount} token</span>{/if}
+            <span class="nb-ctx-chip">
+              <svg><use xlink:href="#iconFiles"></use></svg>
+              <span>{srcStats.count} 来源</span>
+            </span>
+            {#if srcStats.insights > 0}
+              <span class="nb-ctx-chip">
+                <svg><use xlink:href="#iconInfo"></use></svg>
+                <span>{srcStats.insights} 摘要</span>
+              </span>
+            {/if}
+            {#if tokenCount > 0}
+              <span class="nb-ctx-chip">
+                <svg><use xlink:href="#iconList"></use></svg>
+                <span>{tokenCount} token</span>
+              </span>
+            {/if}
           </div>
         {/if}
 
@@ -453,17 +486,58 @@
   .m-insights { background: var(--b3-card-info-background); color: var(--b3-card-info-color); border-color: var(--b3-card-info-border); }
   .m-off { opacity: 0.4; }
   .nb-hint { font-size: var(--aio-fs-sm); opacity: 0.4; padding: 8px 0; text-align: center; }
+  .nb-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 4px;
+    background: var(--b3-card-error-background);
+    color: var(--b3-card-error-color);
+    font-size: var(--aio-fs-xs);
+    line-height: 1.5;
+  }
+  .nb-error span { min-width: 0; overflow-wrap: anywhere; flex: 1; }
   .nb-stats { display: flex; gap: 8px; flex-wrap: wrap; font-size: var(--aio-fs-xs); opacity: 0.5; padding: 4px 0; }
   .nb-chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .nb-chat-top { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--b3-theme-surface-lighter); gap: 8px; }
   .nb-chat-top-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .nb-icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+
+    svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+    }
+  }
   .nb-select-sm { font-size: var(--aio-fs-sm) !important; padding: 2px 6px !important; }
   .nb-sessions { display: flex; gap: 4px; padding: 4px 10px; overflow-x: auto; border-bottom: 1px solid var(--b3-theme-surface-lighter); flex-shrink: 0; }
   .nb-session { display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--b3-theme-surface-lighter); font-size: var(--aio-fs-xs); white-space: nowrap; background: none; color: var(--b3-theme-on-surface); }
   .nb-session:hover { background: var(--b3-theme-surface-light); }
   .active-session { background: var(--b3-theme-primary-lightest); border-color: var(--b3-theme-primary); }
   .nb-session-title { max-width: 120px; overflow: hidden; text-overflow: ellipsis; border: none; background: none; color: inherit; cursor: pointer; padding: 0; font: inherit; }
-  .nb-session-del { border: none; background: none; color: inherit; cursor: pointer; padding: 0 2px; font: inherit; opacity: 0.6; }
+  .nb-session-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.6;
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
+  }
   .nb-session-del:hover { opacity: 1; color: var(--b3-theme-error); }
   .nb-locator { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--b3-theme-surface-lighter); background: var(--b3-theme-primary-lightest); }
   .nb-locator-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--aio-fs-xs); }
@@ -483,6 +557,33 @@
   .nb-msg-content { padding: 10px 14px; font-size: var(--aio-fs-base); line-height: 1.7; word-break: break-word; }
   .nb-msg-actions { display: flex; gap: 8px; margin-top: 4px; }
   .nb-loading { opacity: 0.5; }
+  .nb-ctx-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    border-top: 1px solid var(--b3-theme-surface-lighter);
+    background: var(--b3-theme-surface);
+  }
+  .nb-ctx-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--b3-theme-surface-lighter);
+    color: var(--b3-theme-on-surface);
+    font-size: var(--aio-fs-xs);
+
+    svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 13px;
+      color: var(--b3-theme-primary);
+    }
+  }
   .nb-input-area { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--b3-theme-surface-lighter); }
   .nb-input-area textarea { flex: 1; resize: none; }
   .nb-input-area button { flex-shrink: 0; }

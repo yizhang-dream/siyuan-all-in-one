@@ -1,21 +1,23 @@
 # 思源 All-in-One 知识闪卡
 
-这是一个面向思源笔记的学习插件：用 OpenNotebook 后端负责资源解析和检索，用 AI 抽取概念、关系和闪卡候选，再用概念图谱把思维导图与 SM-2 闪卡连接起来。
+这是一个面向思源笔记的学习插件：用 OpenNotebook 后端负责资源解析和检索，用 AI 抽取概念、关系和闪卡候选，再用概念图谱把思维导图与间隔重复闪卡连接起来。
 
 核心范式：闪卡和思维导图不再是两套彼此孤立的数据。插件以 `ConceptNode` 作为中间层，让卡片能指向概念，概念能反查卡片，概念关系能生成思维导图，同时卡片仍然保留间隔重复调度。
 
 ## 功能特点
 
-- SM-2 间隔重复复习，支持键盘快捷键。
+- 间隔重复复习，支持键盘快捷键；默认 SM-2，可在设置中切换到 `ts-fsrs` 驱动的 FSRS。
 - AI 候选流水线：来源文本到概念、关系、卡片、卡片归属。
 - OpenNotebook 集成：notebook、source、note、search、chat context、选中笔记详情。
 - 混合来源候选生成：手动片段、OpenNotebook 选源/选笔记、思源文档可以一起进入同一条流水线。
 - 概念中心数据模型：概念、关系、卡片都保留来源引用。
 - 卡片与导图双向工作流：从卡片同步/打开概念导图，导图里保留卡片锚点。
 - 导图制卡：从当前导图节点生成闪卡，并用 `linkedCardIds` 保持导图反向关联。
+- 图谱生成：主流程入口，从混合来源生成概念、关系、闪卡候选，确认后同步概念导图。
+- 快速制卡：保留手动/Agent 单独制卡，适合临时片段和不需要图谱的卡片。
 - 诊断面板：检查本地数据、模型配置、OpenNotebook 连接和 AI dry run。
 - Provider Adapter：支持 OpenAI-compatible、本地兼容服务、DeepSeek、Gemini、Anthropic、火山、智谱等配置差异。
-- 导入导出：导入 Anki `.apkg/.txt/.csv`，导出卡片 JSON/CSV/Anki TSV/Markdown、概念图 JSON、导图 Markdown。
+- 导入导出：导入 Anki `.apkg/.txt/.csv`，也能恢复插件原生备份 `cards-json`、`concepts-json`、`mindmaps-markdown`；导出卡片 JSON/CSV/Anki TSV/Markdown、概念图 JSON、导图 Markdown。
 
 ## 架构
 
@@ -45,6 +47,7 @@ flowchart LR
 - [快速部署指南](docs/INSTALL.md)
 - [测试与部署手册](docs/TESTING.md)
 - [提示词策略](docs/PROMPT_STRATEGY.md)
+- [思源内置闪卡复用判断](docs/SIYUAN_RIFF_REUSE.md)
 - [GitHub 准备清单](docs/GITHUB_PREP.md)
 
 ## 快速安装
@@ -119,7 +122,7 @@ npm run check:live
 
 - `ConceptNode`：概念标题、解释、标签、来源、挂载卡片、父子/相关节点。
 - `Relation`：概念之间的类型化关系，并保留来源。
-- `Card`：带 `conceptId`、`cardType`、`sourceRefs` 的 SM-2 卡片。
+- `Card`：带 SM-2 兼容字段、可选 FSRS 状态、`conceptId`、`cardType`、`sourceRefs` 的卡片。
 - `Mindmap`：由概念和卡片图谱生成的视图。
 
 学习闭环：
@@ -128,8 +131,17 @@ npm run check:live
 2. 在插件里选择 source、note、思源文档，或组合成混合来源。
 3. 生成概念、关系和闪卡候选。
 4. 人工确认候选。
-5. 用 SM-2 复习卡片。
+5. 用 SM-2 或可选 FSRS 复习卡片。
 6. 从卡片跳到概念导图，再从导图回到卡片。
+
+## 备份与恢复
+
+`导入导出` 面板支持两类导入：
+
+- Anki 兼容导入：`.apkg/.txt/.csv`。
+- 插件原生恢复：`cards-json`、`concepts-json`、`mindmaps-markdown`。
+
+其中 `mindmaps-markdown` 仍是 markmap 兼容 Markdown，同时包含 `siyuan-all-in-one-mindmap` 元数据注释，用于恢复 `cardIds`、`linkedCardIds`、来源和时间戳。
 
 ## 当前验证状态
 

@@ -74,7 +74,7 @@ async function buildChunkTree(
     // 全部失败：兜底按卡片问题首字母/首字分组（比单纯的"未分类"有用）
     console.warn('[mindmap] 建树全部失败，使用字母顺序分组兜底:', lastError?.message);
     if (onWarning) {
-        onWarning(`⚠️ AI 分组失败（${lastError?.message || '未知错误'}），已按首字字母分组。`);
+        onWarning(`AI 分组失败（${lastError?.message || '未知错误'}），已按首字字母分组。`);
     }
     const groups = new Map<string, number[]>();
     for (const c of cards) {
@@ -153,13 +153,13 @@ export async function buildTree(
 }
 
 /**
- * 根据 SM-2 复习状态返回 emoji 标记（仍用于索引列表）。
+ * 根据 SM-2 复习状态返回稳定文本标记（用于索引列表和导出）。
  */
-export function getStatusEmoji(card: Card): string {
-    if (card.status === 'buried') return '⚫';
-    if (card.status === 'review' && card.reps >= 3 && card.lapses === 0 && card.interval >= 6) return '🟢';
-    if (card.status === 'learning' || (card.status === 'review' && (card.reps < 3 || card.lapses > 0))) return '🟡';
-    return '🔴';
+export function getStatusLabel(card: Card): string {
+    if (card.status === 'buried') return '[buried]';
+    if (card.status === 'review' && card.reps >= 3 && card.lapses === 0 && card.interval >= 6) return '[mastered]';
+    if (card.status === 'learning' || (card.status === 'review' && (card.reps < 3 || card.lapses > 0))) return '[learning]';
+    return '[weak]';
 }
 
 /**
@@ -280,14 +280,14 @@ export function treeToSections(
 
 /**
  * 生成卡片索引列表 markdown。
- * 每条含复习状态 emoji + 卡片 id 锚点 + 问题文本。
+ * 每条含复习状态文本 + 卡片 id 锚点 + 问题文本。
  * 按知识点分组排列，与思维导图结构对应。
  */
 export function treeToIndex(
     tree: KnowledgeTree,
     cards: Card[]
 ): string {
-    const lines: string[] = ['## 📋 卡片索引', ''];
+    const lines: string[] = ['## 卡片索引', ''];
 
     for (const sub of tree.subtopics || []) {
         lines.push(`### ${sub.name}`);
@@ -298,7 +298,7 @@ export function treeToIndex(
             for (const num of kp.cards || []) {
                 const card = cards[num - 1];
                 if (card) {
-                    lines.push(`- ${getStatusEmoji(card)} \`${card.id}\` ${toSiyuanMath(card.question)}`);
+                    lines.push(`- ${getStatusLabel(card)} \`${card.id}\` ${toSiyuanMath(card.question)}`);
                 }
             }
             lines.push('');
@@ -341,7 +341,7 @@ export async function generateMindmap(
     const isFallback = tree.subtopics.length > 0 &&
         tree.subtopics.every((s) => s.knowledge_points.length <= 2 && s.name !== UNCATEGORIZED && /^.$/u.test(s.name));
     if (isFallback && onWarning) {
-        onWarning('⚠️ AI 知识树分组失败（可能是 API 限流或超时），已按卡片首字字母分组作为替代。');
+        onWarning('AI 知识树分组失败（可能是 API 限流或超时），已按卡片首字字母分组作为替代。');
     }
 
     return { sections, indexMarkdown, title, cardCount: cards.length, tree };

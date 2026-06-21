@@ -17,12 +17,14 @@ export async function fetchOpenNotebookPipelineSources(
 ): Promise<PipelineSource[]> {
     const query = options.query.trim();
     const noteIds = uniqueStrings(options.noteIds || []);
-    if (!options.endpoint || (!query && noteIds.length === 0)) return [];
+    const selectedSourceIds = uniqueStrings(options.sourceIds || []);
+    if (!options.endpoint || (!query && noteIds.length === 0 && selectedSourceIds.length === 0)) return [];
 
     const client = new OpenNotebookClient(options.endpoint);
-    const searchType = options.searchType || 'vector';
+    const searchType = options.searchType || 'text';
+    const sourceResults = query ? [] : await fetchOpenNotebookSourceResults(client, selectedSourceIds);
     const noteResults = await fetchOpenNotebookNoteResults(client, noteIds);
-    const scopedIds = [...(options.sourceIds || []), ...noteIds].filter(Boolean);
+    const scopedIds = [...selectedSourceIds, ...noteIds].filter(Boolean);
     let results: SearchResult[] = [];
 
     if (query) {
@@ -52,7 +54,7 @@ export async function fetchOpenNotebookPipelineSources(
         }
     }
 
-    return openNotebookResultsToPipelineSources([...noteResults, ...results], query, {
+    return openNotebookResultsToPipelineSources([...sourceResults, ...noteResults, ...results], query, {
         maxCharsPerSource: options.maxCharsPerSource,
     });
 }
@@ -138,6 +140,53 @@ async function fetchOpenNotebookNoteResults(
         })
     );
     return settled.filter((item: SearchResult | null): item is SearchResult => Boolean(item));
+}
+
+async function fetchOpenNotebookSourceResults(
+    client: OpenNotebookClient,
+    sourceIds: string[]
+): Promise<SearchResult[]> {
+    const settled = await Promise.all(
+        sourceIds.map(async (sourceId) => {
+            try {
+                return sourceDetailToSearchResult(await client.getSource(sourceId), sourceId);
+            } catch {
+                return null;
+            }
+        })
+    );
+    return settled.filter((item: SearchResult | null): item is SearchResult => Boolean(item));
+}
+
+function sourceDetailToSearchResult(detail: any, fallbackId: string): SearchResult | null {
+    const content = firstNestedString(detail, [
+        'full_text',
+        'fullText',
+        'content',
+        'text',
+        'markdown',
+        'body',
+        'summary',
+        'description',
+    ]);
+    if (!content.trim()) return null;
+
+    const id = firstNestedString(detail, ['id', 'source_id', 'sourceId']) || fallbackId;
+    const title = firstNestedString(detail, ['title', 'name', 'filename']) || 'Selected source';
+    const url = firstNestedString(detail, ['url', 'uri', 'source_url', 'sourceUrl']);
+    const page = Number(firstNestedString(detail, ['page', 'page_number', 'pageNumber']));
+
+    return {
+        id,
+        title,
+        content,
+        parentId: id,
+        sourceId: id,
+        chunkId: id,
+        url: url || undefined,
+        page: Number.isFinite(page) ? page : undefined,
+        metadata: { source_id: id },
+    };
 }
 
 function noteDetailToSearchResult(detail: any, fallbackId: string): SearchResult | null {

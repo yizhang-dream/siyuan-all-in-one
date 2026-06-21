@@ -28,6 +28,8 @@
   let notebookTarget: Partial<SourceRef> | null = null;
   let conceptSourceTarget: NotebookConceptRequest | null = null;
   let conceptSourceTargetSeq = 0;
+  let reviewQueue: { ids: string[]; title: string; key: number } | null = null;
+  let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
 
   /** 跳转到思维导图面板并加载指定导图 */
   function jumpToMindmap(mindmapId: string) {
@@ -51,14 +53,21 @@
     activeTab = 'concepts';
   }
 
+  function openConceptsFromMindmapGaps(gapSourceText: string, label: string) {
+    conceptSourceTargetSeq += 1;
+    mindmapGapTarget = { manualText: gapSourceText, label, key: conceptSourceTargetSeq };
+    conceptSourceTarget = null; // 清掉 notebook target，避免冲突
+    activeTab = 'concepts';
+  }
+
   const tabs = [
     { id: 'review', label: '复习', icon: 'iconRefresh' },
     { id: 'browse', label: '浏览', icon: 'iconList' },
-    { id: 'generate', label: '生成', icon: 'iconAdd' },
+    { id: 'generate', label: '制卡', icon: 'iconAdd' },
     { id: 'import', label: '导入', icon: 'iconDownload' },
     { id: 'notebook', label: '问答', icon: 'iconBookmark' },
     { id: 'models', label: '模型', icon: 'iconSettings' },
-    { id: 'concepts', label: '概念', icon: 'iconGraph' },
+    { id: 'concepts', label: '图谱生成', icon: 'iconGraph' },
     { id: 'mindmap', label: '导图', icon: 'iconGraph' },
     { id: 'diagnostics', label: '诊断', icon: 'iconInfo' },
     { id: 'stats', label: '统计', icon: 'iconBarChart' },
@@ -66,6 +75,19 @@
 
   function switchTab(id: string) {
     activeTab = id;
+  }
+
+  function openImportPanel() {
+    activeTab = 'import';
+  }
+
+  function openConceptsPanel() {
+    activeTab = 'concepts';
+  }
+
+  function startFilteredReview(ids: string[], title = '筛选复习') {
+    reviewQueue = { ids: [...ids], title, key: Date.now() };
+    activeTab = 'review';
   }
 </script>
 
@@ -103,25 +125,25 @@
   <!-- 右侧内容区 -->
   <main class="aio-content">
     {#if activeTab === 'review'}
-      <Review {plugin} {cardStore} />
+      <Review {plugin} {cardStore} queue={reviewQueue} />
     {:else if activeTab === 'browse'}
-      <Browse {plugin} {cardStore} {mindmapStore} {conceptStore} {jumpToMindmap} {openSourceRef} />
+      <Browse {plugin} {cardStore} {mindmapStore} {conceptStore} {jumpToMindmap} {openSourceRef} {startFilteredReview} />
     {:else if activeTab === 'generate'}
-      <Generate {plugin} {cardStore} {config} />
+      <Generate {plugin} {cardStore} {config} {openConceptsPanel} />
     {:else if activeTab === 'import'}
-      <Import {cardStore} {conceptStore} {mindmapStore} {config} />
+      <Import {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
     {:else if activeTab === 'notebook'}
       <Notebook {plugin} sourceTarget={notebookTarget} {openConceptsFromNotebook} />
     {:else if activeTab === 'models'}
       <Models {plugin} />
     {:else if activeTab === 'concepts'}
-      <Concepts {plugin} {conceptStore} {cardStore} {mindmapStore} {config} {openSourceRef} {jumpToMindmap} notebookTarget={conceptSourceTarget} />
+      <Concepts {plugin} {conceptStore} {cardStore} {mindmapStore} {config} {openSourceRef} {jumpToMindmap} notebookTarget={conceptSourceTarget} mindmapGapTarget={mindmapGapTarget} />
     {:else if activeTab === 'mindmap'}
-      <Mindmap {plugin} {cardStore} {mindmapStore} {conceptStore} {config} {jumpTarget} />
+      <Mindmap {plugin} {cardStore} {mindmapStore} {conceptStore} {config} {jumpTarget} {startFilteredReview} openConceptsFromMindmapGaps={openConceptsFromMindmapGaps} />
     {:else if activeTab === 'diagnostics'}
       <Diagnostics {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
     {:else if activeTab === 'stats'}
-      <Stats {cardStore} />
+      <Stats {cardStore} {openImportPanel} />
     {/if}
   </main>
 </div>

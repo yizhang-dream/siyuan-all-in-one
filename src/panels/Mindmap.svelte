@@ -1,13 +1,30 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount, afterUpdate, tick } from 'svelte';
   import { generateMindmap, getStatusCategory, treeToIndex } from '../libs/mindmap';
-  import { renderMarkmap, statusToColor, fitMarkmap } from '../libs/markmap-render';
+  import {
+    renderMarkmap,
+    statusToColor,
+    fitMarkmapWithProfile,
+    profileMindmapMarkdown,
+    filterMindmapMarkdown,
+    extractCardIdsFromMindmapMarkdown,
+    extractGapNodes,
+    gapNodesToSourceText,
+    searchMindmapNodes,
+    focusMindmapSearchMatch,
+    clearMindmapSearchFocus,
+    syncMindmapSearchHighlights,
+    type MindmapMarkdownViewMode,
+    type MindmapMarkdownViewStats,
+    type MindmapSearchResult,
+    type MindmapSizeProfile,
+  } from '../libs/markmap-render';
   import { fetchContext, searchSiyuanDocs } from '../libs/sources';
   import type { SourceConfig, DocItem } from '../libs/sources';
   import { callLLM, resolveLLMConfig } from '../libs/llm';
   import { generateMindmapCardDrafts, type MindmapCardDraft } from '../libs/mindmap-cards';
   import { syncConceptMindmap } from '../libs/concept-mindmap-sync';
-  import { createCard, schedule } from '../libs/srs';
+  import { createCard, scheduleCard } from '../libs/srs';
   import { renderToHTML, renderMath } from '../libs/render';
   import type { Card } from '../libs/types';
   import { genMindmapId } from '../libs/mindmap-store';
@@ -20,6 +37,8 @@
   export let conceptStore: any;
   export let config: any;
   export let jumpTarget: { mindmapId?: string } = {};
+  export let startFilteredReview: (ids: string[], title?: string) => void = () => {};
+  export let openConceptsFromMindmapGaps: (gapSourceText: string, label: string) => void = () => {};
 
   let mode: 'cards' | 'doc' | 'concepts' = 'cards';
   let showList = false; // 导图列表展开状态
@@ -45,8 +64,15 @@
   let currentCards: Card[] = [];
   let currentTree: any = null;
   let currentMindmapId = '';
+  let currentProfile: MindmapSizeProfile | null = null;
+  let currentViewStats: MindmapMarkdownViewStats | null = null;
+  let mindmapViewMode: MindmapMarkdownViewMode = 'all';
   let generatedCardCount = 6;
   let isGeneratingCards = false;
+  let mindmapSearchQuery = '';
+  let mindmapSearchResult: MindmapSearchResult = { query: '', matches: [], activeIndex: 0, activeMatch: null };
+  let mindmapSearchStatus = '';
+  let visibleReviewCardIds: string[] = [];
 
   // 卡片复习浮层
   let reviewCard: Card | null = null;
@@ -79,6 +105,13 @@
   /** 所有已保存的导图列表 */
   $: allMindmaps = mindmapStore?.getAll() || [];
 
+  function getMindmapSourceMeta(source?: SavedMindmap['source'] | string) {
+    if (source === 'cards') return { icon: 'iconList', label: '卡片' };
+    if (source === 'doc') return { icon: 'iconFiles', label: '文档' };
+    if (source === 'concepts') return { icon: 'iconGraph', label: '概念' };
+    return { icon: 'iconList', label: '手动' };
+  }
+
   /** 加载指定 id 的思维导图 */
   async function loadMindmapById(id: string) {
     if (!mindmapStore) return;
@@ -106,6 +139,7 @@
     if (currentMindmapId === id) {
       currentMarkdown = '';
       currentMindmapId = '';
+      clearMindmapSearch();
       status = '';
     }
     showMessage('已删除');
@@ -127,6 +161,7 @@
     } else {
       currentMarkdown = '';
       currentMindmapId = '';
+      clearMindmapSearch();
       status = '';
     }
   }
@@ -292,7 +327,7 @@
       // 等 Svelte 渲染 SVG 容器到 DOM（currentMarkdown 触发 {#if} 块）
       await tick();
       if (!svgEl) {
-        status = '❌ SVG 容器未就绪';
+        status = 'SVG 容器未就绪';
         isWorking = false;
         return;
       }
@@ -314,9 +349,9 @@
       await mindmapStore.upsert(saved);
       currentMindmapId = saved.id;
 
-      status = `✅ 完成！${title}（已自动保存）`;
+      status = `完成：${title}（已自动保存）`;
     } catch (e: any) {
-      status = `❌ 失败：${e.message}`;
+      status = `失败：${e.message}`;
       console.error('[mindmap]', e);
     }
     isWorking = false;
@@ -324,8 +359,12 @@
 
   async function renderInPanel() {
     if (!svgEl || !currentMarkdown) return;
+    const view = filterMindmapMarkdown(currentMarkdown, mindmapViewMode, mindmapSearchQuery);
+    currentViewStats = view.stats;
+    visibleReviewCardIds = extractVisibleReviewCardIds(view.markdown);
+    currentProfile = profileMindmapMarkdown(view.markdown);
     const cardColors = buildColorMap(currentCards);
-    mmInstance = await renderMarkmap(svgEl, currentMarkdown, {
+    mmInstance = await renderMarkmap(svgEl, view.markdown, {
       cardColors,
       onNodeClick: (cardId, _text) => {
         const card = cardStore.getById(cardId);
@@ -334,9 +373,102 @@
           reviewFlipped = false;
         }
       },
-      initialExpandLevel: 2,
+      initialExpandLevel: currentProfile.initialExpandLevel,
+      sizeProfile: currentProfile,
     });
-    setTimeout(() => fitMarkmap(mmInstance), 300);
+    fitMarkmapWithProfile(mmInstance, currentProfile);
+    await refreshMindmapSearch(false);
+  }
+
+  async function setMindmapViewMode(mode: MindmapMarkdownViewMode) {
+    mindmapViewMode = mode;
+    if (currentMarkdown) await renderInPanel();
+  }
+
+  function extractVisibleReviewCardIds(markdown: string): string[] {
+    const available = new Set((cardStore?.getAll?.() || []).map((card: Card) => card.id));
+    return extractCardIdsFromMindmapMarkdown(markdown).filter((id) => available.has(id));
+  }
+
+  function reviewVisibleMindmapCards() {
+    if (visibleReviewCardIds.length === 0) {
+      showMessage('当前导图视图没有可复习卡片');
+      return;
+    }
+    startFilteredReview(visibleReviewCardIds, buildMindmapReviewTitle());
+  }
+
+  function buildMindmapReviewTitle(): string {
+    const labelMap: Record<MindmapMarkdownViewMode, string> = {
+      all: '全部导图',
+      cards: '有卡节点',
+      gaps: '缺卡视图',
+      focus: '邻域视图',
+    };
+    const title = currentMindmapId ? (mindmapStore?.getById?.(currentMindmapId)?.title || '当前导图') : '当前导图';
+    return `${title} · ${labelMap[mindmapViewMode]} · ${visibleReviewCardIds.length} 张`;
+  }
+
+  function generateCardsFromGaps() {
+    const markdown = currentMarkdown;
+    if (!markdown) { showMessage('当前没有可分析的导图'); return; }
+    const gaps = extractGapNodes(markdown);
+    if (gaps.length === 0) { showMessage('当前导图视图没有缺卡叶子节点'); return; }
+    const sourceText = gapNodesToSourceText(gaps);
+    const label = `从缺卡节点生成 · ${gaps.length} 个节点`;
+    openConceptsFromMindmapGaps(sourceText, label);
+  }
+
+  async function refreshMindmapSearch(focus = true, nextIndex = mindmapSearchResult.activeIndex) {
+    if (!mmInstance || !mindmapSearchQuery.trim()) {
+      mindmapSearchResult = { query: '', matches: [], activeIndex: 0, activeMatch: null };
+      mindmapSearchStatus = '';
+      await clearMindmapSearchFocus(mmInstance);
+      return;
+    }
+
+    mindmapSearchResult = searchMindmapNodes(mmInstance, mindmapSearchQuery, nextIndex);
+    const count = mindmapSearchResult.matches.length;
+    if (count === 0) {
+      mindmapSearchStatus = '无匹配';
+      await clearMindmapSearchFocus(mmInstance);
+      syncMindmapSearchHighlights(svgEl, mindmapSearchResult);
+      return;
+    }
+
+    mindmapSearchStatus = `${mindmapSearchResult.activeIndex + 1} / ${count}`;
+    if (focus) await focusMindmapSearchMatch(mmInstance, mindmapSearchResult.activeMatch);
+    syncMindmapSearchHighlights(svgEl, mindmapSearchResult);
+  }
+
+  async function moveMindmapSearch(delta: number) {
+    if (!mindmapSearchResult.matches.length) {
+      await refreshMindmapSearch(true, 0);
+      return;
+    }
+    await refreshMindmapSearch(true, mindmapSearchResult.activeIndex + delta);
+  }
+
+  async function clearMindmapSearch() {
+    mindmapSearchQuery = '';
+    mindmapSearchStatus = '';
+    mindmapSearchResult = { query: '', matches: [], activeIndex: 0, activeMatch: null };
+    await clearMindmapSearchFocus(mmInstance);
+    if (svgEl) syncMindmapSearchHighlights(svgEl, mindmapSearchResult);
+    if (mindmapViewMode === 'focus') {
+      mindmapViewMode = 'all';
+      if (currentMarkdown) await renderInPanel();
+    }
+  }
+
+  async function handleMindmapSearchKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      await moveMindmapSearch(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      await clearMindmapSearch();
+    }
   }
 
   async function generateCardsFromCurrentMindmap() {
@@ -441,7 +573,8 @@
 
   function handleGrade(grade: number) {
     if (!reviewCard) return;
-    const updated = schedule(grade, { ...reviewCard });
+    const cfg = plugin.getConfig();
+    const updated = scheduleCard(grade, { ...reviewCard }, cfg.scheduler || 'sm2');
     cardStore.update(reviewCard.id, updated);
     cardStore.save();
     reviewCard = null;
@@ -484,11 +617,12 @@
   <!-- 顶部控制栏 -->
   <div class="mindmap-toolbar">
     <div class="mindmap-tabs">
-      <button class="b3-button b3-button--small" class:b3-button--outline={mode !== 'cards'} on:click={() => mode = 'cards'}>基于卡片</button>
-      <button class="b3-button b3-button--small" class:b3-button--outline={mode !== 'doc'} on:click={() => mode = 'doc'}>基于文档</button>
-      <button class="b3-button b3-button--small" class:b3-button--outline={mode !== 'concepts'} on:click={() => mode = 'concepts'}>基于概念</button>
-      <button class="b3-button b3-button--small b3-button--outline" on:click={() => showList = !showList}>
-        📋 导图列表（{allMindmaps.length}）
+      <button class="b3-button b3-button--small" class:b3-button--outline={mode !== 'cards'} on:click={() => mode = 'cards'}>卡片 → 导图</button>
+      <button class="b3-button b3-button--small" class:b3-button--outline={mode !== 'doc'} on:click={() => mode = 'doc'}>来源 → 导图</button>
+      <button class="b3-button b3-button--small" class:b3-button--outline={mode !== 'concepts'} on:click={() => mode = 'concepts'}>图谱 → 导图</button>
+      <button class="b3-button b3-button--small b3-button--outline mindmap-icon-button" on:click={() => showList = !showList}>
+        <svg><use xlink:href="#iconList"></use></svg>
+        <span>导图列表（{allMindmaps.length}）</span>
       </button>
     </div>
     <span class="mindmap-provider">{currentProviderName}</span>
@@ -505,12 +639,12 @@
             <div class="mindmap-list-info" on:click={() => loadMindmapById(m.id)} on:keydown={(e) => handleMindmapListKeydown(e, m.id)} role="button" tabindex="0">
               <span class="mindmap-list-title">{m.title}</span>
               <span class="mindmap-list-meta">
-                {m.source === 'cards' ? '🎴' : m.source === 'doc' ? '📄' : m.source === 'concepts' ? '◎' : '📝'}
-                {m.cardIds?.length || 0} 张卡片
+                <svg><use xlink:href="#{getMindmapSourceMeta(m.source).icon}"></use></svg>
+                {getMindmapSourceMeta(m.source).label} · {m.cardIds?.length || 0} 张卡片
                 · {new Date(m.modified).toLocaleDateString()}
               </span>
             </div>
-            <button class="b3-button b3-button--small mindmap-list-del" on:click={() => deleteMindmap(m.id)}>✕</button>
+            <button class="b3-button b3-button--small b3-button--text mindmap-list-del" on:click={() => deleteMindmap(m.id)}>删除</button>
           </div>
         {/each}
       {/if}
@@ -536,14 +670,20 @@
         <button class="b3-button b3-button--small" class:b3-button--outline={sourceConfig.type !== 'manual'} on:click={() => sourceConfig = { type: 'manual', siyuanDocIds: [] }}>手动输入</button>
       </div>
     {/if}
-    <button class="b3-button b3-button--outline" on:click={generate} disabled={isWorking}>
-      {isWorking ? '生成中...' : mode === 'concepts' ? '同步图谱' : '🔄 生成'}
+    <button class="b3-button b3-button--outline mindmap-icon-button" on:click={generate} disabled={isWorking}>
+      {#if mode === 'concepts'}
+        <svg><use xlink:href="#iconGraph"></use></svg>
+        <span>{isWorking ? '同步中...' : '同步图谱'}</span>
+      {:else}
+        <svg class:is-spinning={isWorking}><use xlink:href="#iconRefresh"></use></svg>
+        <span>{isWorking ? '生成中...' : '生成'}</span>
+      {/if}
     </button>
     {#if currentMarkdown}
       <div class="mindmap-cardgen">
         <input class="b3-text-field" type="number" min="1" max="30" bind:value={generatedCardCount} aria-label="导图制卡数量" />
         <button class="b3-button b3-button--outline" on:click={generateCardsFromCurrentMindmap} disabled={isGeneratingCards || isWorking}>
-          {isGeneratingCards ? '制卡中...' : '图制卡'}
+          {isGeneratingCards ? '制卡中...' : '导图 → 卡片'}
         </button>
       </div>
     {/if}
@@ -562,7 +702,8 @@
             {#each docResults as doc (doc.id)}
               <label class="doc-item" class:selected={selectedDocIds.has(doc.id)}>
                 <input type="checkbox" checked={selectedDocIds.has(doc.id)} on:change={() => toggleDoc(doc.id)} />
-                <span>📄 {doc.title}</span>
+                <svg><use xlink:href="#iconFiles"></use></svg>
+                <span>{doc.title}</span>
               </label>
             {/each}
           </div>
@@ -577,10 +718,66 @@
 
   {#if status}<div class="mindmap-status">{status}</div>{/if}
   {#if warning}<div class="mindmap-warning">{warning}</div>{/if}
+  {#if currentProfile}
+    <div class="mindmap-profile" class:large-map={currentProfile.sizeClass === 'large' || currentProfile.sizeClass === 'huge'}>
+      <span>{currentProfile.nodeCount} 个节点</span>
+      <span>{currentProfile.cardNodeCount} 张卡片</span>
+      <span>{currentProfile.maxDepth} 层</span>
+      <span>展开到第 {currentProfile.initialExpandLevel} 层</span>
+    </div>
+  {/if}
 
   <!-- 交互式思维导图 SVG -->
   {#if currentMarkdown}
-    <div class="mindmap-canvas">
+    <div class="mindmap-searchbar">
+      <div class="mindmap-searchbox">
+        <svg><use xlink:href="#iconSearch"></use></svg>
+        <input
+          class="b3-text-field"
+          type="search"
+          placeholder="查找节点、路径或卡片 ID"
+          bind:value={mindmapSearchQuery}
+          on:input={() => mindmapViewMode === 'focus' ? renderInPanel() : refreshMindmapSearch(true, 0)}
+          on:keydown={handleMindmapSearchKeydown}
+          aria-label="查找导图节点"
+        />
+      </div>
+      <span class="mindmap-search-count">{mindmapSearchStatus || ' '}</span>
+      <button class="b3-button b3-button--small b3-button--outline mindmap-search-step" on:click={() => moveMindmapSearch(-1)} disabled={!mindmapSearchResult.matches.length}>
+        上一个
+      </button>
+      <button class="b3-button b3-button--small b3-button--outline mindmap-search-step" on:click={() => moveMindmapSearch(1)} disabled={!mindmapSearchResult.matches.length}>
+        下一个
+      </button>
+      <button class="b3-button b3-button--small b3-button--outline mindmap-search-btn" on:click={() => fitMarkmapWithProfile(mmInstance, currentProfile || undefined)} disabled={!mmInstance} aria-label="适配视图">
+        <svg><use xlink:href="#iconFullscreen"></use></svg>
+      </button>
+      <button class="b3-button b3-button--small b3-button--text mindmap-search-btn" on:click={clearMindmapSearch} disabled={!mindmapSearchQuery} aria-label="清空查找">
+        <svg><use xlink:href="#iconClose"></use></svg>
+      </button>
+    </div>
+    <div class="mindmap-viewbar">
+      <div class="mindmap-segmented" role="group" aria-label="导图显示范围">
+        <button class:b3-button--primary={mindmapViewMode === 'all'} on:click={() => setMindmapViewMode('all')}>全部</button>
+        <button class:b3-button--primary={mindmapViewMode === 'cards'} on:click={() => setMindmapViewMode('cards')}>有卡</button>
+        <button class:b3-button--primary={mindmapViewMode === 'gaps'} on:click={() => setMindmapViewMode('gaps')}>缺卡</button>
+        <button class:b3-button--primary={mindmapViewMode === 'focus'} on:click={() => setMindmapViewMode('focus')} disabled={!mindmapSearchQuery.trim()}>邻域</button>
+      </div>
+      {#if currentViewStats && mindmapViewMode !== 'all'}
+        <span class="mindmap-view-count">显示 {currentViewStats.visibleNodes} / {currentViewStats.totalNodes} 个节点</span>
+      {/if}
+      {#if mindmapViewMode === 'gaps'}
+        <button class="b3-button b3-button--small b3-button--primary mindmap-gap-cards-btn" on:click={generateCardsFromGaps}>
+          <svg><use xlink:href="#iconAdd"></use></svg>
+          <span>从缺卡生成候选</span>
+        </button>
+      {/if}
+      <button class="b3-button b3-button--small b3-button--outline mindmap-review-visible" on:click={reviewVisibleMindmapCards} disabled={visibleReviewCardIds.length === 0}>
+        <svg><use xlink:href="#iconRefresh"></use></svg>
+        <span>复习可见卡片 ({visibleReviewCardIds.length})</span>
+      </button>
+    </div>
+    <div class="mindmap-canvas" class:mindmap-canvas--large={currentProfile?.sizeClass === 'large'} class:mindmap-canvas--huge={currentProfile?.sizeClass === 'huge'}>
       <svg bind:this={svgEl} class="mindmap-svg"></svg>
     </div>
     <div class="mindmap-legend">
@@ -608,10 +805,10 @@
           <div class="review-text">{@html renderToHTML(reviewCard.question)}</div>
         </div>
       {:else}
-        <div class="review-side">
-          <span class="review-label">答案</span>
-          <div class="review-text">{@html renderToHTML(reviewCard.answer)}</div>
-          {#if reviewCard.hint}<div class="review-hint">💡 {@html renderToHTML(reviewCard.hint)}</div>{/if}
+          <div class="review-side">
+            <span class="review-label">答案</span>
+            <div class="review-text">{@html renderToHTML(reviewCard.answer)}</div>
+          {#if reviewCard.hint}<div class="review-hint">{@html renderToHTML(reviewCard.hint)}</div>{/if}
         </div>
       {/if}
     </div>
@@ -635,6 +832,19 @@
   .mindmap-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; }
   .mindmap-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
   .mindmap-provider { font-size: var(--aio-fs-xs); opacity: 0.5; }
+  .mindmap-icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+
+    svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+    }
+  }
+  .is-spinning { animation: aio-mindmap-spin 0.9s linear infinite; }
 
   .mindmap-config-row { display: flex; align-items: center; gap: 8px; flex-shrink: 0;
     .mindmap-deck-select { flex: 1; }
@@ -671,14 +881,145 @@
   .mindmap-source-input { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
   .mindmap-row { display: flex; gap: 6px; .b3-text-field { flex: 1; } }
   .doc-list { max-height: 150px; overflow-y: auto; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px; }
-  .doc-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; cursor: pointer; font-size: var(--aio-fs-sm); &:hover { background: var(--b3-theme-surface-light); } input { flex-shrink: 0; } }
+  .doc-item {
+    display: flex; align-items: center; gap: 6px; padding: 4px 8px; cursor: pointer; font-size: var(--aio-fs-sm);
+    &:hover { background: var(--b3-theme-surface-light); }
+    input, svg { flex-shrink: 0; }
+    svg { width: 14px; height: 14px; color: var(--b3-theme-on-surface); }
+    span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
   .selected { background: var(--b3-theme-primary-lightest); }
 
   .mindmap-status { padding: 8px; border-radius: 4px; background: var(--b3-theme-surface-lighter); font-size: var(--aio-fs-sm); text-align: center; flex-shrink: 0; }
   .mindmap-warning { padding: 6px 8px; border-radius: 4px; background: var(--b3-card-warning-background); color: var(--b3-card-warning-color); font-size: var(--aio-fs-xs); flex-shrink: 0; }
+  .mindmap-profile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+
+    span {
+      padding: 3px 7px;
+      border-radius: 4px;
+      background: var(--b3-theme-surface);
+      color: var(--b3-theme-on-surface);
+      font-size: var(--aio-fs-xs);
+    }
+
+    &.large-map span {
+      color: var(--b3-card-warning-color);
+      background: var(--b3-card-warning-background);
+    }
+  }
+
+  .mindmap-searchbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-width: 0;
+  }
+  .mindmap-searchbox {
+    position: relative;
+    flex: 1;
+    min-width: 160px;
+
+    svg {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      color: var(--b3-theme-on-surface);
+      opacity: 0.55;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .b3-text-field {
+      width: 100%;
+      padding-left: 28px;
+    }
+  }
+  .mindmap-search-count {
+    min-width: 50px;
+    text-align: center;
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface);
+    opacity: 0.65;
+  }
+  .mindmap-search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+  .mindmap-search-step {
+    min-width: 52px;
+    padding: 0 8px;
+    white-space: nowrap;
+  }
+  .mindmap-viewbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .mindmap-segmented {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 6px;
+    background: var(--b3-theme-surface);
+
+    button {
+      height: 24px;
+      min-width: 42px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--aio-fs-xs);
+      cursor: pointer;
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      &.b3-button--primary {
+        background: var(--b3-theme-primary);
+        color: var(--b3-theme-on-primary);
+      }
+    }
+  }
+  .mindmap-view-count {
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface);
+    opacity: 0.6;
+    white-space: nowrap;
+  }
+  .mindmap-review-visible { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; svg { width: 14px; height: 14px; } }
+  .mindmap-gap-cards-btn { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; svg { width: 14px; height: 14px; } }
 
   /* SVG 画布 */
   .mindmap-canvas { flex: 1; min-height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; overflow: hidden; position: relative; background: var(--b3-theme-background); }
+  .mindmap-canvas--large,
+  .mindmap-canvas--huge {
+    background:
+      linear-gradient(var(--b3-theme-background), var(--b3-theme-background)) padding-box,
+      linear-gradient(180deg, var(--b3-theme-surface-light), var(--b3-theme-background)) border-box;
+  }
 
   .mindmap-list { max-height: 200px; overflow-y: auto; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; flex-shrink: 0; }
   .mindmap-list-empty { text-align: center; padding: 16px; font-size: var(--aio-fs-sm); opacity: 0.4; }
@@ -688,9 +1029,35 @@
   }
   .mindmap-list-info { flex: 1; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .mindmap-list-title { font-size: var(--aio-fs-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mindmap-list-meta { font-size: var(--aio-fs-xs); opacity: 0.5; }
+  .mindmap-list-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--aio-fs-xs);
+    opacity: 0.55;
+
+    svg {
+      width: 12px;
+      height: 12px;
+      flex: 0 0 12px;
+    }
+  }
   .mindmap-list-del { color: var(--b3-card-error-color); opacity: 0.5; &:hover { opacity: 1; } }
   .mindmap-svg { width: 100%; height: 100%; display: block; }
+  .mindmap-svg :global(.aio-mindmap-search-match > line) {
+    stroke-width: 4px;
+  }
+  .mindmap-svg :global(.aio-mindmap-search-match .markmap-foreign > div > div) {
+    background: var(--b3-card-info-background);
+    color: var(--b3-card-info-color);
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px var(--b3-card-info-background);
+  }
+  .mindmap-svg :global(.aio-mindmap-search-active .markmap-foreign > div > div) {
+    background: var(--b3-theme-primary-lightest);
+    color: var(--b3-theme-primary);
+    box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest), 0 0 0 4px var(--b3-theme-primary);
+  }
 
   .mindmap-legend { display: flex; gap: 12px; font-size: var(--aio-fs-xs); opacity: 0.7; }
   .legend-item { display: flex; align-items: center; gap: 4px; }
@@ -716,4 +1083,9 @@
   .grade-hard { background: #f97316; }
   .grade-good { background: #22c55e; }
   .grade-easy { background: #3b82f6; }
+
+  @keyframes aio-mindmap-spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
+

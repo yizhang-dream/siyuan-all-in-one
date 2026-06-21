@@ -36,6 +36,7 @@ export function createCard(
         conceptId,
         question, answer, hint, deck, tags,
         cardType, sourceRefs,
+        scheduler: 'sm2',
         due: now, interval: 0, ease: 2.5,
         reps: 0, lapses: 0,
         status: 'new',
@@ -49,6 +50,7 @@ const QUALITY_MAP: Record<number, number> = { 0: 0, 1: 2, 2: 4, 3: 5 };
 /** 应用 SM-2 调度到卡片，原地修改并返回。 */
 export function schedule(grade: number, card: Card): Card {
     const q = QUALITY_MAP[grade] ?? 0;
+    card.scheduler = 'sm2';
     if (q < 3) {
         card.reps = 0;
         card.interval = 1;
@@ -88,6 +90,8 @@ export function cleanCard(raw: any): Card {
         tags: Array.isArray(raw?.tags) ? raw.tags.map(String) : [],
         cardType: raw?.cardType || 'qa',
         sourceRefs: Array.isArray(raw?.sourceRefs) ? raw.sourceRefs : [],
+        scheduler: raw?.scheduler === 'fsrs' ? 'fsrs' : raw?.scheduler === 'sm2' ? 'sm2' : undefined,
+        fsrs: cleanFSRSState(raw?.fsrs),
         due: Number(raw?.due) || now,
         interval: Number(raw?.interval) || 0,
         ease: Number(raw?.ease) || 2.5,
@@ -96,5 +100,21 @@ export function cleanCard(raw: any): Card {
         status,
         created: Number(raw?.created) || now,
         modified: Number(raw?.modified) || now,
+    };
+}
+
+function cleanFSRSState(raw: any): Card['fsrs'] {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const state = ['new', 'learning', 'review', 'relearning'].includes(raw.state) ? raw.state : 'new';
+    return {
+        stability: Number(raw.stability) || 0,
+        difficulty: Number(raw.difficulty) || 0,
+        retrievability: Number.isFinite(Number(raw.retrievability)) ? Number(raw.retrievability) : undefined,
+        state,
+        scheduledDays: Number(raw.scheduledDays) || 0,
+        elapsedDays: Number(raw.elapsedDays) || 0,
+        learningSteps: Number(raw.learningSteps) || 0,
+        lastReview: Number(raw.lastReview) || undefined,
+        lastRating: Number(raw.lastRating) || undefined,
     };
 }

@@ -72,9 +72,22 @@ export function buildExportPayload(format: ExportFormat, snapshot: ExportSnapsho
     }
 }
 
+export function exportPayloadToSiyuanMarkdown(filename: string, content: string): string {
+    if (/\.md$/i.test(filename)) return content;
+    const lang = /\.json$/i.test(filename) ? 'json' : /\.csv$/i.test(filename) ? 'csv' : 'tsv';
+    return [
+        `# ${filename}`,
+        '',
+        `\`\`\`${lang}`,
+        content.trimEnd(),
+        '```',
+        '',
+    ].join('\n');
+}
+
 export function cardsToCSV(cards: Card[]): string {
     const rows = [
-        ['id', 'deck', 'question', 'answer', 'hint', 'tags', 'cardType', 'conceptId', 'due', 'interval', 'ease', 'reps', 'lapses', 'status', 'created', 'modified'],
+        ['id', 'deck', 'question', 'answer', 'hint', 'tags', 'cardType', 'conceptId', 'scheduler', 'fsrs', 'due', 'interval', 'ease', 'reps', 'lapses', 'status', 'created', 'modified'],
         ...cards.map((card) => [
             card.id,
             card.deck,
@@ -84,6 +97,8 @@ export function cardsToCSV(cards: Card[]): string {
             (card.tags || []).join(' '),
             card.cardType || 'qa',
             card.conceptId || '',
+            card.scheduler || 'sm2',
+            card.fsrs ? JSON.stringify(card.fsrs) : '',
             String(card.due || 0),
             String(card.interval || 0),
             String(card.ease || 0),
@@ -149,10 +164,26 @@ export function mindmapsToMarkdown(mindmaps: SavedMindmap[]): string {
             `# ${mindmap.title || mindmap.id}`,
             '',
             `<!-- id=${mindmap.id} source=${mindmap.source || ''} deck=${mindmap.deck || ''} -->`,
+            `<!-- siyuan-all-in-one-mindmap=${serializeMindmapMetadata(mindmap)} -->`,
             '',
             mindmap.markdown || '',
         ].join('\n').trimEnd())
         .join('\n\n---\n\n') + '\n';
+}
+
+function serializeMindmapMetadata(mindmap: SavedMindmap): string {
+    const metadata = {
+        version: 1,
+        id: mindmap.id,
+        title: mindmap.title || '',
+        source: mindmap.source || '',
+        deck: mindmap.deck || '',
+        cardIds: mindmap.cardIds || [],
+        linkedCardIds: mindmap.linkedCardIds || [],
+        created: mindmap.created || 0,
+        modified: mindmap.modified || 0,
+    };
+    return JSON.stringify(metadata).replace(/--/g, '\\u002d\\u002d');
 }
 
 function stableJSONStringify(value: unknown): string {

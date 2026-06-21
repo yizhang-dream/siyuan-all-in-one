@@ -14,7 +14,7 @@ await mkdir(tempDir, { recursive: true });
 
 await writeFile(entry, `
 import assert from 'node:assert/strict';
-import { buildExportPayload, cardsToAnkiTSV, cardsToCSV, cardsToMarkdown, mindmapsToMarkdown } from '../src/libs/exporters';
+import { buildExportPayload, cardsToAnkiTSV, cardsToCSV, cardsToMarkdown, exportPayloadToSiyuanMarkdown, mindmapsToMarkdown } from '../src/libs/exporters';
 
 const cards: any[] = [
   {
@@ -34,15 +34,19 @@ const cards: any[] = [
     modified: 2,
     conceptId: 'concept-1',
     cardType: 'qa',
+    scheduler: 'fsrs',
+    fsrs: { stability: 2.4, difficulty: 5.1, state: 'review', scheduledDays: 3, elapsedDays: 1, learningSteps: 0, lastReview: 1, lastRating: 3 },
     sourceRefs: [{ type: 'siyuan', blockId: '20260620120000-abcdefg', quote: 'Impulse theorem' }],
   },
 ];
 
 const csv = cardsToCSV(cards);
-assert.match(csv, /^id,deck,question,answer/m);
+assert.match(csv, /^id,deck,question,answer,.*scheduler,fsrs,/m);
 assert.match(csv, /"Physics, Mechanics"/);
 assert.match(csv, /"What is ""impulse""\\?"/);
 assert.match(csv, /"Impulse equals force over time\\.\\nIt changes momentum\\."/);
+assert.match(csv, /fsrs/);
+assert.match(csv, /""stability"":2.4/);
 
 const tsv = cardsToAnkiTSV(cards);
 assert.equal(tsv.split('\\t').length, 5);
@@ -89,16 +93,34 @@ const mindmapMarkdown = mindmapsToMarkdown([{
   title: 'Mechanics Map',
   markdown: '- Mechanics\\n  - Momentum #card-1',
   cardIds: ['card-1'],
+  linkedCardIds: ['card-2'],
   source: 'concepts',
+  deck: 'Physics, Mechanics',
   created: 1,
   modified: 2,
 }]);
 assert.match(mindmapMarkdown, /# Mechanics Map/);
-assert.match(mindmapMarkdown, /<!-- id=map-1 source=concepts deck= -->/);
+assert.match(mindmapMarkdown, /<!-- id=map-1 source=concepts deck=Physics, Mechanics -->/);
 assert.match(mindmapMarkdown, /Momentum #card-1/);
+const mindmapMetaMatch = mindmapMarkdown.match(/<!-- siyuan-all-in-one-mindmap=(.+?) -->/);
+assert.ok(mindmapMetaMatch, 'mindmap export should include recoverable plugin metadata');
+const mindmapMeta = JSON.parse(mindmapMetaMatch[1]);
+assert.equal(mindmapMeta.id, 'map-1');
+assert.equal(mindmapMeta.deck, 'Physics, Mechanics');
+assert.equal(mindmapMeta.cardIds[0], 'card-1');
+assert.equal(mindmapMeta.linkedCardIds[0], 'card-2');
+assert.equal(mindmapMeta.created, 1);
+assert.equal(mindmapMeta.modified, 2);
 
 const cardsJson = buildExportPayload('cards-json', { cards });
 assert.equal(JSON.parse(cardsJson.content).cards[0].sourceRefs[0].blockId, '20260620120000-abcdefg');
+
+const fence = String.fromCharCode(96).repeat(3);
+const siyuanJsonMarkdown = exportPayloadToSiyuanMarkdown('backup.json', '{"ok":true}\\n');
+assert.equal(siyuanJsonMarkdown, ['# backup.json', '', fence + 'json', '{"ok":true}', fence, ''].join('\\n'));
+const siyuanCsvMarkdown = exportPayloadToSiyuanMarkdown('cards.csv', 'a,b\\n1,2\\n');
+assert.ok(siyuanCsvMarkdown.startsWith(['# cards.csv', '', fence + 'csv', ''].join('\\n')));
+assert.equal(exportPayloadToSiyuanMarkdown('cards.md', '# Already Markdown\\n'), '# Already Markdown\\n');
 
 console.log(JSON.stringify({
   csv: true,
@@ -106,6 +128,7 @@ console.log(JSON.stringify({
   markdown: true,
   conceptGraphJson: true,
   mindmapMarkdown: true,
+  siyuanMarkdownWrapper: true,
 }, null, 2));
 `, 'utf8');
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { showMessage } from 'siyuan';
   import { fetchOpenNotebookPipelineSources, runPromptPipeline } from '../libs/ai';
-  import { resolveLLMConfig } from '../libs/llm';
+  import { getProviderCapabilities, resolveLLMConfig } from '../libs/llm';
   import { OpenNotebookClient } from '../libs/notebook';
 
   export let plugin: any;
@@ -36,6 +36,10 @@
       apiKeySet: boolean;
       baseUrlSet: boolean;
       notebookEndpointSet: boolean;
+      structuredOutputStrategy: string | null;
+      structuredOutputLabel: string | null;
+      nativeJsonConstraint: boolean;
+      jsonFallbackOnUnsupported: boolean;
     };
     openNotebook?: {
       endpointSet: boolean;
@@ -115,21 +119,26 @@
       const currentConfig = cfg();
       const provider = currentConfig.providers?.find((item: any) => item.id === currentConfig.flashcardProviderId);
       const model = currentConfig.flashcardModel || provider?.models?.[0] || '';
+      const capabilities = provider ? getProviderCapabilities(provider.id) : null;
       modelReport = {
         providerId: provider?.id || null,
         model: model || null,
         apiKeySet: Boolean(provider?.apiKey),
         baseUrlSet: Boolean(provider?.baseUrl),
         notebookEndpointSet: Boolean(currentConfig.notebookEndpoint),
+        structuredOutputStrategy: capabilities?.structuredOutputStrategy || null,
+        structuredOutputLabel: capabilities?.structuredOutputLabel || null,
+        nativeJsonConstraint: Boolean(capabilities?.usesNativeJsonConstraint),
+        jsonFallbackOnUnsupported: Boolean(capabilities?.fallbackOnUnsupported),
       };
       if (!provider) {
         setCheck('config', 'fail', '未找到制卡 Provider');
       } else if (!model) {
         setCheck('config', 'fail', `Provider ${provider.id} 未配置模型`);
       } else if (!provider.apiKey && !String(provider.baseUrl || '').includes('localhost') && !String(provider.baseUrl || '').includes('127.0.0.1')) {
-        setCheck('config', 'warn', `${provider.id} / ${model} 未配置 API Key`);
+        setCheck('config', 'warn', `${provider.id} / ${model} 未配置 API Key；${capabilities?.structuredOutputLabel || 'JSON 策略未知'}`);
       } else {
-        setCheck('config', 'pass', `${provider.id} / ${model}`);
+        setCheck('config', 'pass', `${provider.id} / ${model}；${capabilities?.structuredOutputLabel || 'JSON 策略未知'}`);
       }
 
       await checkOpenNotebook();

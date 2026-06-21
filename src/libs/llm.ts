@@ -150,6 +150,7 @@ export interface LLMConfig {
     model?: string;
     apiKey?: string;
     providerId?: string;
+    responseFormat?: 'text' | 'json_object';
     maxTokens?: number;
     temperature?: number;
     timeout?: number;
@@ -160,11 +161,50 @@ export interface ChatMessage {
     content: string;
 }
 
+export type StructuredOutputStrategy = 'openai-compatible' | 'gemini-native' | 'prompt-only';
+
+export interface ProviderCapabilities {
+    structuredOutputStrategy: StructuredOutputStrategy;
+    structuredOutputLabel: string;
+    usesNativeJsonConstraint: boolean;
+    fallbackOnUnsupported: boolean;
+}
+
+/**
+ * Provider 能力说明只用于请求构造和 UI 可观测性，不写入用户配置。
+ * 自定义兼容服务默认先尝试 OpenAI JSON mode，再由 pipeline 在不支持时回退。
+ */
+export function getProviderCapabilities(providerId = 'openai-compatible'): ProviderCapabilities {
+    if (providerId === 'gemini') {
+        return {
+            structuredOutputStrategy: 'gemini-native',
+            structuredOutputLabel: 'JSON 原生',
+            usesNativeJsonConstraint: true,
+            fallbackOnUnsupported: true,
+        };
+    }
+    if (providerId === 'anthropic') {
+        return {
+            structuredOutputStrategy: 'prompt-only',
+            structuredOutputLabel: 'JSON 提示词',
+            usesNativeJsonConstraint: false,
+            fallbackOnUnsupported: false,
+        };
+    }
+    return {
+        structuredOutputStrategy: 'openai-compatible',
+        structuredOutputLabel: 'JSON mode + 回退',
+        usesNativeJsonConstraint: true,
+        fallbackOnUnsupported: true,
+    };
+}
+
 const DEFAULT_CONFIG: Required<LLMConfig> = {
     endpoint: 'http://localhost:15721/v1/chat/completions',
     model: 'deepseek-chat',
     apiKey: '',
     providerId: 'openai-compatible',
+    responseFormat: 'text',
     maxTokens: 8192,
     temperature: 0.7,
     timeout: 300_000,
@@ -190,6 +230,7 @@ export interface LLMRequest {
  */
 export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMConfig>): LLMRequest {
     const providerId = config.providerId || 'openai-compatible';
+    const capabilities = getProviderCapabilities(providerId);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     if (providerId === 'gemini') {
@@ -208,6 +249,9 @@ export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMCon
                 maxOutputTokens: config.maxTokens,
             },
         };
+        if (config.responseFormat === 'json_object' && capabilities.structuredOutputStrategy === 'gemini-native') {
+            body.generationConfig.responseMimeType = 'application/json';
+        }
         if (systemText) {
             body.systemInstruction = { parts: [{ text: systemText }] };
         }
@@ -240,6 +284,9 @@ export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMCon
         max_tokens: config.maxTokens,
         temperature: config.temperature,
     };
+    if (config.responseFormat === 'json_object' && capabilities.structuredOutputStrategy === 'openai-compatible') {
+        body.response_format = { type: 'json_object' };
+    }
     if ((providerId === 'deepseek' || config.model.startsWith('deepseek-')) && config.model) {
         body.thinking = { type: 'disabled' };
     }

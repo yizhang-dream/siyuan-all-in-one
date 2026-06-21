@@ -12,6 +12,7 @@
   export let plugin: any;
   export let cardStore: any;
   export let config: any;
+  export let openConceptsPanel: () => void = () => {};
 
   const t = getT(plugin);
 
@@ -31,6 +32,7 @@
   let aiDeck = '';
   let aiTags = '';
   let aiStatus = '';
+  let aiStatusKind: 'info' | 'success' | 'warn' | 'error' = 'info';
   let isGenerating = false;
   let previewCards: GeneratedCard[] = [];
 
@@ -86,6 +88,7 @@
     isGenerating = true;
     previewCards = [];
     aiStatus = '正在准备...';
+    aiStatusKind = 'info';
 
     try {
       // 1. 从选定的来源获取上下文
@@ -96,8 +99,10 @@
         context = await fetchContext(sourceConfig, cfg.notebookEndpoint);
         if (context) {
           aiStatus = `已获取 ${context.length} 字上下文，AI 生成中...`;
+          aiStatusKind = 'info';
         } else {
           aiStatus = '未能获取上下文，将无上下文生成...';
+          aiStatusKind = 'warn';
         }
       }
 
@@ -115,12 +120,15 @@
       const deduped = before - previewCards.length;
 
       if (previewCards.length === 0) {
-        aiStatus = `❌ 全部 ${before} 张已存在（去重 ${deduped} 张）`;
+        aiStatus = `全部 ${before} 张已存在（去重 ${deduped} 张）`;
+        aiStatusKind = 'warn';
       } else {
-        aiStatus = `✅ 生成 ${previewCards.length} 张${deduped > 0 ? `（去重 ${deduped}）` : ''}，请审核`;
+        aiStatus = `生成 ${previewCards.length} 张${deduped > 0 ? `（去重 ${deduped}）` : ''}，请审核`;
+        aiStatusKind = 'success';
       }
     } catch (e: any) {
-      aiStatus = `❌ 生成失败：${e.message}`;
+      aiStatus = `生成失败：${e.message}`;
+      aiStatusKind = 'error';
     }
     isGenerating = false;
   }
@@ -151,6 +159,17 @@
 </script>
 
 <div class="gen-panel">
+  <div class="gen-workflow-note">
+    <div>
+      <strong>快速制卡</strong>
+      <p>这里适合手动添加或用 Agent 生成独立卡片；需要保留概念、关系和导图联动时，进入来源制卡与图谱。</p>
+    </div>
+    <button class="b3-button b3-button--outline gen-workflow-button" on:click={openConceptsPanel}>
+      <svg><use xlink:href="#iconGraph"></use></svg>
+      来源制卡与图谱
+    </button>
+  </div>
+
   <div class="gen-tabs">
     <button class="b3-button" class:b3-button--outline={mode !== 'manual'} on:click={() => mode = 'manual'}>手动添加</button>
     <button class="b3-button" class:b3-button--outline={mode !== 'ai'} on:click={() => mode = 'ai'}>AI 生成</button>
@@ -182,7 +201,8 @@
     <div class="gen-form">
       {#if agents.length === 0}
         <div class="gen-empty-agent">
-          <p>📝 还没有创建任何 Agent</p>
+          <svg class="gen-empty-icon"><use xlink:href="#iconSettings"></use></svg>
+          <p>还没有创建任何 Agent</p>
           <p class="gen-empty-hint">Agent 是可自定义的制卡提示词模板。请先在「设置 → Agent 管理」中创建。</p>
           <button class="b3-button b3-button--outline" on:click={() => plugin.openSetting()}>前往设置</button>
         </div>
@@ -209,9 +229,9 @@
         <!-- Agent 元信息预览 -->
         {#if selectedAgent}
           <div class="gen-agent-meta">
-            <span class="gen-meta-badge">🌐 {selectedAgent.language}</span>
-            <span class="gen-meta-badge">✏️ {selectedAgent.style}</span>
-            <span class="gen-meta-badge">🎯 {selectedAgent.difficulty}</span>
+            <span class="gen-meta-badge">语言：{selectedAgent.language}</span>
+            <span class="gen-meta-badge">风格：{selectedAgent.style}</span>
+            <span class="gen-meta-badge">难度：{selectedAgent.difficulty}</span>
           </div>
         {/if}
 
@@ -233,7 +253,7 @@
           {isGenerating ? '生成中...' : 'AI 生成'}
         </button>
 
-        {#if aiStatus}<div class="gen-status">{aiStatus}</div>{/if}
+        {#if aiStatus}<div class="gen-status gen-status--{aiStatusKind}">{aiStatus}</div>{/if}
 
         <!-- 预览审核 -->
         {#if previewCards.length > 0}
@@ -250,7 +270,9 @@
                   <textarea class="b3-text-field gen-preview-input" rows="2" on:input={(e) => editPreview(idx, 'answer', e.target.value)}>{card.answer}</textarea>
                   <input class="b3-text-field gen-preview-input" value={card.hint} on:input={(e) => editPreview(idx, 'hint', e.target.value)} placeholder="提示" />
                 </div>
-                <button class="b3-button b3-button--small gen-preview-del" on:click={() => removePreview(idx)}>✕</button>
+                <button class="b3-button b3-button--small gen-preview-del" on:click={() => removePreview(idx)} aria-label="删除预览卡片" title="删除">
+                  <svg><use xlink:href="#iconClose"></use></svg>
+                </button>
               </div>
             {/each}
           </div>
@@ -262,6 +284,41 @@
 
 <style lang="scss">
   .gen-panel { padding: 24px; height: 100%; overflow-y: auto; }
+  .gen-workflow-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 14px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+
+    strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: var(--aio-fs-base);
+    }
+
+    p {
+      margin: 0;
+      color: var(--b3-theme-on-surface);
+      font-size: var(--aio-fs-sm);
+      line-height: 1.5;
+      opacity: 0.72;
+    }
+  }
+
+  .gen-workflow-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+
+    svg { width: 14px; height: 14px; }
+  }
+
   .gen-tabs { display: flex; gap: 6px; margin-bottom: 16px;
     .b3-button { flex: 1; }
   }
@@ -269,10 +326,34 @@
   .gen-form label { font-size: var(--aio-fs-base); font-weight: 500; margin-top: 6px; }
   .gen-row { display: flex; gap: 8px; }
   .gen-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-  .gen-status { padding: 8px; border-radius: 4px; background: var(--b3-theme-surface-lighter); font-size: var(--aio-fs-base); text-align: center; }
+  .gen-status {
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-background);
+    font-size: var(--aio-fs-base);
+    text-align: center;
+  }
+  .gen-status--success {
+    color: var(--b3-card-success-color);
+    background: var(--b3-card-success-background);
+    border-color: var(--b3-card-success-color);
+  }
+  .gen-status--warn {
+    color: var(--b3-card-warning-color);
+    background: var(--b3-card-warning-background);
+    border-color: var(--b3-card-warning-color);
+  }
+  .gen-status--error {
+    color: var(--b3-card-error-color);
+    background: var(--b3-card-error-background);
+    border-color: var(--b3-card-error-color);
+  }
   .gen-agent-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
   .gen-meta-badge { font-size: var(--aio-fs-xs); padding: 2px 8px; border-radius: 3px; background: var(--b3-theme-surface-lighter); }
   .gen-empty-agent { text-align: center; padding: 24px;
+    .gen-empty-icon { width: 24px; height: 24px; color: var(--b3-theme-primary); margin-bottom: 8px; }
     p { margin: 0 0 8px; font-size: var(--aio-fs-base); }
     .gen-empty-hint { font-size: var(--aio-fs-sm); opacity: 0.6; line-height: 1.6; margin-bottom: 12px; }
   }
@@ -282,5 +363,20 @@
   .gen-preview-num { font-size: var(--aio-fs-base); font-weight: 600; color: var(--b3-theme-primary); min-width: 20px; }
   .gen-preview-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   .gen-preview-input { font-size: var(--aio-fs-base) !important; padding: 4px 8px !important; }
-  .gen-preview-del { align-self: flex-start; color: var(--b3-card-error-color); }
+  .gen-preview-del {
+    align-self: flex-start;
+    color: var(--b3-card-error-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    svg { width: 14px; height: 14px; }
+  }
+
+  @media (max-width: 720px) {
+    .gen-workflow-note {
+      align-items: stretch;
+      flex-direction: column;
+    }
+  }
 </style>

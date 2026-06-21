@@ -66,3 +66,28 @@ export function buildConfirmationOptions(
         acceptedCardIndexes: [...selection.cardIndexes],
     };
 }
+
+export function trimSelectionForAcceptedConcepts(
+    result: PipelineResult,
+    selection: CandidateSelectionState
+): CandidateSelectionState {
+    const conceptTempIds = new Set(selection.conceptTempIds);
+    const relationIndexes = new Set<number>(
+        [...selection.relationIndexes].filter((index) => {
+            const relation = result.relations[index];
+            return Boolean(
+                relation &&
+                relation.fromTempId !== relation.toTempId &&
+                conceptTempIds.has(relation.fromTempId) &&
+                conceptTempIds.has(relation.toTempId)
+            );
+        })
+    );
+    const cardIndexes = new Set<number>(
+        [...selection.cardIndexes].filter((index) => {
+            const card = result.cards[index];
+            return Boolean(card && (!card.conceptTempId || conceptTempIds.has(card.conceptTempId)));
+        })
+    );
+    return { conceptTempIds, relationIndexes, cardIndexes };
+}

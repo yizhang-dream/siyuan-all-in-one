@@ -64,8 +64,10 @@ npm run check:repo
 - 跨系统部署：自动探测 SiYuan data 目录，也支持 `--siyuan-data` 和环境变量覆盖。
 - 配置方式：OpenAI-compatible LLM provider、OpenNotebook endpoint。
 - Provider Adapter：DeepSeek/OpenAI-compatible/Gemini/Anthropic/火山/智谱/本地兼容服务。
-- 三条路径：一次性生成、卡制图、图制卡。
-- 导入导出：Anki 导入与 JSON/CSV/TSV/Markdown/概念图/导图导出。
+- 复习调度：默认 SM-2 兼容旧数据，可选 `ts-fsrs` 驱动的 FSRS，并在导入导出中保留调度状态。
+- 三条路径：图谱生成、卡制图、图制卡；快速制卡作为独立手动/Agent 制卡入口。
+- 导入导出：Anki 导入、插件原生备份恢复，以及 JSON/CSV/TSV/Markdown/概念图/导图导出。
+- 恢复格式：`cards-json`、`concepts-json`、`mindmaps-markdown`，其中导图 Markdown 保留 `cardIds`/`linkedCardIds` 元数据。
 - 隐私说明：API key 存在 SiYuan 插件 data storage，bundle 检查不会带出已配置 secret。
 
 ## 4. GitHub Actions
@@ -84,12 +86,14 @@ CI 会执行：
 - `npm test`
 - `npm run build`
 - `npm run package:release`
+- `npm run check:release`
 
 Release workflow 在推送 `v*` tag 时执行：
 
 - `npm ci`
 - `npm run verify`
 - `npm run package:release`
+- `npm run check:release`
 - 上传 `release/*.zip` 到 GitHub Release
 
 不要在 CI 跑 `check:live`，它依赖本机 SiYuan、OpenNotebook 和真实模型配置。
@@ -147,8 +151,11 @@ release/siyuan-all-in-one-v1.0.0.zip
 ```bash
 npm run verify
 npm run check:repo
+npm run package:release
+npm run check:release
 npm run deploy:siyuan -- --apply
 npm run check:full
+npm run check:ui-visual
 npm run check:live
 npm run check:data
 ```
@@ -168,9 +175,12 @@ npm run check:full -- --siyuan-data "/path/to/SiYuan/data"
 - Concepts 候选确认后能同步概念导图。
 - Browse 中卡片能打开关联概念导图。
 - Mindmap 中当前导图能生成新卡片并保留 `linkedCardIds`。
-- Import/Export 面板能导出卡片、概念图和导图。
+- Import/Export 面板能导出卡片、概念图和导图，也能恢复导入 `cards-json`、`concepts-json`、`mindmaps-markdown`。
+- `check:ui-visual` 能打开真实 SiYuan 前端中的插件主面板并完成截图级冒烟检查。
+- `check:release` 能确认 release zip 只包含插件市场需要的文件，并覆盖核心能力入口与密钥泄漏检查。
+- `test:paradigm` 能证明卡片、概念图谱和思维导图三者的双向路径在持久化后仍可反查。
 
 ## 7. 当前缺口
 
-- UI 仍缺少浏览器截图级验收，当前主要靠脚本和插件内 Diagnostics。
+- UI 已有 headless 浏览器截图级冒烟验收；公开发布前仍建议人工检查一次桌面端真实交互、深浅色主题和窄屏布局。
 - GitHub 远程仓库尚未创建；创建后需要确认 `package.json` 和 `plugin.json` 中的 URL 是否为最终仓库地址。

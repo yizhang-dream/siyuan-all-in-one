@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<SourceRef['type'], string> = {
     opennotebook: 'OpenNotebook',
     siyuan: 'SiYuan',
     manual: '手动',
+    file: '文件',
     pdf: 'PDF',
     url: 'URL',
 };

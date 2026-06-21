@@ -44,7 +44,7 @@
       bind:value={config.notebookQuery}
     />
     {#if !notebookEndpoint}
-      <p class="source-hint">⚠️ 请先在设置中配置 Open Notebook 端点</p>
+      <p class="source-hint source-hint--warn">请先在设置中配置 Open Notebook 端点</p>
     {/if}
   {/if}
 
@@ -69,13 +69,17 @@
             class:selected={config.siyuanDocId === doc.id}
             on:click={() => selectDoc(doc)}
           >
-            📄 {doc.title}
+            <svg><use xlink:href="#iconFiles"></use></svg>
+            <span>{doc.title}</span>
           </button>
         {/each}
       </div>
     {/if}
     {#if config.siyuanDocId}
-      <p class="source-hint source-hint--ok">✅ 已选择文档</p>
+      <p class="source-hint source-hint--ok">
+        <svg><use xlink:href="#iconCheck"></use></svg>
+        <span>已选择文档</span>
+      </p>
     {/if}
   {/if}
 
@@ -107,14 +111,20 @@
     border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px;
   }
   .source-doc-item {
-    display: block; width: 100%; text-align: left;
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
     padding: 6px 10px; border: none; background: none; cursor: pointer;
     font-size: var(--aio-fs-base); color: var(--b3-theme-on-background);
+    svg { width: 14px; height: 14px; flex: 0 0 14px; color: var(--b3-theme-on-surface); }
+    span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     &:hover { background: var(--b3-theme-surface-light); }
     &.selected { background: var(--b3-theme-primary-lightest); color: var(--b3-theme-primary); }
+    &.selected svg { color: var(--b3-theme-primary); }
   }
   .source-hint {
-    font-size: var(--aio-fs-sm); opacity: 0.6; margin: 0;
+    display: flex; align-items: center; gap: 4px;
+    font-size: var(--aio-fs-sm); opacity: 0.7; margin: 0;
+    svg { width: 14px; height: 14px; flex: 0 0 14px; }
     &.source-hint--ok { color: var(--b3-card-success-color); opacity: 1; }
+    &.source-hint--warn { color: var(--b3-card-warning-color); opacity: 1; }
   }
 </style>

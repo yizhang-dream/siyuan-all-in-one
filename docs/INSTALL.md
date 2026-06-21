@@ -30,6 +30,7 @@ http://localhost:5055
 - API key
 - flashcard provider/model
 - mindmap provider/model
+- review scheduler：默认使用 SM-2 兼容旧卡片；在 `设置 -> 复习设置` 中可以切换到 FSRS（实验），新复习记录会保留 `fsrs` 状态，同时继续同步旧的 `due/interval/status` 字段。
 
 内置 provider 分两类：
 
@@ -57,7 +58,7 @@ api key: 留空
 https://example.com/custom/chat#
 ```
 
-Diagnostics 面板和 `check:bundle` 不会导出真实 API key，只检查 `apiKeySet` 或 bundle 中是否误带 secret。
+Diagnostics 面板会显示当前 provider 的结构化输出策略，例如 `JSON 原生`、`JSON mode + 回退` 或 `JSON 提示词`，用于排查不同 provider 的 JSON 稳定性问题。Diagnostics 和 `check:bundle` 不会导出真实 API key，只检查 `apiKeySet` 或 bundle 中是否误带 secret。
 
 ## 4. 开发者本地部署
 
@@ -119,7 +120,17 @@ npm run check:live
 
 `check:live` 会调用真实 OpenNotebook 和 LLM，但使用内存 store 与内容哈希检查，设计上不修改真实插件数据。
 
-## 6. Release 打包
+## 6. 备份与恢复
+
+`导入导出` 面板支持 Anki 导入，也支持恢复插件原生备份：
+
+- `cards-json`：恢复卡片。
+- `concepts-json`：恢复概念、关系和关联卡片。
+- `mindmaps-markdown`：恢复导图 Markdown，并通过元数据注释恢复 `cardIds` 与 `linkedCardIds`。
+
+建议公开发布或大重构前导出一次卡片、概念图和导图；恢复导入会按现有 id 合并，适合迁移工作空间或回滚误操作。
+
+## 7. Release 打包
 
 ```bash
 npm run build

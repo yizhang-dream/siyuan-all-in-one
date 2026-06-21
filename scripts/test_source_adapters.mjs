@@ -116,6 +116,13 @@ assert.equal(drifted[1].content, 'Chunk object text.');
 
 let searchBody: any = null;
 (globalThis as any).fetch = async (url: string, init: any = {}) => {
+  if (url.endsWith('/api/sources/source-1')) {
+    return new Response(JSON.stringify({
+      id: 'source-1',
+      title: 'Selected source detail',
+      full_text: 'Direct source detail content should work without a search query.',
+    }), { status: 200 });
+  }
   if (url.endsWith('/api/notes/note-1')) {
     return new Response(JSON.stringify({
       id: 'note-1',
@@ -131,6 +138,20 @@ let searchBody: any = null;
   }
   return new Response(JSON.stringify({ results: [] }), { status: 200 });
 };
+
+const selectedSourceOnly = await fetchOpenNotebookPipelineSources({
+  endpoint: 'http://localhost:5055',
+  query: '',
+  sourceIds: ['source-1'],
+  limit: 2,
+  searchType: 'text',
+});
+
+assert.equal(selectedSourceOnly.length, 1);
+assert.equal(selectedSourceOnly[0].sourceId, 'source-1');
+assert.equal(selectedSourceOnly[0].chunkId, 'source-1');
+assert.match(selectedSourceOnly[0].text, /# Selected source detail/);
+assert.match(selectedSourceOnly[0].text, /without a search query/);
 
 const scopedNoteSources = await fetchOpenNotebookPipelineSources({
   endpoint: 'http://localhost:5055',
@@ -176,6 +197,7 @@ assert.equal(siyuanSources[0].text.includes('冲量定理'.repeat(100)), false);
 
 console.log(JSON.stringify({
   pipelineSources: sources.length,
+  selectedSourceOnly: selectedSourceOnly.length,
   scopedNoteSources: scopedNoteSources.length,
   siyuanSources: siyuanSources.length,
   sourceType: sources[0].type,

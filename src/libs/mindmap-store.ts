@@ -6,8 +6,6 @@
  * 每个思维导图保存：标题、markdown 内容、关联的卡片 id 列表、创建时间。
  */
 
-import type { Card } from './types';
-
 export interface SavedMindmap {
     id: string;
     title: string;
@@ -36,7 +34,7 @@ export class MindmapStore {
         try {
             const data = await this.plugin.loadData('mindmaps');
             if (Array.isArray(data)) {
-                this.mindmaps = data;
+                this.mindmaps = data.map(cleanMindmap);
             }
         } catch {
             this.mindmaps = [];
@@ -93,10 +91,51 @@ export class MindmapStore {
         this.mindmaps = [];
         await this.save();
     }
+
+    importMindmaps(rawMindmaps: any[] = []): { added: number; updated: number } {
+        let added = 0;
+        let updated = 0;
+        for (const raw of rawMindmaps) {
+            const mindmap = cleanMindmap(raw);
+            const existing = this.mindmaps.find((item) => item.id === mindmap.id);
+            if (existing) {
+                Object.assign(existing, {
+                    ...mindmap,
+                    cardIds: mergeIds(existing.cardIds, mindmap.cardIds),
+                    linkedCardIds: mergeIds(existing.linkedCardIds, mindmap.linkedCardIds),
+                });
+                updated++;
+            } else {
+                this.mindmaps.push(mindmap);
+                added++;
+            }
+        }
+        return { added, updated };
+    }
 }
 
 function mergeIds(a: string[] = [], b: string[] = []): string[] {
     return Array.from(new Set([...a, ...b].filter(Boolean)));
+}
+
+function cleanMindmap(raw: any): SavedMindmap {
+    const now = Date.now();
+    const source = ['cards', 'doc', 'manual', 'concepts'].includes(raw?.source) ? raw.source : 'manual';
+    return {
+        id: String(raw?.id || genMindmapId()),
+        title: String(raw?.title || raw?.id || 'Untitled mindmap'),
+        markdown: String(raw?.markdown || ''),
+        cardIds: toStringArray(raw?.cardIds),
+        linkedCardIds: toStringArray(raw?.linkedCardIds),
+        deck: raw?.deck === undefined ? undefined : String(raw.deck),
+        source,
+        created: Number(raw?.created) || now,
+        modified: Number(raw?.modified) || now,
+    };
+}
+
+function toStringArray(value: any): string[] {
+    return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
 /** 生成思维导图 id */

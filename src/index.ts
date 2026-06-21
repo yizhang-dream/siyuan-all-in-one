@@ -31,7 +31,7 @@ export default class SiYuanAllInOne extends Plugin {
     private typoTimer: number | null = null;
 
     async onload() {
-        console.log('[all-in-one] loading...');
+        console.debug('[all-in-one] loading...');
 
         this.cardStore = new CardStore(this);
         await this.cardStore.load();
@@ -84,7 +84,7 @@ export default class SiYuanAllInOne extends Plugin {
             },
         });
 
-        console.log('[all-in-one] loaded');
+        console.debug('[all-in-one] loaded');
     }
 
     async onLayoutReady() {

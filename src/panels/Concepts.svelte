@@ -1,15 +1,18 @@
 <script lang="ts">
   import { afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
-  import { confirmPipelineResult, fetchOpenNotebookPipelineSources, runPromptPipeline, type PipelineSource, type PipelineStep } from '../libs/ai';
-  import { buildConfirmationOptions, createCandidateSelection } from '../libs/ai/selection';
+  import { confirmPipelineResult, runPromptPipeline, type PipelineSource, type PipelineStep } from '../libs/ai';
+  import { buildConfirmationOptions, createCandidateSelection, trimSelectionForAcceptedConcepts } from '../libs/ai/selection';
   import { syncConceptMindmap } from '../libs/concept-mindmap-sync';
   import { resolveLLMConfig } from '../libs/llm';
+  import { OpenNotebookClient, type Notebook, type Source } from '../libs/notebook';
   import type { NotebookConceptRequest } from '../libs/notebook-bridge';
   import { buildConceptGraph, type ConceptGraphNode } from '../libs/render/concept-graph';
   import { renderToHTML, renderMath } from '../libs/render';
   import { activateSourceRef, formatSourceLabel, formatSourceText, getSourceAction } from '../libs/source-actions';
-  import { readSiyuanDocsAsPipelineSources, searchSiyuanDocs, type DocItem } from '../libs/sources';
+  import { searchSiyuanDocs, type DocItem } from '../libs/sources';
+  import { collectPipelineSources } from '../libs/sources/source-hub';
+  import { fileToLocalTextInput, type LocalTextFileInput } from '../libs/sources/local-file-adapters';
   import { CARD_TYPE_LABELS, type PipelineResult, type RelationType, type SourceRef } from '../libs/types/concept';
 
   export let plugin: any;
@@ -20,6 +23,7 @@
   export let openSourceRef: (ref: Partial<SourceRef>) => Promise<boolean> = (ref) => activateSourceRef(ref);
   export let jumpToMindmap: (mindmapId: string) => void = () => {};
   export let notebookTarget: NotebookConceptRequest | null = null;
+  export let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
 
   let query = '';
   let refreshKey = 0;
@@ -28,11 +32,20 @@
   let notebookQuery = '';
   let notebookSourceIds: string[] = [];
   let notebookNoteIds: string[] = [];
+  let openNotebookNotebooks: Notebook[] = [];
+  let selectedOpenNotebookId = '';
+  let openNotebookSources: Source[] = [];
+  let isLoadingOpenNotebookSources = false;
+  let openNotebookSourceError = '';
+  let openNotebookPickerLoadedFor = '';
   let siyuanDocQuery = '';
   let siyuanDocResults: DocItem[] = [];
   let selectedSiyuanDocs: DocItem[] = [];
   let isSearchingSiyuanDocs = false;
+  let localFiles: LocalTextFileInput[] = [];
+  let localFileError = '';
   let appliedNotebookTargetKey = '';
+  let appliedMindmapGapTargetKey = 0;
   let targetCardCount = 8;
   let deck = config?.defaultDeck || '默认';
   let tagsText = 'pipeline';
@@ -86,6 +99,15 @@
   $: if (selectedGraphNodeId && !graphNodeIds.has(selectedGraphNodeId)) selectedGraphNodeId = '';
   $: selectedGraphNode = conceptGraph.nodes.find((node) => node.id === selectedGraphNodeId) || null;
   $: applyNotebookTarget(notebookTarget);
+  $: applyMindmapGapTarget(mindmapGapTarget);
+  $: if (
+    (sourceMode === 'opennotebook' || sourceMode === 'mixed') &&
+    config?.notebookEndpoint &&
+    !isLoadingOpenNotebookSources &&
+    openNotebookPickerLoadedFor !== config.notebookEndpoint
+  ) {
+    loadOpenNotebookSourcePicker();
+  }
 
   afterUpdate(() => {
     if (candidateReviewEl) renderMath(candidateReviewEl);
@@ -108,11 +130,11 @@
       showMessage('请先粘贴一段来源文本');
       return;
     }
-    if (sourceMode === 'opennotebook' && !query && notebookNoteIds.length === 0) {
-      showMessage('请输入 OpenNotebook 搜索问题，或从 Notebook 面板选择笔记');
+    if (sourceMode === 'opennotebook' && !query && notebookSourceIds.length === 0 && notebookNoteIds.length === 0) {
+      showMessage('请输入 OpenNotebook 搜索问题，或直接选择 OpenNotebook 来源/笔记');
       return;
     }
-    if (sourceMode === 'mixed' && !text && !query && notebookNoteIds.length === 0 && selectedSiyuanDocs.length === 0) {
+    if (sourceMode === 'mixed' && !text && !query && notebookSourceIds.length === 0 && notebookNoteIds.length === 0 && selectedSiyuanDocs.length === 0 && localFiles.length === 0) {
       showMessage('请至少提供一种来源：手动文本、OpenNotebook 或思源文档');
       return;
     }
@@ -182,48 +204,84 @@
     }
   }
 
-  async function buildPipelineSources(cfg: any): Promise<PipelineSource[]> {
-    const sources: PipelineSource[] = [];
-    const text = sourceText.trim();
-    const query = notebookQuery.trim();
-
-    if ((sourceMode === 'manual' || sourceMode === 'mixed') && text) {
-      sources.push({
-        id: 'manual-1',
-        type: 'manual',
-        sourceId: 'manual-1',
-        chunkId: 'manual-1',
-        quote: text.slice(0, 240),
-        text,
-      });
-    }
-
-    if ((sourceMode === 'opennotebook' || sourceMode === 'mixed') && (query || notebookNoteIds.length > 0)) {
-      sources.push(...await fetchOpenNotebookPipelineSources({
-        endpoint: cfg.notebookEndpoint,
-        query,
-        sourceIds: notebookSourceIds,
-        noteIds: notebookNoteIds,
-        limit: 12,
-        searchType: 'vector',
-      }));
-    }
-
-    if (sourceMode === 'mixed' && selectedSiyuanDocs.length > 0) {
-      sources.push(...await readSiyuanDocsAsPipelineSources(selectedSiyuanDocs, { maxCharsPerDoc: 8000 }));
-    }
-
-    return dedupePipelineSources(sources);
+  function applyMindmapGapTarget(target: { manualText: string; label: string; key: number } | null) {
+    if (!target || target.key === appliedMindmapGapTargetKey) return;
+    appliedMindmapGapTargetKey = target.key;
+    sourceMode = 'manual';
+    sourceText = target.manualText;
+    notebookQuery = '';
+    notebookSourceIds = [];
+    notebookNoteIds = [];
+    selectedSiyuanDocs = [];
+    localFiles = [];
+    status = target.label || '已接收导图缺卡节点';
+    setTimeout(() => {
+      if (!isRunning && appliedMindmapGapTargetKey === target.key) runPipeline();
+    }, 0);
   }
 
-  function dedupePipelineSources(sources: PipelineSource[]): PipelineSource[] {
-    const seen = new Set<string>();
-    return sources.filter((source) => {
-      const key = [source.type || 'manual', source.sourceId || '', source.blockId || '', source.chunkId || '', source.text.slice(0, 120)].join('|');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+  async function buildPipelineSources(cfg: any): Promise<PipelineSource[]> {
+    const text = sourceText.trim();
+    const query = notebookQuery.trim();
+    const result = await collectPipelineSources({
+      mode: sourceMode,
+      manualText: text,
+      notebookEndpoint: cfg.notebookEndpoint,
+      notebookQuery: query,
+      notebookSourceIds,
+      notebookNoteIds,
+      siyuanDocs: selectedSiyuanDocs,
+      localFiles,
+      openNotebookLimit: 12,
+      openNotebookSearchType: 'text',
+      maxCharsPerSiyuanDoc: 8000,
+      maxCharsPerLocalFileChunk: 6000,
     });
+    return result.sources;
+  }
+
+  async function loadOpenNotebookSourcePicker(force = false) {
+    const cfg = plugin?.getConfig?.() || config || {};
+    if (!cfg.notebookEndpoint) {
+      openNotebookSourceError = '未配置 OpenNotebook 端点';
+      return;
+    }
+    if (!force && openNotebookSources.length > 0) return;
+    isLoadingOpenNotebookSources = true;
+    openNotebookPickerLoadedFor = cfg.notebookEndpoint;
+    openNotebookSourceError = '';
+    try {
+      const client = new OpenNotebookClient(cfg.notebookEndpoint);
+      openNotebookNotebooks = await client.listNotebooks();
+      const preferred = openNotebookNotebooks.find((notebook) => notebook.id === selectedOpenNotebookId) ||
+        openNotebookNotebooks.find((notebook) => notebook.source_count > 0) ||
+        openNotebookNotebooks[0];
+      selectedOpenNotebookId = preferred?.id || '';
+      openNotebookSources = selectedOpenNotebookId ? await client.listSources(selectedOpenNotebookId, 200) : [];
+    } catch (err: any) {
+      openNotebookNotebooks = [];
+      openNotebookSources = [];
+      openNotebookSourceError = err?.message || String(err);
+    } finally {
+      isLoadingOpenNotebookSources = false;
+    }
+  }
+
+  async function changeOpenNotebookNotebook(event: Event) {
+    selectedOpenNotebookId = (event.target as HTMLSelectElement).value;
+    openNotebookSources = [];
+    await loadOpenNotebookSourcePicker(true);
+  }
+
+  function toggleOpenNotebookSource(sourceId: string) {
+    const next = new Set(notebookSourceIds);
+    if (next.has(sourceId)) next.delete(sourceId);
+    else next.add(sourceId);
+    notebookSourceIds = [...next];
+  }
+
+  function clearOpenNotebookSources() {
+    notebookSourceIds = [];
   }
 
   async function searchSiyuanDocCandidates() {
@@ -247,6 +305,42 @@
 
   function removeSiyuanDoc(docId: string) {
     selectedSiyuanDocs = selectedSiyuanDocs.filter((doc) => doc.id !== docId);
+  }
+
+  async function addLocalFiles(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = '';
+    if (files.length === 0) return;
+    localFileError = '';
+    const accepted: LocalTextFileInput[] = [];
+    for (const file of files) {
+      if (!isSupportedLocalFile(file.name, file.type)) {
+        localFileError = '仅支持 txt、md、markdown、html、htm';
+        continue;
+      }
+      try {
+        accepted.push(await fileToLocalTextInput(file));
+      } catch (err: any) {
+        localFileError = err?.message || String(err);
+      }
+    }
+    const byName = new Map(localFiles.map((file) => [file.name, file]));
+    accepted.forEach((file) => byName.set(file.name, file));
+    localFiles = [...byName.values()];
+  }
+
+  function removeLocalFile(name: string) {
+    localFiles = localFiles.filter((file) => file.name !== name);
+  }
+
+  function clearLocalFiles() {
+    localFiles = [];
+    localFileError = '';
+  }
+
+  function isSupportedLocalFile(name: string, type = ''): boolean {
+    return /\.(txt|md|markdown|html?|xhtml)$/i.test(name) || /^text\/|markdown|html/i.test(type);
   }
 
   async function confirmCandidates() {
@@ -354,18 +448,14 @@
 
   function trimSelectionsForConcepts() {
     if (!result) return;
-    selectedRelationIndexes = new Set(
-      [...selectedRelationIndexes].filter((index) => {
-        const relation = result?.relations[index];
-        return relation && selectedConceptTempIds.has(relation.fromTempId) && selectedConceptTempIds.has(relation.toTempId);
-      })
-    );
-    selectedCardIndexes = new Set(
-      [...selectedCardIndexes].filter((index) => {
-        const card = result?.cards[index];
-        return card && (!card.conceptTempId || selectedConceptTempIds.has(card.conceptTempId));
-      })
-    );
+    const trimmed = trimSelectionForAcceptedConcepts(result, {
+      conceptTempIds: selectedConceptTempIds,
+      relationIndexes: selectedRelationIndexes,
+      cardIndexes: selectedCardIndexes,
+    });
+    selectedConceptTempIds = trimmed.conceptTempIds;
+    selectedRelationIndexes = trimmed.relationIndexes;
+    selectedCardIndexes = trimmed.cardIndexes;
   }
 
   function conceptTitle(tempId?: string): string {
@@ -455,8 +545,8 @@
   <section class="concept-candidates">
     <div class="concept-toolbar">
       <div>
-        <div class="concept-title">候选生成与确认</div>
-        <div class="concept-subtitle">AI 只生成候选，勾选确认后才写入概念库和闪卡库</div>
+        <div class="concept-title">来源制卡与图谱</div>
+        <div class="concept-subtitle">来源 → 概念/关系 → 闪卡/导图；确认后写入</div>
       </div>
       <div class="concept-actions">
         <button class="b3-button b3-button--small b3-button--outline" on:click={resetCandidates} disabled={isRunning || isConfirming || !result}>清空候选</button>
@@ -490,10 +580,53 @@
           placeholder="输入 OpenNotebook 搜索问题，例如：SM-2 为什么能改善长期记忆？"
         />
         <span>{config?.notebookEndpoint ? `端点：${config.notebookEndpoint}` : '未配置 OpenNotebook 端点'}</span>
+        <div class="notebook-picker-row">
+          <select class="b3-select" bind:value={selectedOpenNotebookId} on:change={changeOpenNotebookNotebook} disabled={isLoadingOpenNotebookSources || openNotebookNotebooks.length === 0}>
+            <option value="">选择 notebook</option>
+            {#each openNotebookNotebooks as notebook (notebook.id)}
+              <option value={notebook.id}>{notebook.name} ({notebook.source_count || 0})</option>
+            {/each}
+          </select>
+          <button class="b3-button b3-button--small b3-button--outline" type="button" on:click={() => loadOpenNotebookSourcePicker(true)} disabled={isLoadingOpenNotebookSources || !config?.notebookEndpoint}>
+            {isLoadingOpenNotebookSources ? '加载中...' : '刷新来源'}
+          </button>
+        </div>
+        {#if openNotebookSourceError}
+          <div class="notebook-source-error">{openNotebookSourceError}</div>
+        {/if}
+        {#if notebookSourceIds.length > 0}
+          <div class="siyuan-selected">
+            {#each notebookSourceIds as sourceId}
+              <span class="siyuan-chip" title={sourceId}>
+                {shortTitle(openNotebookSources.find((source) => source.id === sourceId)?.title || sourceId, 20)}
+                <button type="button" aria-label="移除 OpenNotebook 来源" title="移除" on:click={() => toggleOpenNotebookSource(sourceId)}>
+                  <svg><use xlink:href="#iconClose"></use></svg>
+                </button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+        {#if openNotebookSources.length > 0}
+          <div class="notebook-source-results">
+            {#each openNotebookSources as source (source.id)}
+              <button
+                class="notebook-source-result"
+                class:selected={notebookSourceIds.includes(source.id)}
+                type="button"
+                on:click={() => toggleOpenNotebookSource(source.id)}
+                title={source.id}
+              >
+                <svg><use xlink:href="#iconFiles"></use></svg>
+                <span>{source.title || source.id}</span>
+                <em>{notebookSourceIds.includes(source.id) ? '已选' : '添加'}</em>
+              </button>
+            {/each}
+          </div>
+        {/if}
         {#if notebookSourceIds.length > 0}
           <div class="notebook-scope">
             <span>限定来源：{notebookSourceIds.join(', ')}</span>
-            <button class="nb-link" type="button" on:click={() => (notebookSourceIds = [])}>清除限定</button>
+            <button class="nb-link" type="button" on:click={clearOpenNotebookSources}>清除限定</button>
           </div>
         {/if}
         {#if notebookNoteIds.length > 0}
@@ -525,7 +658,9 @@
             {#each selectedSiyuanDocs as doc (doc.id)}
               <span class="siyuan-chip" title={doc.id}>
                 {shortTitle(doc.title || doc.id, 18)}
-                <button type="button" aria-label="移除思源文档" on:click={() => removeSiyuanDoc(doc.id)}>×</button>
+                <button type="button" aria-label="移除思源文档" title="移除" on:click={() => removeSiyuanDoc(doc.id)}>
+                  <svg><use xlink:href="#iconClose"></use></svg>
+                </button>
               </span>
             {/each}
           </div>
@@ -544,6 +679,39 @@
                 <span>{doc.title}</span>
                 <em>{selectedSiyuanDocs.some((item) => item.id === doc.id) ? '已选' : '加入'}</em>
               </button>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="local-file-row">
+          <label class="b3-button b3-button--small b3-button--outline local-file-picker">
+            <svg><use xlink:href="#iconUpload"></use></svg>
+            <span>加入本地文本</span>
+            <input
+              type="file"
+              multiple
+              accept=".txt,.md,.markdown,.html,.htm,text/plain,text/markdown,text/html"
+              on:change={addLocalFiles}
+            />
+          </label>
+          {#if localFiles.length > 0}
+            <button class="nb-link" type="button" on:click={clearLocalFiles}>清除文件</button>
+          {/if}
+        </div>
+
+        {#if localFileError}
+          <div class="notebook-source-error">{localFileError}</div>
+        {/if}
+
+        {#if localFiles.length > 0}
+          <div class="siyuan-selected">
+            {#each localFiles as file (file.name)}
+              <span class="siyuan-chip" title={file.name}>
+                {shortTitle(file.name, 22)}
+                <button type="button" aria-label="移除本地文件" title="移除" on:click={() => removeLocalFile(file.name)}>
+                  <svg><use xlink:href="#iconClose"></use></svg>
+                </button>
+              </span>
             {/each}
           </div>
         {/if}
@@ -918,9 +1086,10 @@
     height: 100%;
     padding: 16px;
     display: grid;
-    grid-template-rows: minmax(320px, auto) minmax(0, 1fr);
+    grid-template-rows: auto minmax(360px, 1fr);
     gap: 14px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .concept-candidates,
@@ -932,6 +1101,7 @@
   }
 
   .concept-library {
+    min-height: 360px;
     overflow: hidden;
   }
 
@@ -988,6 +1158,70 @@
     }
   }
 
+  .notebook-picker-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .notebook-source-error {
+    padding: 5px 7px;
+    border-radius: 4px;
+    color: var(--b3-card-error-color);
+    background: var(--b3-card-error-background);
+    font-size: var(--aio-fs-xs);
+  }
+
+  .notebook-source-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+
+  .notebook-source-result {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 5px 7px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    cursor: pointer;
+    text-align: left;
+
+    svg {
+      width: 14px;
+      height: 14px;
+      color: var(--b3-theme-primary);
+    }
+
+    span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--aio-fs-xs);
+    }
+
+    em {
+      flex-shrink: 0;
+      font-style: normal;
+      font-size: var(--aio-fs-xs);
+      color: var(--b3-theme-primary);
+    }
+
+    &.selected {
+      border-color: var(--b3-theme-primary-light);
+      background: var(--b3-theme-primary-lightest);
+    }
+  }
+
   .notebook-scope {
     display: flex;
     align-items: center;
@@ -1018,6 +1252,30 @@
     align-items: center;
   }
 
+  .local-file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .local-file-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  .local-file-picker svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+  }
+
+  .local-file-picker input {
+    display: none;
+  }
+
   .siyuan-selected {
     display: flex;
     flex-wrap: wrap;
@@ -1037,12 +1295,23 @@
     font-size: var(--aio-fs-xs);
 
     button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
       border: none;
       background: transparent;
       color: var(--b3-theme-on-surface);
       cursor: pointer;
       opacity: 0.65;
-      padding: 0 2px;
+      padding: 0;
+
+      svg {
+        width: 12px;
+        height: 12px;
+      }
     }
 
     button:hover {
@@ -1605,7 +1874,7 @@
     }
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1200px) {
     .concept-panel {
       overflow-y: auto;
       grid-template-rows: auto auto;
@@ -1620,6 +1889,14 @@
       max-height: 260px;
     }
 
+    .candidate-relation-row {
+      grid-template-columns: minmax(0, 1fr) minmax(84px, 120px);
+    }
+
+    .candidate-relation-row em {
+      text-align: right;
+    }
+
     .concept-graph-view {
       grid-template-columns: 1fr;
       overflow: visible;
@@ -1632,6 +1909,48 @@
     .concept-graph-svg {
       min-width: 680px;
       min-height: 360px;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .concept-panel {
+      padding: 12px;
+    }
+
+    .concept-toolbar,
+    .candidate-review-head {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .siyuan-search-row {
+      grid-template-columns: 1fr;
+    }
+
+    .source-mode-tabs {
+      flex-wrap: wrap;
+    }
+
+    .source-mode-tabs .b3-button {
+      flex: 1 1 120px;
+      min-width: 0;
+    }
+
+    .candidate-review {
+      overflow: visible;
+    }
+
+    .candidate-column {
+      max-height: none;
+      overflow: visible;
+    }
+
+    .candidate-line {
+      flex-direction: column;
+    }
+
+    .candidate-card-meta {
+      grid-template-columns: 1fr;
     }
   }
 </style>

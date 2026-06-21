@@ -14,7 +14,7 @@ await mkdir(tempDir, { recursive: true });
 
 await writeFile(entry, `
 import assert from 'node:assert/strict';
-import { buildConfirmationOptions, createCandidateSelection } from '../src/libs/ai/selection';
+import { buildConfirmationOptions, createCandidateSelection, trimSelectionForAcceptedConcepts } from '../src/libs/ai/selection';
 import type { PipelineResult } from '../src/libs/types/concept';
 
 const result: PipelineResult = {
@@ -89,6 +89,22 @@ assert.deepEqual(options.acceptedCardIndexes, [0, 2]);
 assert.equal(options.deck, '测试');
 assert.deepEqual(options.tags, ['selection']);
 assert.equal(options.save, false);
+
+const fullySelected = {
+  conceptTempIds: new Set(['c1', 'c2']),
+  relationIndexes: new Set([0, 1]),
+  cardIndexes: new Set([0, 1, 2]),
+};
+fullySelected.conceptTempIds.delete('c2');
+const trimmed = trimSelectionForAcceptedConcepts(result, fullySelected);
+assert.deepEqual([...trimmed.conceptTempIds], ['c1']);
+assert.deepEqual([...trimmed.relationIndexes], []);
+assert.deepEqual([...trimmed.cardIndexes], [0, 2]);
+
+const trimmedOptions = buildConfirmationOptions(trimmed, { deck: 'trimmed', tags: ['ui-bridge'] });
+assert.deepEqual(trimmedOptions.acceptedConceptTempIds, ['c1']);
+assert.deepEqual(trimmedOptions.acceptedRelationIndexes, []);
+assert.deepEqual(trimmedOptions.acceptedCardIndexes, [0, 2]);
 
 console.log(JSON.stringify({
   selectedConcepts: selection.conceptTempIds.size,

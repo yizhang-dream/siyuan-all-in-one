@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, afterUpdate } from 'svelte';
-  import { schedule } from '../libs/srs';
+  import { scheduleCard } from '../libs/srs';
   import { renderToHTML, renderMath } from '../libs/render';
 
   export let plugin: any;
   export let cardStore: any;
+  export let queue: { ids: string[]; title: string; key: number } | null = null;
 
   // 牌组选择
   let allDecks: string[] = [];
@@ -16,6 +17,9 @@
   let dueCards: any[] = [];
   let currentIndex = 0;
   let flipped = false;
+  let appliedQueueKey = 0;
+  let dismissedQueueKey = 0;
+  let activeQueueTitle = '';
 
   onMount(() => {
     // 加载配置
@@ -26,7 +30,19 @@
   });
 
   function refresh() {
+    if (queue?.key && queue.key !== appliedQueueKey && queue.key !== dismissedQueueKey) {
+      appliedQueueKey = queue.key;
+      activeQueueTitle = queue.title || '筛选复习';
+      const idSet = new Set(queue.ids || []);
+      dueCards = cardStore.getAll().filter((card: any) => idSet.has(card.id));
+      currentIndex = 0;
+      flipped = false;
+      allDecks = cardStore.getDecks();
+      return;
+    }
+
     // 获取全部到期卡片
+    activeQueueTitle = '';
     allDecks = cardStore.getDecks();
     const allDue = cardStore.getDue();
 
@@ -46,13 +62,16 @@
   function handleGrade(g: number) {
     const card = dueCards[currentIndex];
     if (!card) return;
-    schedule(g, card);
+    const cfg = plugin.getConfig();
+    scheduleCard(g, card, cfg.scheduler || 'sm2');
     plugin.saveCards();
     currentIndex++;
     flipped = false;
   }
 
   function changeDeck() {
+    appliedQueueKey = 0;
+    activeQueueTitle = '';
     refresh();
   }
 
@@ -75,6 +94,14 @@
   $: hasMore = currentIndex < dueCards.length;
   $: remainingToday = dailyLimit - currentIndex;
   $: totalFiltered = dueCards.length; // 实际加载的卡片数（受限于 dailyLimit）
+  $: if (queue?.key && queue.key !== appliedQueueKey && queue.key !== dismissedQueueKey) refresh();
+
+  function exitFilteredQueue() {
+    dismissedQueueKey = appliedQueueKey;
+    appliedQueueKey = 0;
+    activeQueueTitle = '';
+    refresh();
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (!hasMore) return;
@@ -115,7 +142,7 @@
   <div class="review-settings">
     <div class="review-setting">
       <label for="review-deck">牌组</label>
-      <select id="review-deck" class="b3-select" bind:value={selectedDeck} on:change={changeDeck}>
+      <select id="review-deck" class="b3-select" bind:value={selectedDeck} on:change={changeDeck} disabled={Boolean(activeQueueTitle)}>
         <option value="">全部牌组</option>
         {#each allDecks as deck}
           <option value={deck}>{deck}</option>
@@ -133,22 +160,28 @@
 
   {#if dueCards.length === 0}
     <div class="review-empty">
-      <svg class="review-empty-icon"><use xlink:href="#iconEmoji"></use></svg>
+      <svg class="review-empty-icon"><use xlink:href="#iconInfo"></use></svg>
       <p class="review-empty-text">暂无待复习的卡片</p>
       <p class="review-empty-hint">去「生成」页面创建新卡片</p>
     </div>
   {:else if !hasMore}
     <div class="review-empty">
       <svg class="review-empty-icon"><use xlink:href="#iconCheck"></use></svg>
-      <p class="review-empty-text">本轮复习完成！🎉</p>
+      <p class="review-empty-text">本轮复习完成</p>
       {#if totalFiltered === dailyLimit}
         <p class="review-empty-hint">已达每日上限 {dailyLimit} 张，明天再来</p>
       {/if}
       <button class="b3-button b3-button--outline" on:click={refresh}>刷新</button>
     </div>
   {:else}
+    {#if activeQueueTitle}
+      <div class="review-queue-banner">
+        <span>{activeQueueTitle}</span>
+        <button class="b3-button b3-button--small b3-button--outline" on:click={exitFilteredQueue}>返回到期复习</button>
+      </div>
+    {/if}
     <div class="review-progress">
-      <span>{currentIndex + 1} / {dueCards.length}（今日剩余 {remainingToday}）</span>
+      <span>{currentIndex + 1} / {dueCards.length}{activeQueueTitle ? '' : `（今日剩余 ${remainingToday}）`}</span>
       <div class="review-bar">
         <div class="review-bar-fill" style="width: {((currentIndex + 1) / dueCards.length) * 100}%"></div>
       </div>
@@ -159,6 +192,12 @@
         <div class="review-card-front">
           <div class="review-card-label">问题</div>
           <div class="review-card-text">{@html renderToHTML(currentCard.question)}</div>
+          {#if currentCard.hint}
+            <div class="review-card-hint review-card-hint--front">
+              <span class="review-card-label">提示</span>
+              {@html renderToHTML(currentCard.hint)}
+            </div>
+          {/if}
         </div>
         <div class="review-card-back">
           <div class="review-card-label">答案</div>
@@ -218,6 +257,28 @@
     .review-empty-hint { font-size: var(--aio-fs-base); opacity: 0.6; }
   }
 
+  .review-queue-banner {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--b3-theme-primary-light);
+    border-radius: 4px;
+    background: var(--b3-theme-primary-lightest);
+    color: var(--b3-theme-on-surface);
+    font-size: var(--aio-fs-sm);
+
+    span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   .review-progress {
     width: 100%; max-width: 720px; display: flex; align-items: center; gap: 8px; font-size: var(--aio-fs-sm); color: var(--b3-theme-on-surface);
     .review-bar { flex: 1; height: 4px; background: var(--b3-theme-surface-lighter); border-radius: 2px; overflow: hidden; }
@@ -245,6 +306,10 @@
   .review-card-label { font-size: var(--aio-fs-xs); text-transform: uppercase; letter-spacing: 1px; color: var(--b3-theme-primary); margin-bottom: 8px; font-weight: 600; }
   .review-card-text { font-size: var(--aio-fs-md); line-height: 1.7; text-align: center; word-break: break-word; white-space: pre-wrap; }
   .review-card-hint { margin-top: 12px; font-size: var(--aio-fs-base); opacity: 0.7; text-align: center; padding-top: 8px; border-top: 1px solid var(--b3-theme-surface-lighter); width: 100%; }
+  .review-card-hint--front {
+    max-width: 92%;
+    padding: 8px 10px 0;
+  }
 
   .review-flip-btn { width: 100%; max-width: 720px; padding: 10px; }
   .review-grades { display: flex; gap: 8px; width: 100%; max-width: 720px; }

@@ -69,7 +69,7 @@ function injectScript(script: JSItem) {
 
 /**
  * 卡片复习状态对应的颜色（hex）。
- * 与 getStatusEmoji 对齐，但返回颜色值供 markmap color 回调使用。
+ * 与 getStatusCategory 对齐，但返回颜色值供 markmap color 回调使用。
  */
 export function statusToColor(status: 'mastered' | 'learning' | 'weak' | 'buried'): string {
     switch (status) {
@@ -87,6 +87,346 @@ export interface RenderOptions {
     onNodeClick?: (cardId: string, nodeText: string) => void;
     /** 初始展开层级（默认 2，只展开到知识点层） */
     initialExpandLevel?: number;
+    /** 导图体量画像；传入后会自动启用大图降压渲染策略 */
+    sizeProfile?: MindmapSizeProfile;
+}
+
+export interface MindmapSizeProfile {
+    nodeCount: number;
+    maxDepth: number;
+    cardNodeCount: number;
+    initialExpandLevel: number;
+    sizeClass: 'small' | 'medium' | 'large' | 'huge';
+}
+
+export interface MindmapRenderTuning {
+    animationDuration: number;
+    clickBindChunkSize: number;
+    clickBindDelay: number;
+    fitDelay: number;
+    chunkedClickBinding: boolean;
+}
+
+export interface MindmapSearchMatch {
+    index: number;
+    node: INode;
+    text: string;
+    path: string[];
+    depth: number;
+    cardId: string | null;
+    ancestors: INode[];
+}
+
+export interface MindmapSearchResult {
+    query: string;
+    matches: MindmapSearchMatch[];
+    activeIndex: number;
+    activeMatch: MindmapSearchMatch | null;
+}
+
+export type MindmapMarkdownViewMode = 'all' | 'cards' | 'gaps' | 'focus';
+
+export interface MindmapMarkdownViewStats {
+    totalNodes: number;
+    visibleNodes: number;
+    cardNodes: number;
+    gapLeaves: number;
+    mode: MindmapMarkdownViewMode;
+    query: string;
+}
+
+export interface MindmapMarkdownView {
+    markdown: string;
+    stats: MindmapMarkdownViewStats;
+}
+
+export function profileMindmapMarkdown(markdown: string): MindmapSizeProfile {
+    let nodeCount = 0;
+    let maxDepth = 0;
+    let cardNodeCount = 0;
+
+    for (const line of markdown.split(/\r?\n/)) {
+        const match = line.match(/^(\s*)-\s+(.+)$/);
+        if (!match) continue;
+        nodeCount += 1;
+        const depth = Math.floor(match[1].replace(/\t/g, '  ').length / 2) + 1;
+        maxDepth = Math.max(maxDepth, depth);
+        if (extractCardIdFromText(match[2])) cardNodeCount += 1;
+    }
+
+    const sizeClass =
+        nodeCount >= 700 ? 'huge' :
+        nodeCount >= 240 ? 'large' :
+        nodeCount >= 90 ? 'medium' :
+        'small';
+    const initialExpandLevel =
+        sizeClass === 'huge' ? 1 :
+        sizeClass === 'large' ? 1 :
+        sizeClass === 'medium' ? 2 :
+        3;
+
+    return { nodeCount, maxDepth, cardNodeCount, initialExpandLevel, sizeClass };
+}
+
+export function filterMindmapMarkdown(
+    markdown: string,
+    mode: MindmapMarkdownViewMode = 'all',
+    rawQuery = ''
+): MindmapMarkdownView {
+    const nodes = parseMarkdownNodes(markdown);
+    const query = normalizeSearchText(rawQuery);
+    const cardNodes = nodes.filter((node) => node.cardId).length;
+    const gapLeaves = nodes.filter((node) => isLeafNode(node) && !node.cardId).length;
+    const statsBase = { totalNodes: nodes.length, cardNodes, gapLeaves, mode, query };
+    if (mode === 'all' || nodes.length === 0) {
+        return {
+            markdown,
+            stats: { ...statsBase, visibleNodes: nodes.length },
+        };
+    }
+
+    const included = new Set<MindmapMarkdownNode>();
+    const includeAncestors = (node: MindmapMarkdownNode) => {
+        let current: MindmapMarkdownNode | undefined = node;
+        while (current) {
+            included.add(current);
+            current = current.parent;
+        }
+    };
+    const includeChildren = (node: MindmapMarkdownNode) => {
+        for (const child of node.children) included.add(child);
+    };
+
+    for (const node of nodes) {
+        if (mode === 'cards' && node.cardId) {
+            includeAncestors(node);
+        } else if (mode === 'gaps' && isLeafNode(node) && !node.cardId) {
+            includeAncestors(node);
+        } else if (mode === 'focus' && query && node.searchable.includes(query)) {
+            includeAncestors(node);
+            includeChildren(node);
+        }
+    }
+
+    const visibleNodes = nodes.filter((node) => included.has(node));
+    return {
+        markdown: renderMarkdownNodes(visibleNodes) || '- 无匹配节点',
+        stats: { ...statsBase, visibleNodes: visibleNodes.length },
+    };
+}
+
+export function extractCardIdsFromMindmapMarkdown(markdown: string): string[] {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const line of markdown.split(/\r?\n/)) {
+        const match = line.match(/^(\s*)-\s+(.+)$/);
+        if (!match) continue;
+        const cardId = extractCardIdFromText(match[2]);
+        if (!cardId || seen.has(cardId)) continue;
+        seen.add(cardId);
+        ids.push(cardId);
+    }
+    return ids;
+}
+
+export interface MindmapGapNode {
+    title: string;
+    cleanTitle: string;
+    pathText: string;
+    depth: number;
+    cardId: string | null;
+}
+
+/** 从导图 markdown 中提取叶子节点中还没有卡片 ID 的节点（缺卡节点）。 */
+export function extractGapNodes(markdown: string): MindmapGapNode[] {
+    const nodes = parseMarkdownNodes(markdown);
+    return nodes
+        .filter((node) => isLeafNode(node) && !node.cardId)
+        .map((node) => ({
+            title: node.text,
+            cleanTitle: node.cleanText,
+            pathText: node.path.join(' / '),
+            depth: node.depth,
+            cardId: node.cardId,
+        }));
+}
+
+/** 将一组缺卡节点拼接成适合 AI 管线输入的文本块。 */
+export function gapNodesToSourceText(gaps: MindmapGapNode[]): string {
+    return gaps
+        .map((gap) => {
+            const header = `## ${gap.cleanTitle}`;
+            const context = gap.pathText !== gap.cleanTitle ? `路径: ${gap.pathText}` : '';
+            return [header, context].filter(Boolean).join('\n');
+        })
+        .join('\n\n');
+}
+
+interface MindmapMarkdownNode {
+    text: string;
+    cleanText: string;
+    depth: number;
+    cardId: string | null;
+    parent?: MindmapMarkdownNode;
+    children: MindmapMarkdownNode[];
+    path: string[];
+    searchable: string;
+}
+
+function parseMarkdownNodes(markdown: string): MindmapMarkdownNode[] {
+    const nodes: MindmapMarkdownNode[] = [];
+    const stack: MindmapMarkdownNode[] = [];
+    for (const line of markdown.split(/\r?\n/)) {
+        const match = line.match(/^(\s*)-\s+(.+)$/);
+        if (!match) continue;
+        const depth = Math.floor(match[1].replace(/\t/g, '  ').length / 2) + 1;
+        const text = match[2].trim();
+        const cardId = extractCardIdFromText(text);
+        const cleanText = stripCardIdFromText(text);
+        while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
+        const parent = stack[stack.length - 1];
+        const path = parent ? [...parent.path, cleanText] : [cleanText];
+        const node: MindmapMarkdownNode = {
+            text,
+            cleanText,
+            depth,
+            cardId,
+            parent,
+            children: [],
+            path,
+            searchable: normalizeSearchText(`${path.join(' / ')} ${cardId || ''}`),
+        };
+        if (parent) parent.children.push(node);
+        stack.push(node);
+        nodes.push(node);
+    }
+    return nodes;
+}
+
+function renderMarkdownNodes(nodes: MindmapMarkdownNode[]): string {
+    return nodes
+        .map((node) => `${'  '.repeat(Math.max(0, node.path.length - 1))}- ${node.text}`)
+        .join('\n');
+}
+
+function isLeafNode(node: MindmapMarkdownNode): boolean {
+    return node.children.length === 0;
+}
+
+export function searchMindmapNodes(
+    mm: Markmap | null | undefined,
+    rawQuery: string,
+    activeIndex = 0
+): MindmapSearchResult {
+    const query = normalizeSearchText(rawQuery);
+    const root = mm?.state?.data;
+    if (!root || !query) {
+        return { query, matches: [], activeIndex: 0, activeMatch: null };
+    }
+
+    const matches: MindmapSearchMatch[] = [];
+    walkMindmapNodes(root, [], (node, ancestors) => {
+        const text = getNodePlainText(node);
+        if (!text) return;
+        const path = [...ancestors.map(getNodePlainText).filter(Boolean), text];
+        const cleanPath = path.map((item) => stripCardIdFromText(item));
+        const cardId = extractCardIdFromText(text);
+        const searchable = normalizeSearchText(`${cleanPath.join(' / ')} ${cardId || ''}`);
+        if (!searchable.includes(query)) return;
+        matches.push({
+            index: matches.length,
+            node,
+            text: stripCardIdFromText(text),
+            path,
+            depth: node.state?.depth ?? ancestors.length,
+            cardId,
+            ancestors,
+        });
+    });
+
+    const normalizedActiveIndex = matches.length ? modulo(activeIndex, matches.length) : 0;
+    return {
+        query,
+        matches,
+        activeIndex: normalizedActiveIndex,
+        activeMatch: matches[normalizedActiveIndex] || null,
+    };
+}
+
+export async function focusMindmapSearchMatch(mm: Markmap, match: MindmapSearchMatch | null): Promise<void> {
+    if (!match) {
+        await clearMindmapSearchFocus(mm);
+        return;
+    }
+
+    for (const ancestor of match.ancestors) {
+        if (ancestor.payload?.fold) ancestor.payload.fold = 0;
+    }
+
+    await mm.renderData();
+    await mm.setHighlight(match.node);
+    await mm.ensureVisible(match.node, { left: 96, right: 96, top: 72, bottom: 72 });
+}
+
+export async function clearMindmapSearchFocus(mm: Markmap | null | undefined): Promise<void> {
+    if (!mm) return;
+    await mm.setHighlight(null);
+}
+
+export function syncMindmapSearchHighlights(
+    svgEl: SVGElement | null | undefined,
+    result: MindmapSearchResult
+): void {
+    if (!svgEl) return;
+    const matchIds = new Set(result.matches.map((match) => match.node.state?.id).filter((id) => id !== undefined));
+    const activeId = result.activeMatch?.node.state?.id;
+    for (const nodeEl of Array.from(svgEl.querySelectorAll('.markmap-node'))) {
+        const data = (nodeEl as any).__data__ as INode | undefined;
+        const id = data?.state?.id;
+        nodeEl.classList.toggle('aio-mindmap-search-match', id !== undefined && matchIds.has(id));
+        nodeEl.classList.toggle('aio-mindmap-search-active', id !== undefined && id === activeId);
+    }
+}
+
+function walkMindmapNodes(
+    node: INode,
+    ancestors: INode[],
+    visit: (node: INode, ancestors: INode[]) => void
+): void {
+    visit(node, ancestors);
+    for (const child of node.children || []) {
+        walkMindmapNodes(child, [...ancestors, node], visit);
+    }
+}
+
+function getNodePlainText(node: INode): string {
+    return stripHtml(String(node.content || '')).replace(/\s+/g, ' ').trim();
+}
+
+function normalizeSearchText(value: string): string {
+    return stripCardIdFromText(String(value || ''))
+        .replace(/[/>\\|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function modulo(value: number, length: number): number {
+    return ((value % length) + length) % length;
+}
+
+export function getMindmapRenderTuning(profile: MindmapSizeProfile): MindmapRenderTuning {
+    switch (profile.sizeClass) {
+        case 'huge':
+            return { animationDuration: 0, clickBindChunkSize: 80, clickBindDelay: 500, fitDelay: 650, chunkedClickBinding: true };
+        case 'large':
+            return { animationDuration: 0, clickBindChunkSize: 160, clickBindDelay: 300, fitDelay: 450, chunkedClickBinding: true };
+        case 'medium':
+            return { animationDuration: 180, clickBindChunkSize: 320, clickBindDelay: 220, fitDelay: 350, chunkedClickBinding: true };
+        case 'small':
+        default:
+            return { animationDuration: 300, clickBindChunkSize: 1000, clickBindDelay: 200, fitDelay: 300, chunkedClickBinding: false };
+    }
 }
 
 /**
@@ -102,6 +442,8 @@ export async function renderMarkmap(
     options: RenderOptions = {}
 ): Promise<Markmap> {
     const { cardColors, onNodeClick, initialExpandLevel = 2 } = options;
+    const sizeProfile = options.sizeProfile || profileMindmapMarkdown(markdown);
+    const tuning = getMindmapRenderTuning(sizeProfile);
 
     // 1. Markdown → 节点树
     const transformer = getTransformer();
@@ -118,7 +460,7 @@ export async function renderMarkmap(
         initialExpandLevel,
         zoom: true,
         pan: true,
-        duration: 300,
+        duration: tuning.animationDuration,
         // 自定义节点颜色：从 cardColors 映射中查找
         color: (node: INode) => {
             const cardId = extractCardId(node);
@@ -131,24 +473,7 @@ export async function renderMarkmap(
 
     // 4. 挂载节点点击事件（遍历 markmap 节点，匹配 cardId）
     if (onNodeClick) {
-        setTimeout(() => {
-            const nodes = svgEl.querySelectorAll('.markmap-node');
-            nodes.forEach((nodeEl) => {
-                // 只取该节点自己的文本（不包含子节点）
-                const firstText = nodeEl.querySelector('foreignObject span, foreignObject div, tspan');
-                const rawText = firstText?.textContent?.trim() || '';
-                // 也检查整个节点的文本（兜底）
-                const fullText = stripHtml(nodeEl.innerHTML || '');
-                const cardId = extractCardIdFromText(rawText) || extractCardIdFromText(fullText);
-                if (cardId) {
-                    (nodeEl as HTMLElement).style.cursor = 'pointer';
-                    nodeEl.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        onNodeClick(cardId, stripCardIdFromText(rawText));
-                    });
-                }
-            });
-        }, 200); // 等 markmap 完全渲染
+        setTimeout(() => bindNodeClickHandlers(svgEl, onNodeClick, tuning), tuning.clickBindDelay);
     }
 
     return mm;
@@ -171,10 +496,53 @@ function stripHtml(html: string): string {
 
 /** 自适应缩放，让导图完整显示在容器内 */
 export function fitMarkmap(mm: Markmap): void {
+    fitMarkmapWithProfile(mm);
+}
+
+export function fitMarkmapWithProfile(mm: Markmap, profile?: MindmapSizeProfile): void {
+    const tuning = getMindmapRenderTuning(profile || { nodeCount: 0, maxDepth: 0, cardNodeCount: 0, initialExpandLevel: 2, sizeClass: 'small' });
     try {
-        mm.fit();
+        setTimeout(() => mm.fit(), tuning.fitDelay);
     } catch {
         // markmap-view 的 fit 可能需要延迟
-        setTimeout(() => mm.fit(), 200);
+        setTimeout(() => mm.fit(), tuning.fitDelay + 200);
     }
+}
+
+function bindNodeClickHandlers(
+    svgEl: SVGElement,
+    onNodeClick: (cardId: string, nodeText: string) => void,
+    tuning: MindmapRenderTuning
+): void {
+    const nodes = Array.from(svgEl.querySelectorAll('.markmap-node'));
+    let index = 0;
+
+    const bindBatch = () => {
+        const end = Math.min(nodes.length, index + tuning.clickBindChunkSize);
+        for (; index < end; index++) {
+            bindNodeClickHandler(nodes[index], onNodeClick);
+        }
+        if (index < nodes.length) {
+            setTimeout(bindBatch, tuning.chunkedClickBinding ? 16 : 0);
+        }
+    };
+
+    bindBatch();
+}
+
+function bindNodeClickHandler(
+    nodeEl: Element,
+    onNodeClick: (cardId: string, nodeText: string) => void
+): void {
+    const firstText = nodeEl.querySelector('foreignObject span, foreignObject div, tspan');
+    const rawText = firstText?.textContent?.trim() || '';
+    const fullText = stripHtml(nodeEl.innerHTML || '');
+    const cardId = extractCardIdFromText(rawText) || extractCardIdFromText(fullText);
+    if (!cardId) return;
+
+    (nodeEl as HTMLElement).style.cursor = 'pointer';
+    nodeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onNodeClick(cardId, stripCardIdFromText(rawText || fullText));
+    });
 }

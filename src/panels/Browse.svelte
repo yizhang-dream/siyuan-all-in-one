@@ -13,6 +13,7 @@
   export let conceptStore: any;
   export let jumpToMindmap: (mindmapId: string) => void = () => {};
   export let openSourceRef: (ref: any) => Promise<boolean> = (ref) => activateSourceRef(ref);
+  export let startFilteredReview: (ids: string[], title?: string) => void = () => {};
 
   const t = getT(plugin);
 
@@ -80,7 +81,7 @@
   }
 
   function deleteCard(id: string) {
-    confirm('⚠️', '确定删除这张卡片吗？', () => {
+    confirm('确认删除', '确定删除这张卡片吗？', () => {
       cardStore.delete(id);
       cardStore.save();
       refresh();
@@ -90,12 +91,33 @@
 
   function batchDelete() {
     if (selectedIds.size === 0) return;
-    confirm('⚠️', `确定删除选中的 ${selectedIds.size} 张卡片吗？`, () => {
+    confirm('确认删除', `确定删除选中的 ${selectedIds.size} 张卡片吗？`, () => {
       cardStore.deleteMany([...selectedIds]);
       cardStore.save();
       refresh();
       showMessage(`已删除 ${selectedIds.size} 张`);
     });
+  }
+
+  function reviewFilteredCards() {
+    const ids = selectedIds.size > 0 ? [...selectedIds] : filtered.map((card) => card.id);
+    if (ids.length === 0) {
+      showMessage('没有可复习的卡片');
+      return;
+    }
+    const title = selectedIds.size > 0
+      ? `选中 ${selectedIds.size} 张`
+      : buildFilteredReviewTitle(ids.length);
+    startFilteredReview(ids, title);
+  }
+
+  function buildFilteredReviewTitle(count: number): string {
+    const parts = [
+      selectedDeck ? `牌组 ${selectedDeck}` : '',
+      selectedTag ? `标签 ${selectedTag}` : '',
+      searchQuery.trim() ? `搜索 ${searchQuery.trim()}` : '',
+    ].filter(Boolean);
+    return parts.length > 0 ? `${parts.join(' · ')} · ${count} 张` : `全部筛选 · ${count} 张`;
   }
 
   function startEdit(card: Card) {
@@ -220,6 +242,10 @@
         删除选中 ({selectedIds.size})
       </button>
     {/if}
+    <button class="b3-button b3-button--outline browse-review-button" on:click={reviewFilteredCards} disabled={filtered.length === 0}>
+      <svg><use xlink:href="#iconRefresh"></use></svg>
+      <span>{selectedIds.size > 0 ? `复习选中 (${selectedIds.size})` : '复习筛选'}</span>
+    </button>
   </div>
 
   <div class="browse-count">共 {filtered.length} 张</div>
@@ -298,8 +324,9 @@
                   <strong>关联导图</strong>
                   <div class="browse-linked-maps">
                     {#each getLinkedMindmaps(card) as lm}
-                      <button class="b3-button b3-button--small b3-button--text" on:click={() => jumpToMindmap(lm.id)}>
-                        🧠 {lm.title}
+                      <button class="b3-button b3-button--small b3-button--text browse-linked-map-button" on:click={() => jumpToMindmap(lm.id)}>
+                        <svg><use xlink:href="#iconGraph"></use></svg>
+                        <span>{lm.title}</span>
                       </button>
                     {/each}
                   </div>
@@ -354,6 +381,13 @@
   }
 
   .browse-count { padding: 0 24px 4px; font-size: var(--aio-fs-sm); opacity: 0.6; flex-shrink: 0; }
+  .browse-review-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    svg { width: 14px; height: 14px; }
+  }
   .browse-list { flex: 1; overflow-y: auto; padding: 0 24px 24px; }
   .browse-empty { text-align: center; padding: 32px; opacity: 0.4; }
 
@@ -415,6 +449,8 @@
   }
   .browse-detail-stats { display: flex; gap: 12px; font-size: var(--aio-fs-xs); opacity: 0.5; margin-bottom: 8px; }
   .browse-linked-maps { display: flex; flex-wrap: wrap; gap: 4px; }
+  .browse-linked-map-button { display: inline-flex; align-items: center; gap: 4px; }
+  .browse-linked-map-button svg { width: 14px; height: 14px; }
   .browse-detail-actions { display: flex; gap: 6px; }
   .browse-btn-danger { color: var(--b3-card-error-color) !important; }
 

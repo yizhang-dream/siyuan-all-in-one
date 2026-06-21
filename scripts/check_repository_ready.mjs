@@ -25,6 +25,7 @@ const requiredFiles = [
   'docs/INSTALL.md',
   'docs/TESTING.md',
   'docs/PROMPT_STRATEGY.md',
+  'docs/SIYUAN_RIFF_REUSE.md',
 ];
 
 for (const file of requiredFiles) {
@@ -33,18 +34,70 @@ for (const file of requiredFiles) {
 
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 const manifest = JSON.parse(readFileSync(path.join(root, 'plugin.json'), 'utf8'));
+const ciWorkflow = readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
+const releaseWorkflow = readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
 
 assert.equal(pkg.license, 'MIT', 'package license should be MIT');
 assert.ok(pkg.repository?.url, 'package repository URL is required');
 assert.ok(pkg.bugs?.url, 'package bugs URL is required');
 assert.ok(pkg.homepage, 'package homepage is required');
+assert.match(pkg.scripts?.test || '', /test:paradigm/, 'npm test should include the concept/card/mindmap paradigm test');
 assert.ok(manifest.url?.startsWith('https://github.com/'), 'plugin.json url should point to GitHub');
 assert.ok(manifest.name && manifest.version && manifest.displayName, 'plugin manifest should include marketplace metadata');
+assert.match(ciWorkflow, /node-version:\s*20/, 'CI workflow should pin Node 20 for GitHub compatibility');
+assert.match(ciWorkflow, /npm ci/, 'CI workflow should install from package-lock.json');
+assert.match(ciWorkflow, /npm run verify/, 'CI workflow should run full verification');
+assert.match(ciWorkflow, /npm run check:repo/, 'CI workflow should run repository readiness checks');
+assert.match(ciWorkflow, /npm run package:release/, 'CI workflow should verify release package creation');
+assert.match(ciWorkflow, /npm run check:release/, 'CI workflow should verify release zip contents');
+assert.match(releaseWorkflow, /tags:[\s\S]*v\*/, 'Release workflow should run for v* tags');
+assert.match(releaseWorkflow, /contents:\s*write/, 'Release workflow should be allowed to create GitHub releases');
+assert.match(releaseWorkflow, /npm run verify/, 'Release workflow should run full verification');
+assert.match(releaseWorkflow, /npm run check:repo/, 'Release workflow should run repository readiness checks');
+assert.match(releaseWorkflow, /npm run package:release/, 'Release workflow should create the plugin zip');
+assert.match(releaseWorkflow, /npm run check:release/, 'Release workflow should verify release zip contents');
+assert.match(releaseWorkflow, /softprops\/action-gh-release@v2/, 'Release workflow should upload a GitHub release asset');
+assert.match(releaseWorkflow, /release\/\*\.zip/, 'Release workflow should upload release/*.zip');
 
 const gitignore = readFileSync(path.join(root, '.gitignore'), 'utf8');
 for (const pattern of ['node_modules/', 'dist/', 'release/', '.deploy-backups/', '.env', '_temp_*']) {
   assert.match(gitignore, new RegExp(escapeRegExp(pattern)), `.gitignore should include ${pattern}`);
 }
+
+assertDocIncludes('README_zh_CN.md', [
+  '图谱生成',
+  '快速制卡',
+  '恢复',
+  'concepts-json',
+  'mindmaps-markdown',
+]);
+assertDocIncludes('README.md', [
+  'Graph Generate',
+  'Quick Cards',
+  'restore',
+  'concepts-json',
+  'mindmaps-markdown',
+]);
+assertDocIncludes('docs/TESTING.md', [
+  'test:importers',
+  'test:paradigm',
+  'test:siyuan-riff',
+  'test:riff-sync',
+  'check:ui-visual',
+  'concepts-json',
+  'mindmaps-markdown',
+]);
+assertDocIncludes('docs/SIYUAN_RIFF_REUSE.md', [
+  '/api/riff/addRiffCards',
+  'syncCardsToSiyuanRiff',
+  'reviewBackend',
+  '不能“直接复用思源自带闪卡代码”',
+]);
+assertDocIncludes('docs/GITHUB_PREP.md', [
+  '恢复导入',
+  'concepts-json',
+  'mindmaps-markdown',
+]);
 
 const ignoredPaths = [
   'node_modules',
@@ -69,6 +122,8 @@ console.log(JSON.stringify({
   ignoredPaths: ignoredPaths.length,
   packageMetadata: true,
   manifestMetadata: true,
+  workflowChecks: true,
+  docCapabilityChecks: true,
   secretScanFiles: scanned.length,
 }, null, 2));
 
@@ -109,6 +164,13 @@ function scanTextFiles(dir) {
 function isTextFile(file) {
   return /\.(cjs|css|html|js|json|md|mjs|scss|svelte|ts|txt|yaml|yml)$/i.test(file) ||
     ['.gitignore', '.gitattributes'].includes(path.basename(file));
+}
+
+function assertDocIncludes(file, needles) {
+  const content = readFileSync(path.join(root, file), 'utf8');
+  for (const needle of needles) {
+    assert.ok(content.includes(needle), `${file} should mention ${needle}`);
+  }
 }
 
 function escapeRegExp(value) {

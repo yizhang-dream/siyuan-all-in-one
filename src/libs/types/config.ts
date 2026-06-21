@@ -36,6 +36,7 @@ export interface AppConfig {
     mindmapModel: string;
     notebookEndpoint: string;
     cardsPerDay: number;
+    scheduler: 'sm2' | 'fsrs';
     defaultDeck: string;
     agents: AgentConfig[];
 }

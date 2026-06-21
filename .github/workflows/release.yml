@@ -19,7 +19,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+      - run: npm run check:repo
       - run: npm run package:release
+      - run: npm run check:release
       - name: Find release zip
         id: artifact
         shell: bash
@@ -30,4 +32,3 @@ jobs:
         with:
           files: ${{ steps.artifact.outputs.file }}
           generate_release_notes: true
-

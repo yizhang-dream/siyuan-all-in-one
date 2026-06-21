@@ -3,7 +3,7 @@
   import { showMessage, confirm } from 'siyuan';
   import type { AppConfig, AgentConfig, Provider } from '../libs/types';
   import { genAgentId, genId } from '../libs/config';
-  import { fetchProviderModels } from '../libs/llm';
+  import { fetchProviderModels, getProviderCapabilities } from '../libs/llm';
 
   export let plugin: any;
   export let config: AppConfig;
@@ -15,6 +15,7 @@
   let mindmapModel = '';
   let notebookEndpoint = '';
   let cardsPerDay = 30;
+  let scheduler: 'sm2' | 'fsrs' = 'sm2';
   let defaultDeck = '';
   let agents: AgentConfig[] = [];
 
@@ -34,6 +35,7 @@
     mindmapModel = config.mindmapModel || '';
     notebookEndpoint = config.notebookEndpoint || '';
     cardsPerDay = config.cardsPerDay ?? 30;
+    scheduler = config.scheduler === 'fsrs' ? 'fsrs' : 'sm2';
     defaultDeck = config.defaultDeck || '';
     agents = config.agents || [];
   });
@@ -47,6 +49,7 @@
       mindmapModel,
       notebookEndpoint,
       cardsPerDay: Number(cardsPerDay),
+      scheduler,
       defaultDeck,
       agents,
     });
@@ -56,6 +59,10 @@
   // 获取指定 provider 的可用模型（从本地配置读，不联网）
   function getProviderModels(providerId: string): string[] {
     return providers.find((p) => p.id === providerId)?.models || [];
+  }
+
+  function getProviderJsonLabel(providerId: string): string {
+    return getProviderCapabilities(providerId).structuredOutputLabel;
   }
 
   // 切换 Provider 时自动重置 Model 为该 Provider 的第一个模型
@@ -106,7 +113,7 @@
 
   function deleteProvider(p: Provider) {
     if (p.isBuiltIn) { showMessage('内置 Provider 不可删除，但可编辑'); return; }
-    confirm('⚠️', `确定删除 Provider「${p.name}」吗？`, () => {
+    confirm('删除 Provider', `确定删除 Provider「${p.name}」吗？`, () => {
       providers = providers.filter((x) => x.id !== p.id);
       // 如果删除的是当前选中的 provider，重置指针
       if (flashcardProviderId === p.id) { flashcardProviderId = providers[0]?.id || ''; flashcardModel = getProviderModels(flashcardProviderId)[0] || ''; }
@@ -216,7 +223,7 @@
   }
 
   function deleteAgent(agent: AgentConfig) {
-    confirm('⚠️', `确定删除 Agent「${agent.name}」吗？`, () => {
+    confirm('删除 Agent', `确定删除 Agent「${agent.name}」吗？`, () => {
       agents = agents.filter((a) => a.id !== agent.id);
       save();
     });
@@ -237,7 +244,10 @@
   <div class="settings-group">
     <div class="section-header">
       <h3>AI Provider 管理</h3>
-      <button class="b3-button b3-button--small b3-button--outline" on:click={newProvider}>+ 新增</button>
+      <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newProvider}>
+        <svg><use xlink:href="#iconAdd"></use></svg>
+        <span>新增</span>
+      </button>
     </div>
     <p class="settings-hint">配置一个或多个 AI 服务（OpenAI 兼容端点）。每个功能可独立选择不同的 Provider + 模型。</p>
 
@@ -252,6 +262,7 @@
             </span>
             <span class="provider-meta">
               {p.models.length > 0 ? `${p.models.length} 个模型` : '未配置模型'}
+              · {getProviderJsonLabel(p.id)}
               {#if !p.apiKey} · <span class="warn-text">需密钥</span>{/if}
             </span>
           </div>
@@ -273,7 +284,10 @@
 
     <div class="feature-assign">
       <div class="feature-block">
-        <div class="feature-label">🎴 制卡</div>
+        <div class="feature-label">
+          <svg><use xlink:href="#iconList"></use></svg>
+          <span>制卡</span>
+        </div>
         <div class="feature-row">
           <select class="b3-select" value={flashcardProviderId} on:change={onFlashcardProviderChange} aria-label="制卡 Provider">
             {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
@@ -288,7 +302,10 @@
       </div>
 
       <div class="feature-block">
-        <div class="feature-label">🧠 思维导图</div>
+        <div class="feature-label">
+          <svg><use xlink:href="#iconGraph"></use></svg>
+          <span>思维导图</span>
+        </div>
         <div class="feature-row">
           <select class="b3-select" value={mindmapProviderId} on:change={onMindmapProviderChange} aria-label="思维导图 Provider">
             {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
@@ -317,6 +334,13 @@
     <h3>复习设置</h3>
     <div class="feature-row">
       <div>
+        <label for="settings-scheduler">复习算法</label>
+        <select id="settings-scheduler" class="b3-select" bind:value={scheduler}>
+          <option value="sm2">SM-2（兼容）</option>
+          <option value="fsrs">FSRS（实验）</option>
+        </select>
+      </div>
+      <div>
         <label for="settings-cards-per-day">每日新卡片上限</label>
         <input id="settings-cards-per-day" class="b3-text-field" type="number" bind:value={cardsPerDay} min="1" max="999" />
       </div>
@@ -331,7 +355,10 @@
   <div class="settings-group">
     <div class="section-header">
       <h3>Agent 管理（制卡提示词）</h3>
-      <button class="b3-button b3-button--small b3-button--outline" on:click={newAgent}>+ 新增</button>
+      <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newAgent}>
+        <svg><use xlink:href="#iconAdd"></use></svg>
+        <span>新增</span>
+      </button>
     </div>
     <p class="settings-hint">Agent 决定 AI 如何生成卡片（提示词、语言、风格、难度）。</p>
 
@@ -379,14 +406,17 @@
       {#each editingProvider.models as m, idx}
         <div class="model-row">
           <span class="model-name">{m}</span>
-          <button class="b3-button b3-button--small b3-button--text" on:click={() => removeModel(idx)}>✕</button>
+          <button class="b3-button b3-button--small b3-button--text settings-icon-button" on:click={() => removeModel(idx)} aria-label="移除模型" title="移除模型">
+            <svg><use xlink:href="#iconClose"></use></svg>
+          </button>
         </div>
       {/each}
 
       <!-- 获取模型列表按钮 -->
       <div class="model-fetch-area">
-        <button class="b3-button b3-button--small b3-button--outline" on:click={fetchModels} disabled={isFetchingModels}>
-          {isFetchingModels ? '获取中...' : '🔄 从 API 获取模型列表'}
+        <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={fetchModels} disabled={isFetchingModels}>
+          <svg class:is-spinning={isFetchingModels}><use xlink:href="#iconRefresh"></use></svg>
+          <span>{isFetchingModels ? '获取中...' : '从 API 获取模型列表'}</span>
         </button>
         {#if fetchedModels.length > 0}
           <button class="b3-button b3-button--small b3-button--text" on:click={addAllFetched}>全部添加</button>
@@ -495,6 +525,18 @@
   .settings-hint { font-size: var(--aio-fs-xs); opacity: 0.5; margin: 0; }
   .empty-hint { font-size: var(--aio-fs-base); opacity: 0.4; text-align: center; padding: 16px; }
   .section-header { display: flex; align-items: center; justify-content: space-between; }
+  .settings-icon-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+
+    svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+    }
+  }
 
   .provider-list { display: flex; flex-direction: column; gap: 6px; }
   .provider-item {
@@ -512,7 +554,20 @@
 
   .feature-assign { display: flex; flex-direction: column; gap: 12px; }
   .feature-block { display: flex; flex-direction: column; gap: 4px; }
-  .feature-label { font-size: var(--aio-fs-base); font-weight: 500; }
+  .feature-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--aio-fs-base);
+    font-weight: 500;
+
+    svg {
+      width: 15px;
+      height: 15px;
+      color: var(--b3-theme-primary);
+      flex: 0 0 15px;
+    }
+  }
   .feature-row { display: flex; gap: 8px;
     .b3-select { flex: 1; }
     > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
@@ -532,6 +587,7 @@
   .model-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: var(--b3-theme-surface-lighter); border-radius: 4px; font-size: var(--aio-fs-sm); }
   .model-name { font-family: var(--b3-font-family-code, monospace); }
   .model-fetch-area { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+  .is-spinning { animation: aio-settings-spin 0.9s linear infinite; }
   .fetched-models { max-height: 200px; overflow-y: auto; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px; margin: 4px 0; }
   .fetched-model-row { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 4px 10px; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: var(--aio-fs-sm); font-family: var(--b3-font-family-code, monospace); text-align: left;
     &:hover { background: var(--b3-theme-primary-lightest); }
@@ -545,4 +601,8 @@
   }
   .dialog-row { display: flex; gap: 8px; > div { flex: 1; display: flex; flex-direction: column; gap: 4px; } }
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+  @keyframes aio-settings-spin {
+    to { transform: rotate(360deg); }
+  }
 </style>

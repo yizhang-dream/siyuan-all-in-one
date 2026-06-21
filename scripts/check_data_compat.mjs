@@ -8,7 +8,7 @@ import { resolvePluginDataDir } from './siyuan_paths.mjs';
 
 const root = process.cwd();
 const dataDir = resolvePluginDataDir();
-const tempDir = path.join(root, '_temp_data_compat_test');
+const tempDir = path.join(root, `_temp_data_compat_test_${process.pid}`);
 const entry = path.join(tempDir, 'fixture.ts');
 const outfile = path.join(tempDir, 'fixture.mjs');
 
@@ -71,6 +71,24 @@ function loadRawJson(key: string) {
   return { exists: true, empty: false, value: JSON.parse(text) };
 }
 
+function cleanRiffSyncState(raw: any) {
+  const records = Array.isArray(raw?.records) ? raw.records : Array.isArray(raw) ? raw : [];
+  return {
+    version: 1,
+    records: records
+      .map((record: any) => ({
+        cardId: String(record?.cardId || ''),
+        blockId: String(record?.blockId || ''),
+        deckId: String(record?.deckId || ''),
+        deckName: String(record?.deckName || ''),
+        docId: String(record?.docId || ''),
+        syncedAt: Number(record?.syncedAt || 0),
+        cardModified: Number(record?.cardModified || 0),
+      }))
+      .filter((record: any) => record.cardId && record.blockId && record.deckName),
+  };
+}
+
 function countDuplicates(values: string[]) {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
@@ -112,12 +130,14 @@ const rawConfig = loadRawJson('config');
 const rawMindmaps = loadRawJson('mindmaps');
 const rawConcepts = loadRawJson('concepts');
 const rawRelations = loadRawJson('relations');
+const rawRiffSync = loadRawJson('riff-sync');
 
 assert.ok(!rawCards.exists || Array.isArray(rawCards.value), 'cards must be a JSON array when present');
 assert.ok(!rawMindmaps.exists || Array.isArray(rawMindmaps.value), 'mindmaps must be a JSON array when present');
 assert.ok(!rawConcepts.exists || Array.isArray(rawConcepts.value), 'concepts must be a JSON array when present');
 assert.ok(!rawRelations.exists || Array.isArray(rawRelations.value), 'relations must be a JSON array when present');
 assert.ok(!rawConfig.exists || typeof rawConfig.value === 'object', 'config must be a JSON object when present');
+assert.ok(!rawRiffSync.exists || typeof rawRiffSync.value === 'object' || Array.isArray(rawRiffSync.value), 'riff-sync must be a JSON object or legacy array when present');
 
 const plugin = new ReadOnlyPlugin();
 const cardStore = new CardStore(plugin);
@@ -133,6 +153,7 @@ const concepts = conceptStore.getAll();
 const relations = conceptStore.getRelations();
 const mindmaps = mindmapStore.getAll();
 const config = cleanConfig(rawConfig.value || {});
+const riffSync = cleanRiffSyncState(rawRiffSync.value || {});
 
 const invalidCards = sampleInvalidCards(cards);
 assert.deepEqual(invalidCards, [], 'cleaned cards are missing required fields: ' + JSON.stringify(invalidCards));
@@ -153,12 +174,16 @@ if (!providerIds.has(config.mindmapProviderId)) {
 if (!Number.isFinite(Number(config.cardsPerDay))) {
   configWarnings.push('cardsPerDay is not numeric');
 }
+if (!['sm2', 'fsrs'].includes(config.scheduler)) {
+  configWarnings.push('scheduler is not valid');
+}
 if (!String(config.notebookEndpoint || '').trim()) {
   configWarnings.push('notebookEndpoint is empty');
 }
 
 assert.ok(Array.isArray(config.providers) && config.providers.length > 0, 'cleaned config must have providers');
 assert.ok(Number.isFinite(Number(config.cardsPerDay)), 'cleaned config cardsPerDay must be numeric');
+assert.ok(['sm2', 'fsrs'].includes(config.scheduler), 'cleaned config scheduler must be sm2 or fsrs');
 assert.ok(String(config.notebookEndpoint || '').trim(), 'cleaned config must have notebookEndpoint');
 
 const duplicateCardIds = countDuplicates(cards.map((card) => card.id));
@@ -170,6 +195,7 @@ const conceptCardLinks = concepts.reduce((count, concept) => count + (concept.ca
 const cardConceptLinks = cards.filter((card) => card.conceptId).length;
 
 assert.equal(plugin.writes.size, 0, 'data compatibility check must not write plugin data');
+assert.equal(riffSync.records.every((record) => record.cardId && record.blockId && record.deckName), true, 'all riff-sync records must keep cardId/blockId/deckName');
 
 console.log(JSON.stringify({
   dataDir,
@@ -179,6 +205,7 @@ console.log(JSON.stringify({
     mindmaps: { exists: rawMindmaps.exists, count: Array.isArray(rawMindmaps.value) ? rawMindmaps.value.length : 0 },
     concepts: { exists: rawConcepts.exists, count: Array.isArray(rawConcepts.value) ? rawConcepts.value.length : 0 },
     relations: { exists: rawRelations.exists, count: Array.isArray(rawRelations.value) ? rawRelations.value.length : 0 },
+    riffSync: { exists: rawRiffSync.exists, count: riffSync.records.length },
   },
   loaded: {
     cards: cards.length,
@@ -192,6 +219,7 @@ console.log(JSON.stringify({
     topDecks: summarizeDecks(cards),
     withConceptId: cardConceptLinks,
     withSourceRefs: cards.filter((card) => card.sourceRefs.length > 0).length,
+    withFsrs: cards.filter((card) => card.scheduler === 'fsrs' || card.fsrs).length,
   },
   graph: {
     conceptCardLinks,
@@ -205,8 +233,13 @@ console.log(JSON.stringify({
     mindmapModelSet: Boolean(config.mindmapModel),
     notebookEndpoint: config.notebookEndpoint,
     cardsPerDay: config.cardsPerDay,
+    scheduler: config.scheduler,
     agents: config.agents.length,
     warnings: configWarnings,
+  },
+  riffSync: {
+    records: riffSync.records.length,
+    uniqueCards: new Set(riffSync.records.map((record) => record.cardId)).size,
   },
   reads: [...plugin.reads].sort(),
   readOnly: plugin.writes.size === 0,

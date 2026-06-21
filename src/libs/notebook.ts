@@ -160,10 +160,49 @@ export class OpenNotebookClient {
     // ── 来源 ────────────────────────────────────────────
 
     async listSources(notebookId?: string, limit = 100): Promise<Source[]> {
-        let path = `/sources?limit=${limit}`;
-        if (notebookId) path += `&notebook_id=${encodeURIComponent(notebookId)}`;
-        const data = await this.request('GET', path);
-        return unwrapOpenNotebookArray(data) as Source[];
+        const safeLimit = clampInteger(limit, 1, 100);
+        const basePath = `/sources?limit=${safeLimit}`;
+        if (!notebookId) {
+            const data = await this.request('GET', basePath);
+            return unwrapOpenNotebookArray(data) as Source[];
+        }
+
+        const encoded = encodeURIComponent(notebookId);
+        const fallbackNotebookId = notebookId.startsWith('notebook:')
+            ? notebookId.slice('notebook:'.length)
+            : '';
+        const candidatePaths = [
+            `${basePath}&notebook_id=${encoded}`,
+            fallbackNotebookId ? `${basePath}&notebook_id=${encodeURIComponent(fallbackNotebookId)}` : '',
+            `${basePath}&notebook=${encoded}`,
+            `${basePath}&notebookId=${encoded}`,
+        ].filter(Boolean);
+
+        const failures: string[] = [];
+        for (const path of candidatePaths) {
+            try {
+                const data = await this.request('GET', path);
+                return unwrapOpenNotebookArray(data) as Source[];
+            } catch (err: any) {
+                if (!isRetryableCompatibilityError(err)) throw err;
+                failures.push(err.message || String(err));
+            }
+        }
+
+        try {
+            const data = await this.request('GET', basePath);
+            const allSources = unwrapOpenNotebookArray(data) as Source[];
+            const filtered = filterSourcesByNotebook(allSources, notebookId);
+            return filtered.length > 0 ? filtered : allSources;
+        } catch (err: any) {
+            if (failures.length > 0) {
+                throw new NotebookError(
+                    `Open Notebook 来源列表请求失败: ${failures[0]}`,
+                    err?.status || 0
+                );
+            }
+            throw err;
+        }
     }
 
     async getSource(id: string): Promise<SourceDetail> {
@@ -182,19 +221,40 @@ export class OpenNotebookClient {
             minimumScore?: number;
         }
     ): Promise<SearchResult[]> {
-        const body = {
+        const requestedType = opts?.type || 'text';
+        const limit = clampInteger(opts?.limit || 20, 1, 1000);
+        const minimumScore = clampNumber(opts?.minimumScore ?? 0.2, 0, 1);
+        const baseBody = {
             query,
-            type: opts?.type || 'text',
-            limit: opts?.limit || 20,
+            limit,
             search_sources: opts?.searchSources ?? true,
             search_notes: opts?.searchNotes ?? true,
-            minimum_score: opts?.minimumScore ?? 0.2,
         };
-        const data = await this.request('POST', '/search', body);
+        const candidateBodies = buildSearchRequestBodies(baseBody, requestedType, minimumScore);
+        const failures: string[] = [];
+        let data: any = null;
+
+        for (const body of candidateBodies) {
+            try {
+                data = await this.request('POST', '/search', body);
+                break;
+            } catch (err: any) {
+                if (!isRetryableCompatibilityError(err)) throw err;
+                failures.push(err.message || String(err));
+            }
+        }
+
+        if (data === null) {
+            throw new NotebookError(
+                `Open Notebook 搜索失败: ${failures[0] || '所有兼容请求均失败'}`,
+                0
+            );
+        }
+
         const results = normalizeOpenNotebookSearchResults(data);
 
         // text 搜索不返回 content，需要补全
-        if ((opts?.type || 'text') === 'text') {
+        if (requestedType === 'text' || data?.search_type === 'text') {
             // 对每个命中结果，尝试获取来源全文（限制数量避免过多请求）
             const top = results.slice(0, 5);
             await Promise.all(
@@ -373,6 +433,68 @@ export class OpenNotebookClient {
         const data = await this.request('GET', path);
         return unwrapOpenNotebookArray(data) as ONModel[];
     }
+}
+
+function buildSearchRequestBodies(
+    baseBody: Record<string, any>,
+    requestedType: 'text' | 'vector',
+    minimumScore: number
+): Array<Record<string, any>> {
+    const textBody = { ...baseBody, type: 'text' };
+    const minimalTextBody = {
+        query: baseBody.query,
+        type: 'text',
+        limit: baseBody.limit,
+    };
+    if (requestedType === 'vector') {
+        return [
+            { ...baseBody, type: 'vector', minimum_score: minimumScore },
+            textBody,
+            minimalTextBody,
+        ];
+    }
+    return [
+        textBody,
+        minimalTextBody,
+    ];
+}
+
+function filterSourcesByNotebook(sources: Source[], notebookId: string): Source[] {
+    const targetIds = new Set([
+        notebookId,
+        notebookId.startsWith('notebook:') ? notebookId.slice('notebook:'.length) : `notebook:${notebookId}`,
+    ]);
+    return sources.filter((source: any) => {
+        const candidates = [
+            source.notebook_id,
+            source.notebookId,
+            source.notebook,
+            source.metadata?.notebook_id,
+            source.metadata?.notebookId,
+        ];
+        if (Array.isArray(source.notebooks)) candidates.push(...source.notebooks);
+        if (Array.isArray(source.notebook_ids)) candidates.push(...source.notebook_ids);
+        if (Array.isArray(source.notebookIds)) candidates.push(...source.notebookIds);
+        return candidates
+            .filter((value) => value !== undefined && value !== null)
+            .some((value) => targetIds.has(String(value)));
+    });
+}
+
+function isRetryableCompatibilityError(err: any): boolean {
+    return err instanceof NotebookError && [400, 404, 422, 500].includes(err.status);
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n)) return min;
+    return Math.max(min, Math.min(max, n));
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return min;
+    return Math.max(min, Math.min(max, n));
 }
 
 function contextModeValue(mode: string): string {

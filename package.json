@@ -17,11 +17,13 @@
     "build": "cross-env NODE_ENV=production vite build",
     "dev": "cross-env NODE_ENV=development vite build --watch",
     "package:release": "node --no-warnings ./scripts/package_release.mjs",
+    "check:release": "node --no-warnings ./scripts/check_release_zip.mjs",
     "make-link": "node --no-warnings ./scripts/make_dev_link.js",
     "deploy:siyuan": "node --no-warnings ./scripts/deploy_siyuan.mjs",
     "check:siyuan": "node --no-warnings ./scripts/check_siyuan_integration.mjs",
     "check:data": "node --no-warnings ./scripts/check_data_compat.mjs",
     "check:runtime": "node --no-warnings ./scripts/check_runtime.mjs",
+    "check:ui-visual": "node --no-warnings ./scripts/check_ui_visual.mjs",
     "check:bundle": "node --no-warnings ./scripts/check_bundle_integrity.mjs",
     "check:repo": "node --no-warnings ./scripts/check_repository_ready.mjs",
     "check:ai-live": "node --no-warnings ./scripts/check_ai_live.mjs",
@@ -31,7 +33,7 @@
     "check:full": "node --no-warnings ./scripts/check_full.mjs",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test && npm run build",
-    "test": "npm run test:json && npm run test:prompt-contracts && npm run test:notebook-client && npm run test:sources && npm run test:source-refs && npm run test:notebook-bridge && npm run test:ui-contracts && npm run test:render && npm run test:paths && npm run test:providers && npm run test:exporters && npm run test:mindmap-cards && npm run test:selection && npm run test:pipeline && npm run test:concept-store && npm run test:graph && npm run test:concept-mindmap && npm run test:card-id",
+    "test": "npm run test:json && npm run test:prompt-contracts && npm run test:notebook-client && npm run test:sources && npm run test:local-files && npm run test:source-hub && npm run test:source-refs && npm run test:notebook-bridge && npm run test:ui-contracts && npm run test:render && npm run test:paths && npm run test:providers && npm run test:srs && npm run test:siyuan-riff && npm run test:riff-sync && npm run test:exporters && npm run test:importers && npm run test:mindmap-cards && npm run test:paradigm && npm run test:selection && npm run test:pipeline && npm run test:concept-store && npm run test:graph && npm run test:concept-mindmap && npm run test:card-id",
     "test:json": "node --no-warnings ./scripts/test_json_repair.mjs",
     "test:prompt-contracts": "node --no-warnings ./scripts/test_prompt_contracts.mjs",
     "test:notebook-client": "node --no-warnings ./scripts/test_notebook_client.mjs",
@@ -39,6 +41,8 @@
     "test:selection": "node --no-warnings ./scripts/test_selection.mjs",
     "test:concept-store": "node --no-warnings ./scripts/test_concept_store.mjs",
     "test:sources": "node --no-warnings ./scripts/test_source_adapters.mjs",
+    "test:local-files": "node --no-warnings ./scripts/test_local_file_adapters.mjs",
+    "test:source-hub": "node --no-warnings ./scripts/test_source_hub.mjs",
     "test:graph": "node --no-warnings ./scripts/test_concept_graph.mjs",
     "test:concept-mindmap": "node --no-warnings ./scripts/test_concept_mindmap.mjs",
     "test:card-id": "node --no-warnings ./scripts/test_card_id.mjs",
@@ -48,8 +52,13 @@
     "test:render": "node --no-warnings ./scripts/test_render_math.mjs",
     "test:paths": "node --no-warnings ./scripts/test_siyuan_paths.mjs",
     "test:providers": "node --no-warnings ./scripts/test_llm_providers.mjs",
+    "test:srs": "node --no-warnings ./scripts/test_srs_scheduler.mjs",
+    "test:siyuan-riff": "node --no-warnings ./scripts/test_siyuan_riff.mjs",
+    "test:riff-sync": "node --no-warnings ./scripts/test_riff_sync.mjs",
     "test:exporters": "node --no-warnings ./scripts/test_exporters.mjs",
-    "test:mindmap-cards": "node --no-warnings ./scripts/test_mindmap_cards.mjs"
+    "test:importers": "node --no-warnings ./scripts/test_importers.mjs",
+    "test:mindmap-cards": "node --no-warnings ./scripts/test_mindmap_cards.mjs",
+    "test:paradigm": "node --no-warnings ./scripts/test_concept_card_mindmap_paradigm.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
@@ -68,6 +77,7 @@
     "fflate": "^0.8.3",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
-    "sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "ts-fsrs": "^5.4.1"
   }
 }

@@ -39,49 +39,38 @@
 
 - `STRICT OUTPUT CONTRACT`
 - `FLASHCARD QUALITY CONTRACT`
+- `RELATION RUBRIC`
 - 禁止 markdown/prose/XML。
 - 保留 sourceRefs。
+- 每个候选控制 1 到 2 条证据，`quote` 只保留短证据。
 - evidence weak 则 uncertain/warnings。
 - 闪卡必须 active recall，避免泛泛解释。
+- 闪卡负例约束：不把章节标题直接做卡，不问来源中没有答案的问题，不把多个事实塞进一张卡。
+- 关系类型约束：`parent_child`、`prerequisite`、`cause_effect`、`sequence`、`contrast`、`related` 都有明确使用边界。
 
-## 4. 下一步建议
+## 4. 已采用的开源提示词经验
 
-### 4.1 加入负例约束
+这些经验已经进入 prompt contract 或测试，而不是只停留在文档：
 
-在生成卡片 prompt 中加入明确负例：
+- NotebookLM 类 source-grounded/citation-backed 原则 -> 每个概念、关系、卡片都必须保留 `sourceRefs`，证据弱则进入 `uncertain/warnings`。
+- 知识图谱/GraphRAG 项目的 entity-relation provenance 原则 -> 关系也必须有证据，并使用 `RELATION RUBRIC` 限制关系类型。
+- Anki/FSRS/主动回忆经验 -> `FLASHCARD QUALITY CONTRACT` 要求一卡一知识点、active recall、答案可从证据核验。
+- prompt 工程集合的可回归思路 -> `scripts/test_prompt_contracts.mjs` 静态验证每个 prompt 都带结构化输出、证据、uncertain/warnings、证据预算、闪卡质量和关系 rubric。
 
-- 不要问“请解释 X”。
-- 不要问来源中没有给出答案的问题。
-- 不要把章节标题当成已解释概念。
-- 不要把两个概念塞进一张卡。
+## 5. 后续建议
 
-### 4.2 加入 relation rubric
+### 5.1 增加少样例 few-shot
 
-关系类型应有更硬的判定：
+当前为了减少 token 和避免模型照抄样例，主要用 contract + schema。后续可加入少量高质量 few-shot：
 
-- `parent_child`：必须是上位/下位或整体/部分。
-- `prerequisite`：必须有学习或推理前置依赖。
-- `cause_effect`：必须有因果动词或明确因果描述。
-- `sequence`：必须有时间、步骤或流程顺序。
-- `contrast`：必须有对比维度。
-- `related`：只能作为弱关系兜底。
+- 一个“强证据概念”的正例。
+- 一个“标题但无解释，放入 uncertain”的负例。
+- 一个“弱相关不能强行 parent_child”的关系负例。
+- 一个“多事实拆成两张卡”的闪卡正例。
 
-### 4.3 加入 evidence budget
+### 5.2 增加 prompt 输出对抗样本
 
-每个候选最多 1 到 2 条证据，quote 控制短句，避免 sourceRefs 太长导致 UI 和存储膨胀。
-
-### 4.4 对 prompt 做回归测试
-
-继续扩展 `scripts/test_prompt_contracts.mjs`：
-
-- 检查每个 prompt 都包含 JSON schema。
-- 检查每个 prompt 都要求 sourceRefs。
-- 检查每个 prompt 都要求 uncertain/warnings。
-- 检查生成卡 prompt 包含 active recall 质量约束。
-
-### 4.5 增加模型输出对抗样本
-
-继续扩展 `scripts/test_json_repair.mjs`：
+继续扩展 `scripts/test_json_repair.mjs` 和 pipeline 测试：
 
 - markdown fence + 前后解释。
 - OpenAI wrapper。
@@ -92,7 +81,7 @@
 - 裸换行字符串。
 - `NaN/Infinity`。
 
-## 5. 参考链接
+## 6. 参考链接
 
 - notebooklm-py: https://github.com/teng-lin/notebooklm-py
 - NotebookLM skill: https://github.com/PleasePrompto/notebooklm-skill
@@ -108,4 +97,8 @@
 - Memento flashcards skill: https://github.com/NousResearch/hermes-agent/blob/main/optional-skills/productivity/memento-flashcards/SKILL.md
 - Skill-Anything: https://github.com/SYuan03/Skill-Anything
 - awesome-prompts: https://github.com/ai-boost/awesome-prompts
-
+- FSRS TypeScript: https://github.com/open-spaced-repetition/ts-fsrs
+- FSRS for Anki: https://github.com/open-spaced-repetition/fsrs4anki
+- Sigma.js: https://github.com/jacomyal/sigma.js
+- Graphology: https://github.com/graphology/graphology
+- Cytoscape.js: https://github.com/cytoscape/cytoscape.js

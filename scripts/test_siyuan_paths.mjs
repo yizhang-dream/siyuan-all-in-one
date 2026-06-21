@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import * as esbuild from 'esbuild';
 import {
   pluginName,
   readArg,
@@ -52,12 +55,15 @@ try {
   assert.equal(resolvePluginDir(), path.join(os.homedir(), 'plugin-override'));
   assert.equal(resolvePluginDataDir(), path.join(os.homedir(), 'plugin-data-override'));
 
+  await assertSiyuanTitleSanitizer();
+
   console.log(JSON.stringify({
     pluginName,
     cliSiyuanData: true,
     envSiyuanData: true,
     pluginOverrides: true,
     kernelOverride: true,
+    titleSanitizer: true,
   }, null, 2));
 } finally {
   process.argv = originalArgv;
@@ -75,5 +81,50 @@ function restoreEnv() {
   clearEnv();
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value !== undefined) process.env[key] = value;
+  }
+}
+
+async function assertSiyuanTitleSanitizer() {
+  const root = process.cwd();
+  const tempDir = path.join(root, '_temp_siyuan_paths_test');
+  const entry = path.join(tempDir, 'fixture.ts');
+  const outfile = path.join(tempDir, 'fixture.mjs');
+
+  await rm(tempDir, { recursive: true, force: true });
+  await mkdir(tempDir, { recursive: true });
+  await writeFile(entry, `
+import assert from 'node:assert/strict';
+import { sanitizeDocTitle } from '../src/libs/siyuan';
+
+assert.equal(sanitizeDocTitle('a/b:c*?"<>|#[x]\\n\\t  y'), 'a b c x y');
+assert.equal(sanitizeDocTitle('   '), '');
+assert.equal(sanitizeDocTitle('x'.repeat(100)).length, 80);
+
+export default true;
+`, 'utf8');
+
+  await esbuild.build({
+    entryPoints: [entry],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile,
+    plugins: [{
+      name: 'stub-siyuan',
+      setup(build) {
+        build.onResolve({ filter: /^siyuan$/ }, () => ({ path: 'siyuan-stub', namespace: 'stub' }));
+        build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
+          contents: 'export async function fetchSyncPost(){ return null; } export function openTab(){}',
+          loader: 'js',
+        }));
+      },
+    }],
+    logLevel: 'silent',
+  });
+
+  try {
+    await import(pathToFileURL(outfile).href);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
 }

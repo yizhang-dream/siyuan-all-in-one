@@ -9,6 +9,19 @@ import type { CardType, SourceRef } from './types/concept';
 
 /** 卡片状态 */
 export type CardStatus = 'new' | 'learning' | 'review' | 'buried';
+export type ReviewScheduler = 'sm2' | 'fsrs';
+
+export interface FSRSCardState {
+    stability: number;
+    difficulty: number;
+    retrievability?: number;
+    state: 'new' | 'learning' | 'review' | 'relearning';
+    scheduledDays: number;
+    elapsedDays: number;
+    learningSteps: number;
+    lastReview?: number;
+    lastRating?: number;
+}
 
 /** 单张闪卡 */
 export interface Card {
@@ -27,6 +40,8 @@ export interface Card {
     /** 新卡片类型和溯源字段；旧卡片缺失时由 cleanCard 补默认值。 */
     cardType?: CardType;
     sourceRefs?: SourceRef[];
+    scheduler?: ReviewScheduler;
+    fsrs?: FSRSCardState;
     due: number; // epoch ms
     interval: number; // 天
     ease: number; // 倍率（≥1.3）
@@ -96,6 +111,8 @@ export interface AppConfig {
     notebookEndpoint: string;
     /** 每日新卡片上限 */
     cardsPerDay: number;
+    /** 复习调度算法：SM-2 兼容默认，FSRS 可选。 */
+    scheduler: ReviewScheduler;
     /** 默认牌组名 */
     defaultDeck: string;
     /** 用户自定义 agent 列表 */

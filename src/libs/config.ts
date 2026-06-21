@@ -88,6 +88,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     mindmapModel: '',
     notebookEndpoint: 'http://localhost:5055',
     cardsPerDay: 30,
+    scheduler: 'sm2',
     defaultDeck: '默认',
     agents: [],
 };
@@ -180,6 +181,7 @@ export function cleanConfig(cfg: any): AppConfig {
         mindmapModel: String(cfg?.mindmapModel ?? (hasOldLlmConfig ? cfg.llmModel : d.mindmapModel)),
         notebookEndpoint: cfg?.notebookEndpoint ?? d.notebookEndpoint,
         cardsPerDay: cfg?.cardsPerDay ?? d.cardsPerDay,
+        scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',
         defaultDeck: cfg?.defaultDeck ?? d.defaultDeck,
         agents: rawAgents.map(cleanAgent),
     };

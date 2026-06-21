@@ -9,7 +9,7 @@
 
 /** 来源引用——每个概念、关系、卡片都可追溯到原始材料 */
 export interface SourceRef {
-    type: 'opennotebook' | 'siyuan' | 'manual' | 'pdf' | 'url';
+    type: 'opennotebook' | 'siyuan' | 'manual' | 'file' | 'pdf' | 'url';
     sourceId?: string;
     blockId?: string;
     chunkId?: string;
