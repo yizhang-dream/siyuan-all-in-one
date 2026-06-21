@@ -83,6 +83,54 @@ export function hitTestOcclusion(
     return null;
 }
 
+/** 检测鼠标是否在遮挡矩形边缘（用于 resize 手柄判断） */
+export function isNearEdge(
+    canvasX: number, canvasY: number,
+    canvasWidth: number, canvasHeight: number,
+    region: ImageOcclusionRegion
+): 'nw' | 'ne' | 'sw' | 'se' | null {
+    const rx = (region.x / 100) * canvasWidth;
+    const ry = (region.y / 100) * canvasHeight;
+    const rw = (region.w / 100) * canvasWidth;
+    const rh = (region.h / 100) * canvasHeight;
+    const margin = 12;
+    const corners: Array<{ key: 'nw' | 'ne' | 'sw' | 'se'; x: number; y: number }> = [
+        { key: 'nw', x: rx, y: ry },
+        { key: 'ne', x: rx + rw, y: ry },
+        { key: 'sw', x: rx, y: ry + rh },
+        { key: 'se', x: rx + rw, y: ry + rh },
+    ];
+    for (const corner of corners) {
+        if (Math.abs(canvasX - corner.x) <= margin && Math.abs(canvasY - corner.y) <= margin) {
+            return corner.key;
+        }
+    }
+    return null;
+}
+
+/** 拖拽调整遮挡矩形尺寸 */
+export function resizeOcclusionRegion(
+    region: ImageOcclusionRegion,
+    corner: 'nw' | 'ne' | 'sw' | 'se',
+    canvasX: number, canvasY: number,
+    canvasWidth: number, canvasHeight: number
+): ImageOcclusionRegion {
+    const px = (canvasX / canvasWidth) * 100;
+    const py = (canvasY / canvasHeight) * 100;
+    let { x, y, w, h } = region;
+    if (corner === 'nw') { w = (x + w - px); h = (y + h - py); x = px; y = py; }
+    else if (corner === 'ne') { w = px - x; h = (y + h - py); y = py; }
+    else if (corner === 'sw') { w = (x + w - px); h = py - y; x = px; }
+    else { w = px - x; h = py - y; }
+    return {
+        ...region,
+        x: Math.max(0, Math.min(100 - 2, x)),
+        y: Math.max(0, Math.min(100 - 2, y)),
+        w: Math.max(3, Math.min(100 - x, w)),
+        h: Math.max(3, Math.min(100 - y, h)),
+    };
+}
+
 /** 在图像上添加一个新遮挡矩形（百分比坐标） */
 export function addOcclusionRegion(
     canvasX: number,

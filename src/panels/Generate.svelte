@@ -9,7 +9,7 @@
   import SourcePicker from './SourcePicker.svelte';
   import { showMessage } from 'siyuan';
   import { parseSymbolCards, type ParsedSymbolCard } from '../libs/symbol-cards';
-  import { addOcclusionRegion, drawOcclusionEditor, fileToDataUrl, fitImageToCanvas, hitTestOcclusion, loadImage } from '../libs/image-occlusion-render';
+  import { addOcclusionRegion, drawOcclusionEditor, fileToDataUrl, fitImageToCanvas, hitTestOcclusion, isNearEdge, loadImage, resizeOcclusionRegion } from '../libs/image-occlusion-render';
   import type { ImageOcclusionRegion } from '../libs/types';
 
   export let plugin: any;
@@ -50,6 +50,8 @@
   let occlusionSelectedId = '';
   let occlusionDeck = '';
   let occlusionTags = '';
+  let occlusionDragCorner: 'nw' | 'ne' | 'sw' | 'se' | null = null;
+  let occlusionDragRegionId = '';
 
   async function loadOcclusionImage(file: File) {
     occlusionImageDataUrl = await fileToDataUrl(file);
@@ -74,15 +76,62 @@
     const rect = occlusionCanvasEl.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+
+    // 优先检测是否在已有的遮挡区域边缘（resize）
+    for (const region of occlusionRegions) {
+      const corner = isNearEdge(x, y, occlusionCanvasEl.width, occlusionCanvasEl.height, region);
+      if (corner) {
+        occlusionDragCorner = corner;
+        occlusionDragRegionId = region.id;
+        occlusionSelectedId = region.id;
+        return;
+      }
+    }
+
+    // 检测是否在已有区域内（选中）
     const hit = hitTestOcclusion(x, y, occlusionCanvasEl.width, occlusionCanvasEl.height, occlusionRegions);
     if (hit) {
       occlusionSelectedId = hit;
-    } else {
-      const region = addOcclusionRegion(x, y, occlusionCanvasEl.width, occlusionCanvasEl.height, occlusionRegions);
-      occlusionRegions = [...occlusionRegions, region];
-      occlusionSelectedId = region.id;
+      occlusionDragCorner = null;
+      renderOcclusionCanvas();
+      return;
     }
+
+    // 空白区：新增
+    const region = addOcclusionRegion(x, y, occlusionCanvasEl.width, occlusionCanvasEl.height, occlusionRegions);
+    occlusionRegions = [...occlusionRegions, region];
+    occlusionSelectedId = region.id;
+    occlusionDragCorner = null;
     renderOcclusionCanvas();
+  }
+
+  function handleOcclusionMouseMove(event: MouseEvent) {
+    if (!occlusionDragCorner || !occlusionDragRegionId || !occlusionCanvasEl) return;
+    const rect = occlusionCanvasEl.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const idx = occlusionRegions.findIndex((r) => r.id === occlusionDragRegionId);
+    if (idx === -1) return;
+    occlusionRegions[idx] = resizeOcclusionRegion(
+      occlusionRegions[idx], occlusionDragCorner!, x, y,
+      occlusionCanvasEl.width, occlusionCanvasEl.height
+    );
+    occlusionRegions = [...occlusionRegions];
+    renderOcclusionCanvas();
+  }
+
+  function handleOcclusionMouseUp() {
+    occlusionDragCorner = null;
+    occlusionDragRegionId = '';
+  }
+
+  function handleOcclusionKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (occlusionSelectedId) {
+        removeOcclusionRegion();
+        event.preventDefault();
+      }
+    }
   }
 
   function removeOcclusionRegion() {
@@ -401,9 +450,9 @@
       <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" on:change={handleOcclusionFileChange} />
       {#if occlusionImage}
         <div class="occlusion-canvas-wrap">
-          <canvas bind:this={occlusionCanvasEl} on:click={handleOcclusionClick} class="occlusion-canvas"></canvas>
+          <canvas bind:this={occlusionCanvasEl} on:click={handleOcclusionClick} on:mousemove={handleOcclusionMouseMove} on:mouseup={handleOcclusionMouseUp} on:keydown={handleOcclusionKeyDown} tabindex="0" class="occlusion-canvas"></canvas>
         </div>
-        <p class="gen-symbol-hint">{occlusionRegions.length} 个遮挡区域 · 点击画布添加，点击已有区域选中 · 选中后按「删除选中」移除</p>
+        <p class="gen-symbol-hint">{occlusionRegions.length} 个遮挡区域 · 点击画布添加 · 拖拽四角调整大小 · 选中后按 Delete 删除</p>
         <div class="gen-row">
           <button class="b3-button b3-button--small b3-button--outline" on:click={removeOcclusionRegion} disabled={!occlusionSelectedId}>删除选中</button>
           <button class="b3-button b3-button--small b3-button--primary" on:click={saveOcclusionCard} disabled={occlusionRegions.length === 0}>保存遮挡卡</button>
