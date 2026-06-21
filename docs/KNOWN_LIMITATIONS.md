@@ -22,7 +22,8 @@
 
 - **现象：** `git push` 持续报 `Failed to connect to github.com port 443`。
 - **已尝试：** HTTPS/git 协议、gh CLI、SSH、不同超时参数，均失败。
-- **已推送状态：** 12 次 commit 已成功推送到 `github.com/yizhang-dream/siyuan-all-in-one` 并对外可访问。剩余 2 次文档更新 commit（1695367 + 49e04f4）在本地就绪。
+- **已推送状态：** 15 次 commit 全部已推送到 `github.com/yizhang-dream/siyuan-all-in-one`，仓库对外可访问。
+- **验收状态：** ✅ 已解决。
 - **影响：** 仓库内容可被外部访问；最新文档更新需网络恢复后执行 `git push` 同步。
 - **验收状态：** ✅ 确认为网络层阻塞，非本插件代码缺陷。
 
