@@ -3,20 +3,30 @@ import type { PipelineSource } from '../ai/pipeline';
 import { readSiyuanDocsAsPipelineSources, type DocItem } from '../sources';
 import { localTextFilesToPipelineSources, type LocalTextFileInput } from './local-file-adapters';
 import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
+import { fetchWebPage, webPageToPipelineSources } from './web-fetcher';
+import { extractPdfText, pdfToPipelineSources } from './pdf-extractor';
 
 export type SourceHubMode = 'manual' | 'opennotebook' | 'mixed';
 
 export interface SourceHubRequest {
     mode: SourceHubMode;
     manualText?: string;
+    // OpenNotebook (optional)
     notebookEndpoint?: string;
     notebookQuery?: string;
     notebookSourceIds?: string[];
     notebookNoteIds?: string[];
+    // SiYuan + local files
     siyuanDocs?: DocItem[];
     localFiles?: LocalTextFileInput[];
+    // Unstructured text
     unstructuredText?: string;
     unstructuredFileName?: string;
+    // Built-in: URL web pages
+    urls?: string[];
+    // Built-in: PDF files
+    pdfBuffers?: Array<{ buffer: ArrayBuffer; fileName: string }>;
+    // Options
     openNotebookLimit?: number;
     openNotebookSearchType?: 'text' | 'vector';
     maxCharsPerSiyuanDoc?: number;
@@ -33,6 +43,8 @@ export interface SourceHubStats {
     file: number;
     openNotebook: number;
     siyuan: number;
+    url: number;
+    pdf: number;
     totalBeforeDedupe: number;
     total: number;
 }
@@ -45,11 +57,14 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
     const notebookNoteIds = uniqueStrings(request.notebookNoteIds || []);
     const siyuanDocs = request.siyuanDocs || [];
     const localFiles = request.localFiles || [];
+    const urls = uniqueStrings(request.urls || []);
+    const pdfBuffers = request.pdfBuffers || [];
 
     if ((request.mode === 'manual' || request.mode === 'mixed') && manualText) {
         sources.push(buildManualPipelineSource(manualText));
     }
 
+    // OpenNotebook (optional, only when endpoint configured)
     if (
         (request.mode === 'opennotebook' || request.mode === 'mixed') &&
         request.notebookEndpoint &&
@@ -77,7 +92,32 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
         }));
     }
 
-    // Unstructured 分区：将原始文本按结构自动拆分为 Title/NarrativeText/ListItem 等元素
+    // Built-in URL fetcher
+    if (request.mode === 'mixed' && urls.length > 0) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const results = await Promise.allSettled(
+            urls.map((url) => fetchWebPage(url, controller.signal))
+        );
+        clearTimeout(timeout);
+        for (const result of results) {
+            if (result.status === 'fulfilled' && result.value.text) {
+                sources.push(...webPageToPipelineSources(result.value, 10));
+            }
+        }
+    }
+
+    // Built-in PDF extractor
+    if (request.mode === 'mixed' && pdfBuffers.length > 0) {
+        for (const pdf of pdfBuffers) {
+            const result = await extractPdfText(pdf.buffer, pdf.fileName);
+            if (result.text) {
+                sources.push(...pdfToPipelineSources(result, 16));
+            }
+        }
+    }
+
+    // Unstructured partitioner (explicitly provided text)
     const unstructuredText = String(request.unstructuredText || '').trim();
     if (request.mode === 'mixed' && unstructuredText) {
         sources.push(...textToUnstructuredPipelineSources(
@@ -92,10 +132,12 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
     return {
         sources: deduped,
         stats: {
-            manual: deduped.filter((source) => source.type === 'manual').length,
-            file: deduped.filter((source) => source.type === 'file').length,
-            openNotebook: deduped.filter((source) => source.type === 'opennotebook').length,
-            siyuan: deduped.filter((source) => source.type === 'siyuan').length,
+            manual: deduped.filter((s) => s.type === 'manual').length,
+            file: deduped.filter((s) => s.type === 'file').length,
+            openNotebook: deduped.filter((s) => s.type === 'opennotebook').length,
+            siyuan: deduped.filter((s) => s.type === 'siyuan').length,
+            url: deduped.filter((s) => s.type === 'url').length,
+            pdf: deduped.filter((s) => s.type === 'pdf').length,
             totalBeforeDedupe,
             total: deduped.length,
         },
@@ -131,5 +173,5 @@ export function dedupePipelineSources(sources: PipelineSource[]): PipelineSource
 }
 
 function uniqueStrings(values: string[]): string[] {
-    return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+    return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
 }

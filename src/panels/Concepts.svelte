@@ -45,6 +45,19 @@
   let isSearchingSiyuanDocs = false;
   let localFiles: LocalTextFileInput[] = [];
   let localFileError = '';
+  let urlInput = '';
+  let addedUrls: string[] = [];
+  let urlError = '';
+
+  function addUrls() {
+    const raw = urlInput.trim();
+    if (!raw) return;
+    addedUrls = [...addedUrls, ...raw.split(/[,，\n]+/).map((s) => s.trim()).filter(Boolean)];
+    urlInput = '';
+    urlError = '';
+  }
+
+  function clearUrls() { addedUrls = []; urlInput = ''; urlError = ''; }
   let appliedNotebookTargetKey = '';
   let appliedMindmapGapTargetKey = 0;
   let targetCardCount = 8;
@@ -236,6 +249,7 @@
       notebookNoteIds,
       siyuanDocs: selectedSiyuanDocs,
       localFiles,
+      urls: addedUrls,
       openNotebookLimit: 12,
       openNotebookSearchType: 'text',
       maxCharsPerSiyuanDoc: 8000,
@@ -691,6 +705,15 @@
           </div>
         {/if}
 
+        <div class="local-file-row">
+          <input class="b3-text-field" type="text" bind:value={urlInput} placeholder="输入网页 URL（多个用逗号分隔）" on:keydown={(e) => { if (e.key === 'Enter') addUrls(); }} />
+          {#if addedUrls.length > 0}
+            <button class="nb-link" type="button" on:click={clearUrls}>清除 URL</button>
+          {/if}
+        </div>
+        {#if urlError}
+          <div class="notebook-source-error">{urlError}</div>
+        {/if}
         <div class="local-file-row">
           <label class="b3-button b3-button--small b3-button--outline local-file-picker">
             <svg><use xlink:href="#iconUpload"></use></svg>
