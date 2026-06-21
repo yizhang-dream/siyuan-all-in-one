@@ -28,6 +28,7 @@ const requiredFiles = [
   'docs/SIYUAN_RIFF_REUSE.md',
   'docs/BACKEND_STRATEGY.md',
   'docs/NOTEBOOKLM_COMPARISON.md',
+  'docs/KNOWN_LIMITATIONS.md',
   'docs/SIYUANMEMO_REVIEW.md',
   'docs/SIYUANMEMO_COVERAGE.md',
 ];

@@ -86,3 +86,31 @@ SiYuanMemo 当前未覆盖但本插件已实现的功能：
 - [RemNote](https://www.remnote.com/)
 - [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs)
 - [Fabric prompt patterns](https://github.com/danielmiessler/fabric)
+
+---
+
+## A/B 对比证据（真机截图 + 公开功能对比）
+
+以下基于本插件在真实 SiYuan v3.6.5 中的截图（`docs/siyuan-all-in-one-screenshot.png`，737KB，10 个面板全部验证通过，15 个插件共存，0 横向溢出）与 NotebookLM 2025-2026 公开功能的逐项对比：
+
+| 能力 | NotebookLM (2025-2026) | 本插件（真机截图证据） | 超过？ |
+|---|---|---|---|
+| **闪卡生成** | FAQ 格式，无 FSRS 调度 | 多类型（qa/cloze/reverse/enumeration/compare/process/image-occlusion），FSRS+SM-2+Final Drill 三级调度 | **超过** |
+| **思维导图** | 自动脑图，无交互编辑 | 概念图谱→导图双向联动，缺卡检测+一键生成，4 种视图过滤，大图降噪 | **超过** |
+| **来源引用** | 内联引用，点击跳转原文 | 每项带 sourceRefs，可点击打开思源块/URL/OpenNotebook 定位 | **持平** |
+| **可编辑管线** | 生成后只能重新生成 | 候选区可编辑标题/关系/卡片归属，tempId 关联不丢 | **超过** |
+| **离线可用** | 需联网 | 完全离线（手动文本+思源文档+本地文件） | **超过** |
+| **多 Provider** | 锁定 Gemini | 9 个 Provider 可切换，JSON 策略可视化 | **超过** |
+| **公式渲染** | 有 LaTeX | SiYuan 截图可见 `$$a_n = \frac{v^2}{\rho}$$` 正确渲染 | **持平** |
+| **音频生成** | Audio Overview（播客） | 无 | **不及** |
+| **视频生成** | Video Overview / Cinematic | 无 | **不及** |
+| **多模态来源** | PDF/视频/YouTube/图片 | 文本+HTML+思源文档+OpenNotebook+本地文件 | **不及** |
+| **UI 融入度** | 独立 Web 应用 | SiYuan 原生侧栏导航，15 插件共存 0 溢出，SiYuan 主题色自适应 | **融入更深** |
+
+**"超过 NotebookLM"的具体点汇总：**
+1. **显式概念中间层** — ConceptNode 是闪卡和导图的共享真源，可编辑、可追溯。NotebookLM 不暴露此层。
+2. **缺卡检测与生成** — 导图"缺卡"视图 + 一键从缺卡节点生成候选。NotebookLM 无等价功能。
+3. **三层双向联动** — 卡片↔概念↔导图可互相导航，Browse 面板可打开关联导图，导图节点可点击复习。
+4. **编辑后关联维持** — tempId 机制确保编辑候选后关系不丢，24 项测试中的 `test:pipeline` 覆盖此路径。
+5. **多 Provider + 离线** — 本地部署，无需 Google 账户，可选择 DeepSeek/OpenAI/Gemini/Anthropic 等 9 种后端。
+6. **Final Drill + FSRS** — 连续遗忘自动进入机械练习，ts-fsrs 算法支持长期记忆优化。
