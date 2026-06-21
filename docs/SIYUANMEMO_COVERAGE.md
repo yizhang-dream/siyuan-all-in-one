@@ -29,7 +29,7 @@
 | SRS Browser 表格管理 | 部分 | Browse 面板列表/编辑/搜索 | 缺表格列排序、批量队列操作、同块卡操作 | 扩展 Browse 为密集表格模式 |
 | 卡片规划：提前/推迟/分摊/排序 | 部分 | SM-2/FSRS 基本调度 | 缺 bulk reschedule、queue ordering | 增加批量排期操作 |
 | 公式制卡与公式复习稳定 | 部分 | 渲染层保留 LaTeX，Review/Browse/Mindmap 渲染公式 | 缺公式块局部挖空制卡 | 加 cloze 公式候选和测试 |
-| 图片遮挡卡 | 部分 ✅ | `ImageOcclusionRegion`/`ImageOcclusionCard` 数据模型、`image-occlusion` 卡片类型、`CARD_TYPE_LABELS` 翻译 | 缺画布编辑器和复习渲染 | 后置 canvas/SVG 遮挡编辑器 |
+| 图片遮挡卡 | 部分 ✅ | 完整数据模型 + Canvas 编辑器（点击添加/选中/删除区域）+ 复习渲染（点击揭示遮挡区域，计数器） | 编辑器缺少拖拽调整尺寸、复习缺少键盘快捷键、无批量遮挡模式 | 增加拖拽调���和键盘操作 |
 | 有序/无序列表模板卡 | 部分 | Markdown/导图节点制卡 | 缺列表模板解析与渐进提示 | 增加 SiYuan list block importer |
 | AI 制卡 / AI 工作台 | 部分 | 多 provider、prompt pipeline、候选确认 | 缺会话式 AI 工作台和工具审批 | 可在 Notebook/Concepts 基础上扩展 |
 | 摘录与渐进阅读 | 部分 | OpenNotebook/SiYuan 多来源输入 | 缺 Alt+X 摘录、Topic 管理 | 做“摘录到候选区/概念区” |

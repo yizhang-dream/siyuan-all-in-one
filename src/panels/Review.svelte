@@ -2,6 +2,8 @@
   import { onMount, afterUpdate } from 'svelte';
   import { scheduleCard } from '../libs/srs';
   import { renderToHTML, renderMath } from '../libs/render';
+  import { drawOcclusionReview, hitTestOcclusion, loadImage, allRevealed } from '../libs/image-occlusion-render';
+  import type { Card } from '../libs/types';
 
   export let plugin: any;
   export let cardStore: any;
@@ -20,6 +22,38 @@
   let appliedQueueKey = 0;
   let dismissedQueueKey = 0;
   let activeQueueTitle = '';
+
+  // 图片遮挡复习状态
+  let occlusionRevealedIds = new Set<string>();
+  let occlusionReviewImage: HTMLImageElement | null = null;
+  let occlusionReviewCanvas: HTMLCanvasElement;
+  $: occlusionRevealedCount = occlusionRevealedIds.size;
+  $: currentCard = dueCards[currentIndex] as Card | undefined;
+
+  function renderOcclusionReview() {
+    if (!occlusionReviewCanvas || !occlusionReviewImage || !currentCard?.occlusion) return;
+    const w = occlusionReviewCanvas.width;
+    const h = occlusionReviewCanvas.height;
+    if (w === 0 || h === 0) {
+      occlusionReviewCanvas.width = Math.min(600, occlusionReviewImage.naturalWidth);
+      occlusionReviewCanvas.height = Math.min(400, occlusionReviewImage.naturalHeight);
+    }
+    const ctx = occlusionReviewCanvas.getContext('2d');
+    if (!ctx) return;
+    drawOcclusionReview(ctx, occlusionReviewImage, currentCard.occlusion.regions, occlusionRevealedIds);
+  }
+
+  function handleOcclusionReviewClick(event: MouseEvent) {
+    if (!occlusionReviewCanvas || !currentCard?.occlusion) return;
+    const rect = occlusionReviewCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const hit = hitTestOcclusion(x, y, occlusionReviewCanvas.width, occlusionReviewCanvas.height, currentCard.occlusion.regions);
+    if (hit) {
+      occlusionRevealedIds = new Set([...occlusionRevealedIds, hit]);
+      renderOcclusionReview();
+    }
+  }
 
   onMount(() => {
     // 加载配置
@@ -57,6 +91,13 @@
 
   function flip() {
     flipped = true;
+    if (dueCards[currentIndex]?.cardType === 'image-occlusion' && dueCards[currentIndex]?.occlusion) {
+      occlusionRevealedIds = new Set();
+      loadImage(dueCards[currentIndex].occlusion.imageDataUrl).then((img) => {
+        occlusionReviewImage = img;
+        renderOcclusionReview();
+      });
+    }
   }
 
   function handleGrade(g: number) {
@@ -67,6 +108,8 @@
     plugin.saveCards();
     currentIndex++;
     flipped = false;
+    occlusionRevealedIds = new Set();
+    occlusionReviewImage = null;
   }
 
   function changeDeck() {
@@ -201,7 +244,18 @@
         </div>
         <div class="review-card-back">
           <div class="review-card-label">答案</div>
-          <div class="review-card-text">{@html renderToHTML(currentCard.answer)}</div>
+          {#if currentCard.cardType === 'image-occlusion' && currentCard.occlusion}
+            <div class="review-occlusion-wrap">
+              <canvas
+                bind:this={occlusionReviewCanvas}
+                on:click={handleOcclusionReviewClick}
+                class="review-occlusion-canvas"
+              ></canvas>
+              <p class="review-occlusion-status">{occlusionRevealedCount} / {currentCard.occlusion.regions.length} 已揭示</p>
+            </div>
+          {:else}
+            <div class="review-card-text">{@html renderToHTML(currentCard.answer)}</div>
+          {/if}
           {#if currentCard.hint}
             <div class="review-card-hint">
               <span class="review-card-label">提示</span>
@@ -305,6 +359,9 @@
 
   .review-card-label { font-size: var(--aio-fs-xs); text-transform: uppercase; letter-spacing: 1px; color: var(--b3-theme-primary); margin-bottom: 8px; font-weight: 600; }
   .review-card-text { font-size: var(--aio-fs-md); line-height: 1.7; text-align: center; word-break: break-word; white-space: pre-wrap; }
+  .review-occlusion-wrap { text-align: center; }
+  .review-occlusion-canvas { max-width: 100%; cursor: pointer; border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter); }
+  .review-occlusion-status { font-size: var(--aio-fs-sm); margin-top: 8px; opacity: 0.6; }
   .review-card-hint { margin-top: 12px; font-size: var(--aio-fs-base); opacity: 0.7; text-align: center; padding-top: 8px; border-top: 1px solid var(--b3-theme-surface-lighter); width: 100%; }
   .review-card-hint--front {
     max-width: 92%;

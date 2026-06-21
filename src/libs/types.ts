@@ -48,6 +48,7 @@ export interface Card {
     reps: number;
     lapses: number;
     consecutiveLapses?: number;
+    occlusion?: ImageOcclusionCard;
     status: CardStatus;
     created: number;
     modified: number;

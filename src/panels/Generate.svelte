@@ -9,6 +9,8 @@
   import SourcePicker from './SourcePicker.svelte';
   import { showMessage } from 'siyuan';
   import { parseSymbolCards, type ParsedSymbolCard } from '../libs/symbol-cards';
+  import { addOcclusionRegion, drawOcclusionEditor, fileToDataUrl, fitImageToCanvas, hitTestOcclusion, loadImage } from '../libs/image-occlusion-render';
+  import type { ImageOcclusionRegion } from '../libs/types';
 
   export let plugin: any;
   export let cardStore: any;
@@ -17,7 +19,7 @@
 
   const t = getT(plugin);
 
-  let mode: 'manual' | 'ai' = 'manual';
+  let mode: 'manual' | 'ai' | 'occlusion' = 'manual';
 
   // 手动添加
   let manualQ = '';
@@ -39,6 +41,83 @@
 
   $: symbolCards = parseSymbolCards(manualQ);
   $: hasSymbolCards = symbolCards.length > 0;
+
+  // 图片遮挡
+  let occlusionImage: HTMLImageElement | null = null;
+  let occlusionImageDataUrl = '';
+  let occlusionCanvasEl: HTMLCanvasElement;
+  let occlusionRegions: ImageOcclusionRegion[] = [];
+  let occlusionSelectedId = '';
+  let occlusionDeck = '';
+  let occlusionTags = '';
+
+  async function loadOcclusionImage(file: File) {
+    occlusionImageDataUrl = await fileToDataUrl(file);
+    occlusionImage = await loadImage(occlusionImageDataUrl);
+    occlusionRegions = [];
+    occlusionSelectedId = '';
+    renderOcclusionCanvas();
+  }
+
+  function renderOcclusionCanvas() {
+    if (!occlusionCanvasEl || !occlusionImage) return;
+    const fit = fitImageToCanvas(occlusionImage.naturalWidth, occlusionImage.naturalHeight, 600, 400);
+    occlusionCanvasEl.width = fit.width;
+    occlusionCanvasEl.height = fit.height;
+    const ctx = occlusionCanvasEl.getContext('2d');
+    if (!ctx) return;
+    drawOcclusionEditor(ctx, occlusionImage, occlusionRegions, occlusionSelectedId);
+  }
+
+  function handleOcclusionClick(event: MouseEvent) {
+    if (!occlusionCanvasEl || !occlusionImage) return;
+    const rect = occlusionCanvasEl.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const hit = hitTestOcclusion(x, y, occlusionCanvasEl.width, occlusionCanvasEl.height, occlusionRegions);
+    if (hit) {
+      occlusionSelectedId = hit;
+    } else {
+      const region = addOcclusionRegion(x, y, occlusionCanvasEl.width, occlusionCanvasEl.height, occlusionRegions);
+      occlusionRegions = [...occlusionRegions, region];
+      occlusionSelectedId = region.id;
+    }
+    renderOcclusionCanvas();
+  }
+
+  function removeOcclusionRegion() {
+    if (!occlusionSelectedId) return;
+    occlusionRegions = occlusionRegions.filter((r) => r.id !== occlusionSelectedId);
+    occlusionSelectedId = '';
+    renderOcclusionCanvas();
+  }
+
+  function saveOcclusionCard() {
+    if (!occlusionImageDataUrl || occlusionRegions.length === 0) return;
+    const deck = occlusionDeck || config?.defaultDeck || '默认';
+    const tags = occlusionTags ? occlusionTags.split(/[,，]/).map((t) => t.trim()).filter(Boolean) : [];
+    const card = createCard('图片遮挡 · 被遮挡区域', '图片遮挡 · 被遮挡区域', '', deck, tags);
+    card.cardType = 'image-occlusion';
+    card.occlusion = {
+      imageDataUrl: occlusionImageDataUrl,
+      imageWidth: occlusionImage?.naturalWidth || 800,
+      imageHeight: occlusionImage?.naturalHeight || 600,
+      regions: occlusionRegions,
+      cardId: card.id,
+    };
+    cardStore?.add?.(card);
+    showMessage(`已创建遮挡卡（${occlusionRegions.length} 个遮挡区域）`);
+    occlusionImage = null;
+    occlusionImageDataUrl = '';
+    occlusionRegions = [];
+    occlusionSelectedId = '';
+  }
+
+  function handleOcclusionFileChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) loadOcclusionImage(file);
+  }
 
   function createSymbolCards() {
     if (symbolCards.length === 0) return;
@@ -196,6 +275,7 @@
   <div class="gen-tabs">
     <button class="b3-button" class:b3-button--outline={mode !== 'manual'} on:click={() => mode = 'manual'}>手动添加</button>
     <button class="b3-button" class:b3-button--outline={mode !== 'ai'} on:click={() => mode = 'ai'}>AI 生成</button>
+    <button class="b3-button" class:b3-button--outline={mode !== 'occlusion'} on:click={() => mode = 'occlusion'}>图片遮挡</button>
   </div>
 
   <!-- 手动添加 -->
@@ -313,6 +393,28 @@
       {/if}
     </div>
   {/if}
+
+  <!-- 图片遮挡编辑器 -->
+  {#if mode === 'occlusion'}
+    <div class="gen-form">
+      <label>上传图片</label>
+      <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" on:change={handleOcclusionFileChange} />
+      {#if occlusionImage}
+        <div class="occlusion-canvas-wrap">
+          <canvas bind:this={occlusionCanvasEl} on:click={handleOcclusionClick} class="occlusion-canvas"></canvas>
+        </div>
+        <p class="gen-symbol-hint">{occlusionRegions.length} 个遮挡区域 · 点击画布添加，点击已有区域选中 · 选中后按「删除选中」移除</p>
+        <div class="gen-row">
+          <button class="b3-button b3-button--small b3-button--outline" on:click={removeOcclusionRegion} disabled={!occlusionSelectedId}>删除选中</button>
+          <button class="b3-button b3-button--small b3-button--primary" on:click={saveOcclusionCard} disabled={occlusionRegions.length === 0}>保存遮挡卡</button>
+        </div>
+        <label for="occl-deck">牌组</label>
+        <input id="occl-deck" class="b3-text-field" type="text" bind:value={occlusionDeck} placeholder={config?.defaultDeck || '默认'} />
+        <label for="occl-tags">标签</label>
+        <input id="occl-tags" class="b3-text-field" type="text" bind:value={occlusionTags} placeholder="逗号分隔" />
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style lang="scss">
@@ -361,6 +463,8 @@
   .gen-symbol-hint { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: var(--b3-theme-primary-lightest); font-size: var(--aio-fs-sm); margin-top: 4px; }
   .gen-symbol-hint svg { width: 14px; height: 14px; color: var(--b3-theme-primary); flex-shrink: 0; }
   .gen-symbol-hint span { flex: 1; }
+  .occlusion-canvas-wrap { border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; overflow: hidden; background: var(--b3-theme-background); }
+  .occlusion-canvas { display: block; cursor: crosshair; max-width: 100%; }
   .gen-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   .gen-status {
     padding: 8px 10px;
