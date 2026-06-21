@@ -38,6 +38,7 @@ export interface PipelineOptions {
     language?: string;
     targetCardCount?: number;
     temperature?: number;
+    cdfMode?: boolean;
     onStep?: (step: PipelineStep, message: string) => void;
     jsonCaller?: (prompt: string, step: PipelineStep) => Promise<any>;
 }
@@ -138,7 +139,8 @@ export async function runPromptPipeline(
         relations,
         chunks,
         options.targetCardCount || Math.max(6, concepts.length * 2),
-        language
+        language,
+        options.cdfMode || false
     );
     const cardJson = await callStepJson(cardPrompt, 'generate-cards', llmConfig, options, warnings);
     let cards = normalizeCardCandidates(cardJson.cards ?? cardJson, chunks, concepts);
@@ -514,6 +516,7 @@ function normalizeCardCandidates(
                 front: toString(item?.front || item?.question || item?.prompt || item?.q).trim(),
                 back: toString(item?.back || item?.answer || item?.completion || item?.a).trim(),
                 hint: toString(item?.hint).trim() || undefined,
+                descriptorDimension: toString(item?.descriptorDimension || item?.descriptor_dimension || item?.dimension).trim() || undefined,
                 confidence: clampConfidence(item?.confidence),
                 sourceRefs: normalizeSourceRefs(
                     item?.sourceRefs || item?.source_refs || item?.evidence || item?.citations ||

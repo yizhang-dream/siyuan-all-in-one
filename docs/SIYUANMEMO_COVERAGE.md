@@ -21,7 +21,7 @@
 | Incremental Learning / 渐进学习 | 未覆盖 | 无 topic/excerpt 队列 | 缺摘录、Topic、渐进阅读 | 与 OpenNotebook/SiYuan 文档摘录联动 |
 | Filtered Review / 筛选复习 | 部分 | Browse 筛选/选中卡片可进入临时复习队列；导图 `有卡/缺卡/邻域` 视图 | 导图筛选结果尚不能直接进入复习；缺持久化队列 | 从导图创建临时筛选复习队列，并抽象 QueueStore |
 | Neural Roaming / 神经漫游 | 部分 | 概念图、SourceRef 回跳、导图搜索邻域 | 缺扩散激活、轨迹历史、汇合节点 | 以 `ConceptGraph + backlink/sourceRefs` 做漫游原型 |
-| CDF 概念描述符制卡 | 部分 | 概念优先 pipeline、cardType、提示词质量契约 | 缺 descriptor card 类型、CDF prompt preset、概念定义双向卡 | 增加 CDF 候选模式：定义、描述符、反向/双向 |
+| CDF 概念描述符制卡 | 部分 ✅ | 概念优先 pipeline、cardType、提示词质量契约、CDF 维度制卡 toggle（定义/公式/过程/对比/应用/因果/限制等维度） | descriptorDimension 字段仅存于候选层，未落持久化；缺双向卡生成 | 增加 CDF 维度持久化与反向卡自动生成 |
 | 符号监听制卡 | 未覆盖 | 快速制卡为表单/AI | 缺 `>>` `<<` `<>` `;;` 监听 | 可选实现，不作为主线 |
 | 原生快速制卡监听/同步 | 部分 | Riff API 适配、Riff 同步入口 | 缺监听思源原生快速制卡并导入插件 | 增加只读扫描/导入 Riff 卡片入口 |
 | 一块多卡 | 部分 | 插件 `Card` 与 `SourceRef.blockId` 可多卡指向同块 | UI 未聚合同块卡，导出/审计弱 | Browse/Review 增加“同来源/同块卡片”面板 |

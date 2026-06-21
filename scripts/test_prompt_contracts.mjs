@@ -56,6 +56,7 @@ const prompts = [
   buildExtractConceptsPrompt(chunks),
   buildInferRelationsPrompt(concepts, chunks),
   buildGenerateCardsPrompt(concepts, relations, chunks, 1),
+  buildGenerateCardsPrompt(concepts, relations, chunks, 2, 'zh-CN', true),
   buildAssignCardsPrompt(concepts, cards),
 ];
 
@@ -74,12 +75,15 @@ assert.match(prompts[2], /Do not turn a heading into a card/);
 assert.match(prompts[1], /RELATION RUBRIC/);
 assert.ok(prompts[1].includes('parent_child: use only for true type/subtype'));
 assert.ok(prompts[1].includes('related: use only as a weak fallback'));
+assert.ok(prompts[3].includes('CDF (Concept Descriptor Framework)'), 'CDF mode prompt should include descriptor framework instructions');
+assert.ok(prompts[3].includes('descriptorDimension'), 'CDF mode prompt should include descriptorDimension field in schema');
 
 console.log(JSON.stringify({
   prompts: prompts.length,
   hasQualityContract: prompts[2].includes('FLASHCARD QUALITY CONTRACT'),
   hasEvidenceBudget: prompts.every((prompt) => prompt.includes('Evidence budget')),
   hasRelationRubric: prompts[1].includes('RELATION RUBRIC'),
+  hasCDFMode: prompts[3].includes('CDF (Concept Descriptor Framework)'),
 }, null, 2));
 `, 'utf8');
 

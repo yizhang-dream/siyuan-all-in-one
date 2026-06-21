@@ -48,6 +48,7 @@
   let appliedNotebookTargetKey = '';
   let appliedMindmapGapTargetKey = 0;
   let targetCardCount = 8;
+  let cdfMode = false;
   let deck = config?.defaultDeck || '默认';
   let tagsText = 'pipeline';
   let isRunning = false;
@@ -169,6 +170,7 @@
         {
           llmConfig: { ...llmConfig, maxTokens: 12000 },
           targetCardCount: Math.max(1, Math.min(50, Number(targetCardCount) || 8)),
+          cdfMode,
           language: 'zh-CN',
           onStep: (step) => {
             status = stepLabels[step] || step;
@@ -736,6 +738,10 @@
       <label>
         <span>卡片标签</span>
         <input class="b3-text-field" type="text" bind:value={tagsText} placeholder="逗号分隔" />
+      </label>
+      <label class="candidate-cdf-toggle" title="CDF：按描述维度（定义/公式/过程/对比/应用等）分维度生成卡片，避免所有卡片都是纯定义卡">
+        <input type="checkbox" bind:checked={cdfMode} />
+        <span>CDF 维度制卡</span>
       </label>
     </div>
 

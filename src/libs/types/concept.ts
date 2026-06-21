@@ -79,6 +79,7 @@ export interface CardCandidate {
     front: string;
     back: string;
     hint?: string;
+    descriptorDimension?: string;
     sourceRefs: SourceRef[];
     confidence: number;
 }

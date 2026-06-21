@@ -122,6 +122,8 @@ assert.match(concepts, /sourceMode = 'manual'/, 'Concepts should switch to manua
 assert.match(concepts, /hasOpenNotebook/, 'Concepts should detect whether OpenNotebook endpoint is configured');
 assert.match(concepts, /!hasOpenNotebook && sourceMode !== 'manual'/, 'Concepts should force manual mode when OpenNotebook is unavailable');
 assert.match(concepts, /手动 \+ 文档/, 'Concepts should expose an offline-friendly hybrid source mode');
+assert.match(concepts, /cdfMode/, 'Concepts should support CDF descriptor-based card generation');
+assert.match(concepts, /CDF 维度制卡/, 'Concepts CDF toggle should have a visible label');
 assert.match(app, /openConceptsFromMindmapGaps/, 'App should expose a gap-to-concepts handoff function');
 assert.match(app, /mindmapGapTarget/, 'App should hold a mindmap gap target signal');
 assert.doesNotMatch(mindmap, /📋|🎴|📄|📝|🔄|💡|❌|✅|⚠️/, 'Mindmap panel should avoid emoji controls and status text');
