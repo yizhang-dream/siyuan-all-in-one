@@ -8,7 +8,7 @@
 import type { CardType, SourceRef } from './types/concept';
 
 /** 卡片状态 */
-export type CardStatus = 'new' | 'learning' | 'review' | 'buried';
+export type CardStatus = 'new' | 'learning' | 'review' | 'buried' | 'drill';
 export type ReviewScheduler = 'sm2' | 'fsrs';
 
 export interface FSRSCardState {
@@ -47,6 +47,7 @@ export interface Card {
     ease: number; // 倍率（≥1.3）
     reps: number;
     lapses: number;
+    consecutiveLapses?: number;
     status: CardStatus;
     created: number;
     modified: number;

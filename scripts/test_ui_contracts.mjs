@@ -14,6 +14,9 @@ const settings = readFileSync('src/panels/Settings.svelte', 'utf8');
 const sourcePicker = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
 const stats = readFileSync('src/panels/Stats.svelte', 'utf8');
 const models = readFileSync('src/panels/Models.svelte', 'utf8');
+const srsTs = readFileSync('src/libs/srs.ts', 'utf8');
+const typesTs = readFileSync('src/libs/types.ts', 'utf8');
+const storeTs = readFileSync('src/libs/srs/sm2.ts', 'utf8');
 const zhCN = JSON.parse(readFileSync('public/i18n/zh_CN.json', 'utf8'));
 const enUS = JSON.parse(readFileSync('public/i18n/en_US.json', 'utf8'));
 
@@ -124,6 +127,10 @@ assert.match(concepts, /!hasOpenNotebook && sourceMode !== 'manual'/, 'Concepts 
 assert.match(concepts, /手动 \+ 文档/, 'Concepts should expose an offline-friendly hybrid source mode');
 assert.match(concepts, /cdfMode/, 'Concepts should support CDF descriptor-based card generation');
 assert.match(concepts, /CDF 维度制卡/, 'Concepts CDF toggle should have a visible label');
+assert.match(typesTs, /drill/, 'CardStatus should include drill status for low-score mechanical practice');
+assert.match(srsTs, /consecutiveLapses/, 'SRS should track consecutive lapses for drill entry');
+assert.match(srsTs, /status = 'drill'/, 'SRS should set card to drill status after consecutive failures');
+assert.ok(srsTs.includes("card.status === 'drill'"), 'Drill cards should always be considered due');
 assert.match(app, /openConceptsFromMindmapGaps/, 'App should expose a gap-to-concepts handoff function');
 assert.match(app, /mindmapGapTarget/, 'App should hold a mindmap gap target signal');
 assert.doesNotMatch(mindmap, /📋|🎴|📄|📝|🔄|💡|❌|✅|⚠️/, 'Mindmap panel should avoid emoji controls and status text');

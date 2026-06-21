@@ -53,11 +53,21 @@ assert.equal(cleaned.scheduler, 'fsrs');
 assert.equal(cleaned.fsrs?.state, fsrsCard.fsrs?.state);
 assert.equal(cleaned.fsrs?.lastRating, fsrsCard.fsrs?.lastRating);
 
+const drillCard = createCard('drill test', 'answer');
+scheduleCard(0, drillCard); // Again
+scheduleCard(0, drillCard); // Again -> 2 consecutive
+assert.equal(drillCard.status, 'drill');
+assert.equal(drillCard.consecutiveLapses, 2);
+scheduleCard(3, drillCard); // Easy -> exit drill
+assert.equal(drillCard.status, 'review');
+assert.equal(drillCard.consecutiveLapses, 0);
+
 console.log(JSON.stringify({
   defaultScheduler: sm2Config.scheduler,
   fsrsScheduler: fsrsConfig.scheduler,
   fsrsState: fsrsCard.fsrs?.state,
   fsrsInterval: fsrsCard.interval,
+  drillEnabled: true,
 }, null, 2));
 `, 'utf8');
 

@@ -68,6 +68,7 @@ export function schedule(grade: number, card: Card): Card {
         card.reps = 0;
         card.interval = 1;
         card.lapses += 1;
+        card.consecutiveLapses = (card.consecutiveLapses || 0) + 1;
         card.status = 'learning';
     } else {
         // 回忆成功：增长间隔
@@ -75,6 +76,7 @@ export function schedule(grade: number, card: Card): Card {
         else if (card.reps === 1) card.interval = 6;
         else card.interval = Math.round(card.interval * card.ease);
         card.reps += 1;
+        card.consecutiveLapses = 0;
         card.status = 'review';
     }
 
@@ -93,7 +95,16 @@ export function scheduleCard(
 ): Card {
     if (scheduler === 'fsrs') return scheduleFSRS(grade, card, now);
     card.scheduler = 'sm2';
-    return schedule(grade, card);
+    schedule(grade, card);
+    // Drill: enter drill if 2+ consecutive lapses; exit if Easy
+    if (card.consecutiveLapses !== undefined && card.consecutiveLapses >= 2) {
+        card.status = 'drill';
+    }
+    if (card.status === 'drill' && grade >= 3) {
+        card.status = 'review';
+        card.consecutiveLapses = 0;
+    }
+    return card;
 }
 
 export function scheduleFSRS(grade: number, card: Card, now = Date.now()): Card {
@@ -135,13 +146,14 @@ export function scheduleFSRS(grade: number, card: Card, now = Date.now()): Card 
 /** 判断卡片是否到期（含新卡片）。buried 卡片不算到期。 */
 export function isDue(card: Card, now = Date.now()): boolean {
     if (card.status === 'buried') return false;
+    if (card.status === 'drill') return true;
     return card.status === 'new' || card.due <= now;
 }
 
 /** 清洗/补全导入的卡片对象，防止缺字段导致崩溃。旧数据的 type 字段在此被丢弃。 */
 export function cleanCard(raw: any): Card {
     const now = Date.now();
-    const validStatuses: CardStatus[] = ['new', 'learning', 'review', 'buried'];
+    const validStatuses: CardStatus[] = ['new', 'learning', 'review', 'buried', 'drill'];
     const status = validStatuses.includes(raw?.status) ? raw.status : 'new';
     return {
         id: String(raw?.id || genId()),
@@ -162,6 +174,7 @@ export function cleanCard(raw: any): Card {
         ease: Number(raw?.ease) || 2.5,
         reps: Number(raw?.reps) || 0,
         lapses: Number(raw?.lapses) || 0,
+        consecutiveLapses: Number.isFinite(Number(raw?.consecutiveLapses)) ? Number(raw.consecutiveLapses) : undefined,
         status,
         created: Number(raw?.created) || now,
         modified: Number(raw?.modified) || now,

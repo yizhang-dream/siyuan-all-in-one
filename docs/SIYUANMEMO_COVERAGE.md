@@ -16,7 +16,7 @@
 | SiYuanMemo 能力 | 当前覆盖 | 当前证据 | 差距 | 下一步 |
 |---|---:|---|---|---|
 | FSRS 间隔重复 | 部分 | `ts-fsrs` 调度器、设置页切换、`test:srs` | 缺学习/重学步骤 UI、复习日志回放、参数优化器 | 增加复习日志与 FSRS 参数预设 |
-| Final Drill / 机械练习 | 未覆盖 | 无独立 drill 队列 | 缺“低评分进入机械练习”“评分 4 移出” | 新增 `drill` 队列与临时练习模式 |
+| Final Drill / 机械练习 | 部分 ✅ | `consecutiveLapses` 计数、`drill` 卡片状态、连续 2 次 Again 进入 drill、Easy 退出 drill | UI 未展示独立 drill 队列入口；缺 drill 频率控制 | Review 面板增加 drill 计数和队列视图 |
 | Retrieval Practice 队列 | 部分 | Review 面板按到期卡复习 | 缺多队列提交语义、队列排序、手动插队 | 抽象 QueueStore |
 | Incremental Learning / 渐进学习 | 未覆盖 | 无 topic/excerpt 队列 | 缺摘录、Topic、渐进阅读 | 与 OpenNotebook/SiYuan 文档摘录联动 |
 | Filtered Review / 筛选复习 | 部分 | Browse 筛选/选中卡片可进入临时复习队列；导图 `有卡/缺卡/邻域` 视图 | 导图筛选结果尚不能直接进入复习；缺持久化队列 | 从导图创建临时筛选复习队列，并抽象 QueueStore |
