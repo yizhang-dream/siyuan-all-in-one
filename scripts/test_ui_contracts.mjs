@@ -153,6 +153,10 @@ assert.match(importPanel, /conceptStore\?\.getAll/, 'Export should include conce
 assert.match(importPanel, /mindmapStore\?\.getAll/, 'Export should include saved mindmaps');
 assert.match(importPanel, /buildBlockAttrScanReport/, 'Import panel should scan for plugin block attributes');
 assert.match(importPanel, /block-attr-scan/, 'Import panel should render a block attribute scan section');
+assert.match(generate, /parseSymbolCards/, 'Generate panel should detect symbol-card syntax');
+assert.match(generate, /gen-symbol-hint/, 'Generate panel should render a symbol card detection hint');
+assert.match(typesTs, /image-occlusion/, 'Card types should include image occlusion');
+assert.match(typesTs, /ImageOcclusionRegion/, 'Types should define image occlusion region model');
 assert.match(importPanel, /syncCardsToSiyuanRiff/, 'Import panel should expose guarded sync to SiYuan native flashcards');
 assert.match(importPanel, /confirm\(\s*'同步到思源闪卡'/, 'Riff sync should require an explicit confirmation');
 assert.match(importPanel, /riffDeckName/, 'Riff sync should let users choose a target deck name');

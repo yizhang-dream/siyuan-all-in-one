@@ -8,6 +8,7 @@
   import type { SourceConfig } from '../libs/sources';
   import SourcePicker from './SourcePicker.svelte';
   import { showMessage } from 'siyuan';
+  import { parseSymbolCards, type ParsedSymbolCard } from '../libs/symbol-cards';
 
   export let plugin: any;
   export let cardStore: any;
@@ -35,6 +36,28 @@
   let aiStatusKind: 'info' | 'success' | 'warn' | 'error' = 'info';
   let isGenerating = false;
   let previewCards: GeneratedCard[] = [];
+
+  $: symbolCards = parseSymbolCards(manualQ);
+  $: hasSymbolCards = symbolCards.length > 0;
+
+  function createSymbolCards() {
+    if (symbolCards.length === 0) return;
+    const deck = manualDeck || config?.defaultDeck || '默认';
+    const tags = manualTags ? manualTags.split(/[,，]/).map((t) => t.trim()).filter(Boolean) : [];
+    for (const parsed of symbolCards) {
+      const card = createCard(
+        parsed.cardType === 'reverse' ? parsed.back : parsed.front,
+        parsed.cardType === 'reverse' ? parsed.front : parsed.back,
+        parsed.hint || '',
+        deck,
+        tags,
+      );
+      card.cardType = parsed.cardType;
+      cardStore?.add?.(card);
+    }
+    showMessage(`已从快速语法创建 ${symbolCards.length} 张卡片`);
+    manualQ = '';
+  }
 
   // 来源选择
   let sourceConfig: SourceConfig = { type: 'none' };
@@ -179,7 +202,17 @@
   {#if mode === 'manual'}
     <div class="gen-form">
       <label for="manual-question">问题 *</label>
-      <textarea id="manual-question" class="b3-text-field" bind:value={manualQ} rows="3" placeholder="输入问题..."></textarea>
+      <textarea id="manual-question" class="b3-text-field" bind:value={manualQ} rows="3" placeholder="输入问题... 或用快速语法：问题 >> 答案、概念 << 定义"></textarea>
+      {#if hasSymbolCards}
+        <div class="gen-symbol-hint">
+          <svg><use xlink:href="#iconInfo"></use></svg>
+          <span>检测到 {symbolCards.length} 张快速卡片（{symbolCards.map((c) => ({ qa: '>>', reverse: '<<', cloze: '<>' })[c.cardType]).filter(Boolean).join(' ')}）</span>
+          <button class="b3-button b3-button--small b3-button--primary" on:click={createSymbolCards}>
+            <svg><use xlink:href="#iconAdd"></use></svg>
+            一键创建 {symbolCards.length} 张
+          </button>
+        </div>
+      {/if}
       <label for="manual-answer">答案 *</label>
       <textarea id="manual-answer" class="b3-text-field" bind:value={manualA} rows="5" placeholder="输入答案... 公式用 $...$"></textarea>
       <label for="manual-hint">提示</label>
@@ -325,6 +358,9 @@
   .gen-form { display: flex; flex-direction: column; gap: 6px; }
   .gen-form label { font-size: var(--aio-fs-base); font-weight: 500; margin-top: 6px; }
   .gen-row { display: flex; gap: 8px; }
+  .gen-symbol-hint { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: var(--b3-theme-primary-lightest); font-size: var(--aio-fs-sm); margin-top: 4px; }
+  .gen-symbol-hint svg { width: 14px; height: 14px; color: var(--b3-theme-primary); flex-shrink: 0; }
+  .gen-symbol-hint span { flex: 1; }
   .gen-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   .gen-status {
     padding: 8px 10px;

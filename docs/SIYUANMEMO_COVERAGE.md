@@ -22,14 +22,14 @@
 | Filtered Review / 筛选复习 | 部分 | Browse 筛选/选中卡片可进入临时复习队列；导图 `有卡/缺卡/邻域` 视图 | 导图筛选结果尚不能直接进入复习；缺持久化队列 | 从导图创建临时筛选复习队列，并抽象 QueueStore |
 | Neural Roaming / 神经漫游 | 部分 | 概念图、SourceRef 回跳、导图搜索邻域 | 缺扩散激活、轨迹历史、汇合节点 | 以 `ConceptGraph + backlink/sourceRefs` 做漫游原型 |
 | CDF 概念描述符制卡 | 部分 ✅ | 概念优先 pipeline、cardType、提示词质量契约、CDF 维度制卡 toggle（定义/公式/过程/对比/应用/因果/限制等维度） | descriptorDimension 字段仅存于候选层，未落持久化；缺双向卡生成 | 增加 CDF 维度持久化与反向卡自动生成 |
-| 符号监听制卡 | 未覆盖 | 快速制卡为表单/AI | 缺 `>>` `<<` `<>` `;;` 监听 | 可选实现，不作为主线 |
+| 符号监听制卡 | 部分 ✅ | `>>` qa、`<<` reverse、`<>` cloze、`;;` 备用语法；Generate 面板自动检测符号卡片数量并一键创建 | 未监听思源编辑器实时输入；缺 `\` 多行延续语法 | 可选扩展编辑器输入监听 |
 | 原生快速制卡监听/同步 | 部分 | Riff API 适配、Riff 同步入口 | 缺监听思源原生快速制卡并导入插件 | 增加只读扫描/导入 Riff 卡片入口 |
 | 一块多卡 | 部分 | 插件 `Card` 与 `SourceRef.blockId` 可多卡指向同块 | UI 未聚合同块卡，导出/审计弱 | Browse/Review 增加“同来源/同块卡片”面板 |
 | 块级复习入口 | 部分 | SourceRef 可跳块；Riff 同步把卡投影成块 | 缺块菜单“复习当前块及子块” | 增加 block menu 与基于 blockId subtree 的筛选队列 |
 | SRS Browser 表格管理 | 部分 | Browse 面板列表/编辑/搜索 | 缺表格列排序、批量队列操作、同块卡操作 | 扩展 Browse 为密集表格模式 |
 | 卡片规划：提前/推迟/分摊/排序 | 部分 | SM-2/FSRS 基本调度 | 缺 bulk reschedule、queue ordering | 增加批量排期操作 |
 | 公式制卡与公式复习稳定 | 部分 | 渲染层保留 LaTeX，Review/Browse/Mindmap 渲染公式 | 缺公式块局部挖空制卡 | 加 cloze 公式候选和测试 |
-| 图片遮挡卡 | 未覆盖 | 无 image occlusion | 缺遮挡编辑器和复习渲染 | 后置，需 canvas/SVG 遮挡数据模型 |
+| 图片遮挡卡 | 部分 ✅ | `ImageOcclusionRegion`/`ImageOcclusionCard` 数据模型、`image-occlusion` 卡片类型、`CARD_TYPE_LABELS` 翻译 | 缺画布编辑器和复习渲染 | 后置 canvas/SVG 遮挡编辑器 |
 | 有序/无序列表模板卡 | 部分 | Markdown/导图节点制卡 | 缺列表模板解析与渐进提示 | 增加 SiYuan list block importer |
 | AI 制卡 / AI 工作台 | 部分 | 多 provider、prompt pipeline、候选确认 | 缺会话式 AI 工作台和工具审批 | 可在 Notebook/Concepts 基础上扩展 |
 | 摘录与渐进阅读 | 部分 | OpenNotebook/SiYuan 多来源输入 | 缺 Alt+X 摘录、Topic 管理 | 做“摘录到候选区/概念区” |

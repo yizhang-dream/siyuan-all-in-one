@@ -101,7 +101,7 @@ const VALID_RELATION_TYPES: RelationType[] = [
     'related',
 ];
 
-const VALID_CARD_TYPES: CardType[] = ['qa', 'cloze', 'reverse', 'enumeration', 'compare', 'process'];
+const VALID_CARD_TYPES: CardType[] = ['qa', 'cloze', 'reverse', 'enumeration', 'compare', 'process', 'image-occlusion'];
 
 export async function runPromptPipeline(
     sources: PipelineSource[],

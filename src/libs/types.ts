@@ -54,6 +54,27 @@ export interface Card {
 }
 
 /**
+ * 图片遮挡卡（Image Occlusion）— 最小数据模型。
+ * 遮挡区域为矩形，坐标相对于图片原始尺寸（百分比 0-100）。
+ */
+export interface ImageOcclusionRegion {
+    id: string;
+    x: number;    // 左上角 x 百分比
+    y: number;    // 左上角 y 百分比
+    w: number;    // 宽度百分比
+    h: number;    // 高度百分比
+    label?: string;
+}
+
+export interface ImageOcclusionCard {
+    imageDataUrl: string;
+    imageWidth: number;
+    imageHeight: number;
+    regions: ImageOcclusionRegion[];
+    cardId?: string;
+}
+
+/**
  * 用户自定义的制卡 Agent（提示词模板）。
  * 用户自由编写 system prompt，配合语言/风格/难度等参数，
  * 由 generateFlashcards 注入到 LLM 调用。

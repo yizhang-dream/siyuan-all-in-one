@@ -94,7 +94,7 @@ export interface PipelineResult {
 }
 
 /** 卡片类型 */
-export type CardType = 'qa' | 'cloze' | 'reverse' | 'enumeration' | 'compare' | 'process';
+export type CardType = 'qa' | 'cloze' | 'reverse' | 'enumeration' | 'compare' | 'process' | 'image-occlusion';
 
 /** 卡片类型元数据 */
 export const CARD_TYPE_LABELS: Record<CardType, string> = {
@@ -104,4 +104,5 @@ export const CARD_TYPE_LABELS: Record<CardType, string> = {
     enumeration: '枚举',
     compare: '对比',
     process: '流程',
+    'image-occlusion': '图片遮挡',
 };
