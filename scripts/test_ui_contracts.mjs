@@ -18,6 +18,8 @@ const sourcesSvelte = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
 const srsTs = readFileSync('src/libs/srs.ts', 'utf8');
 const typesTs = readFileSync('src/libs/types.ts', 'utf8');
 const storeTs = readFileSync('src/libs/srs/sm2.ts', 'utf8');
+const conceptTs = readFileSync('src/libs/types/concept.ts', 'utf8');
+const sourceHubTs = readFileSync('src/libs/sources/source-hub.ts', 'utf8');
 const zhCN = JSON.parse(readFileSync('public/i18n/zh_CN.json', 'utf8'));
 const enUS = JSON.parse(readFileSync('public/i18n/en_US.json', 'utf8'));
 
@@ -155,8 +157,9 @@ assert.match(importPanel, /buildBlockAttrScanReport/, 'Import panel should scan 
 assert.match(importPanel, /block-attr-scan/, 'Import panel should render a block attribute scan section');
 assert.match(generate, /parseSymbolCards/, 'Generate panel should detect symbol-card syntax');
 assert.match(generate, /gen-symbol-hint/, 'Generate panel should render a symbol card detection hint');
-assert.match(typesTs, /image-occlusion/, 'Card types should include image occlusion');
+assert.match(conceptTs, /image-occlusion/, 'Card types should include image occlusion');
 assert.match(typesTs, /ImageOcclusionRegion/, 'Types should define image occlusion region model');
+assert.match(sourceHubTs, /unstructuredText|textToUnstructuredPipelineSources/, 'SourceHub should support Unstructured partitioner input');
 assert.match(importPanel, /syncCardsToSiyuanRiff/, 'Import panel should expose guarded sync to SiYuan native flashcards');
 assert.match(importPanel, /confirm\(\s*'同步到思源闪卡'/, 'Riff sync should require an explicit confirmation');
 assert.match(importPanel, /riffDeckName/, 'Riff sync should let users choose a target deck name');
