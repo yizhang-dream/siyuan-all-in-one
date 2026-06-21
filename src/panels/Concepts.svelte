@@ -58,6 +58,22 @@
   }
 
   function clearUrls() { addedUrls = []; urlInput = ''; urlError = ''; }
+
+  let pdfFiles: File[] = [];
+
+  async function addPdfFiles(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const files = target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (!pdfFiles.some((f) => f.name === file.name)) pdfFiles = [...pdfFiles, file];
+    }
+    target.value = '';
+  }
+
+  function clearPdfFiles() { pdfFiles = []; }
+
+  function removePdfFile(name: string) { pdfFiles = pdfFiles.filter((f) => f.name !== name); }
   let appliedNotebookTargetKey = '';
   let appliedMindmapGapTargetKey = 0;
   let targetCardCount = 8;
@@ -250,6 +266,10 @@
       siyuanDocs: selectedSiyuanDocs,
       localFiles,
       urls: addedUrls,
+      pdfBuffers: await Promise.all(pdfFiles.map(async (file) => ({
+        buffer: await file.arrayBuffer(),
+        fileName: file.name,
+      }))),
       openNotebookLimit: 12,
       openNotebookSearchType: 'text',
       maxCharsPerSiyuanDoc: 8000,
@@ -740,6 +760,29 @@
               <span class="siyuan-chip" title={file.name}>
                 {shortTitle(file.name, 22)}
                 <button type="button" aria-label="移除本地文件" title="移除" on:click={() => removeLocalFile(file.name)}>
+                  <svg><use xlink:href="#iconClose"></use></svg>
+                </button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="local-file-row">
+          <label class="b3-button b3-button--small b3-button--outline local-file-picker">
+            <svg><use xlink:href="#iconUpload"></use></svg>
+            <span>加入 PDF</span>
+            <input type="file" multiple accept=".pdf,application/pdf" on:change={addPdfFiles} />
+          </label>
+          {#if pdfFiles.length > 0}
+            <button class="nb-link" type="button" on:click={clearPdfFiles}>清除 PDF</button>
+          {/if}
+        </div>
+        {#if pdfFiles.length > 0}
+          <div class="siyuan-selected">
+            {#each pdfFiles as file (file.name)}
+              <span class="siyuan-chip" title={file.name}>
+                {shortTitle(file.name, 22)}
+                <button type="button" aria-label="移除 PDF" title="移除" on:click={() => removePdfFile(file.name)}>
                   <svg><use xlink:href="#iconClose"></use></svg>
                 </button>
               </span>
