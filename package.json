@@ -5,13 +5,13 @@
   "description": "Concept-centered SM-2 flashcards with AI generation, OpenNotebook integration, and bidirectional concept mindmaps for SiYuan",
   "author": "zyz",
   "license": "MIT",
-  "homepage": "https://github.com/zyz/siyuan-all-in-one#readme",
+  "homepage": "https://github.com/yizhang-dream/siyuan-all-in-one#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zyz/siyuan-all-in-one.git"
+    "url": "git+https://github.com/yizhang-dream/siyuan-all-in-one.git"
   },
   "bugs": {
-    "url": "https://github.com/zyz/siyuan-all-in-one/issues"
+    "url": "https://github.com/yizhang-dream/siyuan-all-in-one/issues"
   },
   "scripts": {
     "build": "cross-env NODE_ENV=production vite build",

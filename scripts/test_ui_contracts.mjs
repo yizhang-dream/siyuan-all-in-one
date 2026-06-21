@@ -14,6 +14,7 @@ const settings = readFileSync('src/panels/Settings.svelte', 'utf8');
 const sourcePicker = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
 const stats = readFileSync('src/panels/Stats.svelte', 'utf8');
 const models = readFileSync('src/panels/Models.svelte', 'utf8');
+const sourcesSvelte = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
 const srsTs = readFileSync('src/libs/srs.ts', 'utf8');
 const typesTs = readFileSync('src/libs/types.ts', 'utf8');
 const storeTs = readFileSync('src/libs/srs/sm2.ts', 'utf8');
@@ -131,6 +132,12 @@ assert.match(typesTs, /drill/, 'CardStatus should include drill status for low-s
 assert.match(srsTs, /consecutiveLapses/, 'SRS should track consecutive lapses for drill entry');
 assert.match(srsTs, /status = 'drill'/, 'SRS should set card to drill status after consecutive failures');
 assert.ok(srsTs.includes("card.status === 'drill'"), 'Drill cards should always be considered due');
+// Mobile responsiveness: at least 3 panels should have @media breakpoints and UI components should use min-width:0 to prevent overflow
+const responsivePanels = [concepts, generate, importPanel, stats].filter((panelText) => /@media/.test(panelText));
+assert.ok(responsivePanels.length >= 3, `At least 3 panels should have @media responsive breakpoints; found ${responsivePanels.length}`);
+const panelsWithMinWidthZero = [concepts, browse, importPanel, mindmap, notebook, review, diagnostics, settings, models, sourcesSvelte, stats]
+    .filter((panelText) => /min-width:\s*0/.test(panelText));
+assert.ok(panelsWithMinWidthZero.length >= 5, `${panelsWithMinWidthZero.length} panels should use min-width: 0 to prevent overflow in narrow viewports`);
 assert.match(app, /openConceptsFromMindmapGaps/, 'App should expose a gap-to-concepts handoff function');
 assert.match(app, /mindmapGapTarget/, 'App should hold a mindmap gap target signal');
 assert.doesNotMatch(mindmap, /📋|🎴|📄|📝|🔄|💡|❌|✅|⚠️/, 'Mindmap panel should avoid emoji controls and status text');
