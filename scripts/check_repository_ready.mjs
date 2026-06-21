@@ -26,6 +26,10 @@ const requiredFiles = [
   'docs/TESTING.md',
   'docs/PROMPT_STRATEGY.md',
   'docs/SIYUAN_RIFF_REUSE.md',
+  'docs/BACKEND_STRATEGY.md',
+  'docs/NOTEBOOKLM_COMPARISON.md',
+  'docs/SIYUANMEMO_REVIEW.md',
+  'docs/SIYUANMEMO_COVERAGE.md',
 ];
 
 for (const file of requiredFiles) {

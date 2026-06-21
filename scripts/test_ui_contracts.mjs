@@ -119,6 +119,9 @@ assert.match(mindmap, /从缺卡生成候选/, 'Mindmap gap view should expose a
 assert.match(mindmap, /openConceptsFromMindmapGaps/, 'Mindmap should receive the gap-to-concepts handoff callback');
 assert.match(concepts, /applyMindmapGapTarget\(mindmapGapTarget\)/, 'Concepts should react to mindmap gap targets');
 assert.match(concepts, /sourceMode = 'manual'/, 'Concepts should switch to manual mode for gap content');
+assert.match(concepts, /hasOpenNotebook/, 'Concepts should detect whether OpenNotebook endpoint is configured');
+assert.match(concepts, /!hasOpenNotebook && sourceMode !== 'manual'/, 'Concepts should force manual mode when OpenNotebook is unavailable');
+assert.match(concepts, /手动 \+ 文档/, 'Concepts should expose an offline-friendly hybrid source mode');
 assert.match(app, /openConceptsFromMindmapGaps/, 'App should expose a gap-to-concepts handoff function');
 assert.match(app, /mindmapGapTarget/, 'App should hold a mindmap gap target signal');
 assert.doesNotMatch(mindmap, /📋|🎴|📄|📝|🔄|💡|❌|✅|⚠️/, 'Mindmap panel should avoid emoji controls and status text');

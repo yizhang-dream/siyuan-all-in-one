@@ -28,6 +28,7 @@
   let query = '';
   let refreshKey = 0;
   let sourceMode: 'manual' | 'opennotebook' | 'mixed' = 'manual';
+  $: hasOpenNotebook = Boolean(config?.notebookEndpoint);
   let sourceText = '';
   let notebookQuery = '';
   let notebookSourceIds: string[] = [];
@@ -100,6 +101,7 @@
   $: selectedGraphNode = conceptGraph.nodes.find((node) => node.id === selectedGraphNodeId) || null;
   $: applyNotebookTarget(notebookTarget);
   $: applyMindmapGapTarget(mindmapGapTarget);
+  $: if (!hasOpenNotebook && sourceMode !== 'manual') sourceMode = 'manual';
   $: if (
     (sourceMode === 'opennotebook' || sourceMode === 'mixed') &&
     config?.notebookEndpoint &&
@@ -558,8 +560,12 @@
 
     <div class="source-mode-tabs">
       <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'manual'} on:click={() => (sourceMode = 'manual')}>手动文本</button>
-      <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'opennotebook'} on:click={() => (sourceMode = 'opennotebook')}>OpenNotebook</button>
-      <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'mixed'} on:click={() => (sourceMode = 'mixed')}>混合来源</button>
+      {#if hasOpenNotebook}
+        <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'opennotebook'} on:click={() => (sourceMode = 'opennotebook')}>OpenNotebook</button>
+        <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'mixed'} on:click={() => (sourceMode = 'mixed')}>混合来源</button>
+      {:else}
+        <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'mixed'} on:click={() => (sourceMode = 'mixed')}>手动 + 文档</button>
+      {/if}
     </div>
 
     {#if sourceMode === 'manual' || sourceMode === 'mixed'}
@@ -571,7 +577,7 @@
       ></textarea>
     {/if}
 
-    {#if sourceMode === 'opennotebook' || sourceMode === 'mixed'}
+    {#if (sourceMode === 'opennotebook' || sourceMode === 'mixed') && hasOpenNotebook}
       <div class="notebook-source-box">
         <input
           class="b3-text-field"
