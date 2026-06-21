@@ -2,6 +2,7 @@ import { fetchOpenNotebookPipelineSources } from '../ai/source-adapters';
 import type { PipelineSource } from '../ai/pipeline';
 import { readSiyuanDocsAsPipelineSources, type DocItem } from '../sources';
 import { localTextFilesToPipelineSources, type LocalTextFileInput } from './local-file-adapters';
+import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
 
 export type SourceHubMode = 'manual' | 'opennotebook' | 'mixed';
 
@@ -14,6 +15,8 @@ export interface SourceHubRequest {
     notebookNoteIds?: string[];
     siyuanDocs?: DocItem[];
     localFiles?: LocalTextFileInput[];
+    unstructuredText?: string;
+    unstructuredFileName?: string;
     openNotebookLimit?: number;
     openNotebookSearchType?: 'text' | 'vector';
     maxCharsPerSiyuanDoc?: number;
@@ -72,6 +75,16 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
         sources.push(...localTextFilesToPipelineSources(localFiles, {
             maxCharsPerChunk: request.maxCharsPerLocalFileChunk || 6000,
         }));
+    }
+
+    // Unstructured 分区：将原始文本按结构自动拆分为 Title/NarrativeText/ListItem 等元素
+    const unstructuredText = String(request.unstructuredText || '').trim();
+    if (request.mode === 'mixed' && unstructuredText) {
+        sources.push(...textToUnstructuredPipelineSources(
+            unstructuredText,
+            request.unstructuredFileName || 'unstructured-input',
+            { maxElements: 40 }
+        ));
     }
 
     const totalBeforeDedupe = sources.length;
