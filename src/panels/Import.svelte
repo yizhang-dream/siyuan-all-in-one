@@ -5,7 +5,7 @@
   import type { ParsedCard } from '../libs/anki';
   import { buildExportPayload, exportPayloadToSiyuanMarkdown, type ExportFormat } from '../libs/exporters';
   import { parsePluginImport, type PluginImportPayload } from '../libs/importers';
-  import { auditRiffSyncProjection, cleanRiffSyncState, syncCardsToSiyuanRiff, type RiffProjectionAudit } from '../libs/riff-sync';
+  import { auditRiffSyncProjection, buildBlockAttrScanReport, cleanRiffSyncState, syncCardsToSiyuanRiff, type BlockAttrScanReport, type RiffProjectionAudit } from '../libs/riff-sync';
   import { saveToSiyuan, openDoc } from '../libs/siyuan';
   import { showMessage, confirm } from 'siyuan';
 
@@ -33,6 +33,7 @@
   let riffMaxCards = 200;
   let riffSyncRecordCount = 0;
   let riffAudit: RiffProjectionAudit | null = null;
+  let blockAttrScanReport: BlockAttrScanReport = { totalBlocks: 0, blocksWithAttrs: [], attrKeys: [] };
 
   onMount(() => {
     refreshRiffSyncStatus();
@@ -245,6 +246,7 @@
     const syncState = await loadRiffSyncState();
     riffSyncRecordCount = syncState.records.length;
     riffAudit = auditRiffSyncProjection(cardStore?.getAll?.() || [], syncState.records, riffDeckName || '知识闪卡 All-in-One');
+    blockAttrScanReport = buildBlockAttrScanReport(syncState);
   }
 
   async function loadRiffSyncState() {
@@ -429,6 +431,20 @@
     {/if}
     {#if riffSyncStatus}
       <div class="riff-sync-status">{riffSyncStatus}</div>
+    {/if}
+    {#if blockAttrScanReport.totalBlocks > 0}
+      <div class="block-attr-scan">
+        <div class="scan-header">
+          <svg><use xlink:href="#iconInfo"></use></svg>
+          <span>本机已记录 {blockAttrScanReport.totalBlocks} 个思源块带有插件属性 ({blockAttrScanReport.attrKeys.length} 种属性键)</span>
+        </div>
+        <div class="scan-attrs">
+          {#each blockAttrScanReport.attrKeys as attrKey}
+            <code>{attrKey}</code>
+          {/each}
+        </div>
+        <p class="scan-hint">这些属性由插件同步时写入思源块，可在插件卸载前清除。清除记录只移除本机的 riff-sync 映射，不会删除思源块或卡包中的闪卡。</p>
+      </div>
     {/if}
   </section>
 
@@ -704,6 +720,32 @@
     background: var(--b3-theme-surface-light);
     font-size: var(--aio-fs-sm);
     line-height: 1.5;
+  }
+
+  .block-attr-scan {
+    margin-top: 12px;
+    padding: 10px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 6px;
+  }
+  .scan-header {
+    display: flex; align-items: center; gap: 6px;
+    font-size: var(--aio-fs-sm);
+    color: var(--b3-theme-on-surface);
+  }
+  .scan-attrs {
+    margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px;
+  }
+  .scan-attrs code {
+    padding: 2px 6px; border-radius: 3px;
+    background: var(--b3-theme-surface-light);
+    font-size: var(--aio-fs-xs);
+  }
+  .scan-hint {
+    margin-top: 8px;
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface);
+    opacity: 0.6;
   }
 
   .riff-audit {

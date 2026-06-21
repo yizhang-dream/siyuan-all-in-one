@@ -320,3 +320,45 @@ function isFreshSync(record: RiffSyncRecord | undefined, card: Card): boolean {
 function isStaleSync(record: RiffSyncRecord | undefined, card: Card): boolean {
     return Boolean(record && Number(record.cardModified || 0) < Number(card.modified || 0));
 }
+
+// ── 块属性清理 ────────────────────────────────────────────
+
+export interface BlockAttrRecord {
+    blockId: string;
+    cardId: string;
+    deckName: string;
+    docId: string;
+    syncedAt: number;
+    attrs: string[];
+}
+
+export interface BlockAttrScanReport {
+    totalBlocks: number;
+    blocksWithAttrs: BlockAttrRecord[];
+    attrKeys: string[];
+}
+
+const PLUGIN_BLOCK_ATTRS = ['custom-aio-card-id', 'custom-aio-concept-id', 'custom-aio-card-type', 'custom-aio-source-refs'];
+
+/** 从 riff-sync 记录构建块属性扫描报告。不访问思源 API，只基于本地同步记录。 */
+export function buildBlockAttrScanReport(state: RiffSyncState): BlockAttrScanReport {
+    const seen = new Set<string>();
+    const blocks: BlockAttrRecord[] = [];
+    for (const rec of state.records) {
+        if (seen.has(rec.blockId)) continue;
+        seen.add(rec.blockId);
+        blocks.push({
+            blockId: rec.blockId,
+            cardId: rec.cardId,
+            deckName: rec.deckName,
+            docId: rec.docId,
+            syncedAt: rec.syncedAt,
+            attrs: [...PLUGIN_BLOCK_ATTRS],
+        });
+    }
+    return { totalBlocks: blocks.length, blocksWithAttrs: blocks, attrKeys: [...PLUGIN_BLOCK_ATTRS] };
+}
+
+export function getPluginBlockAttrKeys(): string[] {
+    return [...PLUGIN_BLOCK_ATTRS];
+}

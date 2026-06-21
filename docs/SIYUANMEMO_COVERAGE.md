@@ -34,7 +34,7 @@
 | AI 制卡 / AI 工作台 | 部分 | 多 provider、prompt pipeline、候选确认 | 缺会话式 AI 工作台和工具审批 | 可在 Notebook/Concepts 基础上扩展 |
 | 摘录与渐进阅读 | 部分 | OpenNotebook/SiYuan 多来源输入 | 缺 Alt+X 摘录、Topic 管理 | 做“摘录到候选区/概念区” |
 | Riff 同步 | 部分 | 手动同步到思源块与 Riff，重复同步跳过/更新；Import 面板展示 fresh/stale/unsynced/orphan 投影审计 | 缺反向导入 Riff、真实块存在性扫描 | 增加 Riff 反向读取和块存在性校验 |
-| 块属性清理 | 未覆盖 | `riff-sync` 可清除本机记录 | 缺扫描/预览/安全清理插件块属性 | 增加只读扫描再确认清理 |
+| 块属性清理 | 部分 ✅ | `buildBlockAttrScanReport` 基于 riff-sync 记录扫描已知属性块；Import 面板显示扫描结果和属性键列表 | 未调用思源 API 真实扫描块属性；无可选 block ID 的精确清理 | 增加思源 API 属性扫描和选择性清除 |
 | 移动端适配 | 部分 ✅ | 4 个面板有 `@media` 响应式断点（Concepts 1200px/900px、Generate 720px、Import 720px、Stats 600px）；11 个面板使用 `min-width: 0` 防溢出；`plugin.json` 声明 mobile/browser-mobile frontend | 未做 375px 超窄视口/触屏专项测试；侧栏导航在极小宽度未折叠 | 增加 375px 触屏 UI 冒烟和导航折叠 |
 
 ## 当前已经超过 SiYuanMemo 的方向

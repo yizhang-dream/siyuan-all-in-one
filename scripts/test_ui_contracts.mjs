@@ -151,6 +151,8 @@ assert.match(importPanel, /mindmapStore\.importMindmaps/, 'Import panel should r
 assert.match(importPanel, /accept="\.apkg,\.txt,\.csv,\.json,\.md,\.markdown"/, 'Import panel should accept plugin backup files');
 assert.match(importPanel, /conceptStore\?\.getAll/, 'Export should include concept graph nodes');
 assert.match(importPanel, /mindmapStore\?\.getAll/, 'Export should include saved mindmaps');
+assert.match(importPanel, /buildBlockAttrScanReport/, 'Import panel should scan for plugin block attributes');
+assert.match(importPanel, /block-attr-scan/, 'Import panel should render a block attribute scan section');
 assert.match(importPanel, /syncCardsToSiyuanRiff/, 'Import panel should expose guarded sync to SiYuan native flashcards');
 assert.match(importPanel, /confirm\(\s*'同步到思源闪卡'/, 'Riff sync should require an explicit confirmation');
 assert.match(importPanel, /riffDeckName/, 'Riff sync should let users choose a target deck name');

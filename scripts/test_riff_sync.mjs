@@ -14,7 +14,7 @@ await mkdir(tempDir, { recursive: true });
 
 await writeFile(entry, `
 import assert from 'node:assert/strict';
-import { auditRiffSyncProjection, cardToRiffMarkdown, ensureRiffDeck, syncCardsToSiyuanRiff } from '../src/libs/riff-sync';
+import { auditRiffSyncProjection, buildBlockAttrScanReport, cardToRiffMarkdown, ensureRiffDeck, syncCardsToSiyuanRiff } from '../src/libs/riff-sync';
 import { calls } from 'siyuan';
 
 const card: any = {
@@ -122,6 +122,14 @@ assert.equal(audit.unsynced, 1);
 assert.equal(audit.orphanRecords, 1);
 assert.deepEqual(audit.entries.map((entry) => entry.status).sort(), ['fresh', 'orphan', 'stale', 'unsynced']);
 
+// 块属性扫描：基于 riff-sync 本地记录
+const scan = buildBlockAttrScanReport({ version: 1, records: result.nextRecords });
+assert.ok(scan.totalBlocks >= 1);
+assert.equal(scan.blocksWithAttrs.length, scan.totalBlocks);
+assert.ok(scan.blocksWithAttrs.every((block) => /^20260621120000-block/.test(block.blockId)));
+assert.ok(scan.attrKeys.includes('custom-aio-card-id'));
+assert.ok(scan.attrKeys.includes('custom-aio-source-refs'));
+
 export default true;
 `, 'utf8');
 
@@ -173,6 +181,7 @@ try {
     duplicateSkip: true,
     staleUpdate: true,
     projectionAudit: true,
+    blockAttrScan: true,
   }, null, 2));
 } finally {
   await rm(tempDir, { recursive: true, force: true });
