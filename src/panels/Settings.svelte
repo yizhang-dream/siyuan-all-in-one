@@ -104,12 +104,10 @@
   function onEmbeddingProviderChange() {
     embeddingModelList = [];
     if (embeddingProvider === 'builtin') {
-      embeddingModel = 'all-MiniLM-L6-v2';
+      embeddingModel = 'Xenova/bge-base-zh-v1.5';
     } else if (embeddingProvider === 'ollama') {
       embeddingEndpoint = embeddingEndpoint || 'http://localhost:11434';
-      embeddingModel = embeddingModel || 'all-minilm';
-    } else if (embeddingProvider === 'openai') {
-      embeddingModel = embeddingModel || 'text-embedding-3-small';
+      embeddingModel = embeddingModel || '';
     }
   }
 
@@ -426,7 +424,7 @@
         <label class="b3-label">
           <span class="b3-label__text">嵌入模型</span>
           <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
-            <option value="builtin">内置 (all-MiniLM-L6-v2, 384维)</option>
+            <option value="builtin">内置 (bge-base-zh-v1.5, 768维)</option>
             <option value="ollama">Ollama 本地</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
@@ -461,7 +459,7 @@
                 </select>
               {:else}
                 <input class="b3-text-field" type="text" bind:value={embeddingModel}
-                  placeholder={embeddingProvider === 'ollama' ? 'all-minilm' : 'text-embedding-3-small'} />
+                  placeholder={embeddingProvider === 'ollama' ? 'ollama 模型名' : 'text-embedding-3-small'} />
               {/if}
               <button class="b3-button b3-button--small" on:click={fetchEmbeddingModels} disabled={embeddingLoading}>
                 {embeddingLoading ? '获取中...' : '获取模型'}
@@ -766,7 +764,7 @@
         <label class="b3-label">
           <span class="b3-label__text">嵌入模型</span>
           <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
-            <option value="builtin">内置 (all-MiniLM-L6-v2, 384维)</option>
+            <option value="builtin">内置 (bge-base-zh-v1.5, 768维)</option>
             <option value="ollama">Ollama 本地</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
@@ -801,7 +799,7 @@
                 </select>
               {:else}
                 <input class="b3-text-field" type="text" bind:value={embeddingModel}
-                  placeholder={embeddingProvider === 'ollama' ? 'all-minilm' : 'text-embedding-3-small'} />
+                  placeholder={embeddingProvider === 'ollama' ? 'ollama 模型名' : 'text-embedding-3-small'} />
               {/if}
               <button class="b3-button b3-button--small" on:click={fetchEmbeddingModels} disabled={embeddingLoading}>
                 {embeddingLoading ? '获取中...' : '获取模型'}

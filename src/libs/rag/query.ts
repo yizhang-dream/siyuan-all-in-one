@@ -14,6 +14,12 @@ export interface QueryOptions {
     minScore?: number;
 }
 
+/**
+ * BGE search instruction prefix (Chinese).
+ * Applied to queries for retrieval; document chunks are embedded without prefix.
+ */
+const BGE_QUERY_PREFIX = '为这个句子生成表示以用于检索相关文章：';
+
 /** Search vector store for chunks relevant to the question. */
 export async function ragQuery(
     question: string,
@@ -24,7 +30,7 @@ export async function ragQuery(
     const topK = options.topK || 5;
     const minScore = options.minScore ?? 0;
 
-    const [qEmbedding] = await embedder.embed([question]);
+    const [qEmbedding] = await embedder.embed([BGE_QUERY_PREFIX + question]);
     const results = store.search(qEmbedding, topK);
     return results.filter((r) => r.score >= minScore);
 }

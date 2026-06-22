@@ -2,7 +2,7 @@
  * Copyright (c) 2026 siyuan-all-in-one
  * MIT License
  *
- * Embedding layer: lazy-loads @xenova/transformers + all-MiniLM-L6-v2 (Q8, ~22MB).
+ * Embedding layer: lazy-loads @huggingface/transformers + bge-base-zh-v1.5 (Q8, ~103MB).
  * Graceful fallback to zero-vectors if the model is unavailable.
  */
 
@@ -27,7 +27,7 @@ export class RagEmbedder {
     private cache: Map<string, number[]>;
 
     constructor(modelName?: string) {
-        this.modelName = modelName || 'Xenova/all-MiniLM-L6-v2';
+        this.modelName = modelName || 'Xenova/bge-base-zh-v1.5';
         this.cache = new Map();
     }
 
@@ -58,9 +58,9 @@ export class RagEmbedder {
 
     private async _init(): Promise<void> {
         try {
-            const mod = await import('@xenova/transformers');
+            const mod = await import('@huggingface/transformers');
             const { pipeline } = mod;
-            this.pipeline = await pipeline('feature-extraction', this.modelName, { quantized: true });
+            this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
             this.ready = true;
         } catch (err: any) {
             this.initError = err?.message || String(err);
@@ -89,7 +89,7 @@ export class RagEmbedder {
             }
 
             if (!this.ready || !this.pipeline) {
-                const zero = new Array(384).fill(0);
+                const zero = new Array(768).fill(0);
                 results.push(zero);
                 continue;
             }
@@ -101,7 +101,7 @@ export class RagEmbedder {
                 results.push(vec);
             } catch (err: any) {
                 console.warn('[siyuan-all-in-one] Embed failed for text:', err?.message);
-                const zero = new Array(384).fill(0);
+                const zero = new Array(768).fill(0);
                 results.push(zero);
             }
         }

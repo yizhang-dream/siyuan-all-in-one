@@ -91,7 +91,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     defaultDeck: '默认',
     agents: [],
     ragEmbeddingProvider: 'builtin',
-    ragEmbeddingConfig: { endpoint: '', apiKey: '', model: '' },
+    ragEmbeddingConfig: { endpoint: '', apiKey: '', model: 'Xenova/bge-base-zh-v1.5' },
 };
 
 /** 生成唯一 id（用于自定义 Provider） */

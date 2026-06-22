@@ -5,7 +5,7 @@
  * Usage: node scripts/test_embedder.mjs
  *
  * Pattern: write entry file → esbuild bundle → import & run → cleanup.
- * @xenova/transformers is mocked so tests run offline with no model download.
+ * @huggingface/transformers is mocked so tests run offline with no model download.
  */
 
 import assert from 'node:assert/strict';
@@ -24,11 +24,11 @@ const outfile = path.join(tempDir, '_test_bundle.mjs');
 await rm(tempDir, { recursive: true, force: true });
 await mkdir(tempDir, { recursive: true });
 
-// Write a mock for @xenova/transformers so BuiltinEmbedder.init works offline
+// Write a mock for @huggingface/transformers so BuiltinEmbedder.init works offline
 await writeFile(mockFile, `
-// Mock @xenova/transformers for offline testing
+// Mock @huggingface/transformers for offline testing
 const mockPipelineFn = async (text, options) => ({
-  data: new Float32Array(384).fill(0.1),
+  data: new Float32Array(768).fill(0.1),
 });
 
 export async function pipeline(task, model, options) {
@@ -188,7 +188,7 @@ console.log(\`Results: \${passed} passed, \${failed} failed\`);
 if (failed > 0) process.exit(1);
 `, 'utf8');
 
-// ── Bundle with esbuild (mock @xenova/transformers) ─────────────
+// ── Bundle with esbuild (mock @huggingface/transformers) ─────────
 await esbuild.build({
   entryPoints: [entryFile],
   bundle: true,
@@ -198,9 +198,9 @@ await esbuild.build({
   external: ['siyuan'],
   logLevel: 'silent',
   plugins: [{
-    name: 'mock-xenova',
+    name: 'mock-huggingface',
     setup(build) {
-      build.onResolve({ filter: /^@xenova\/transformers$/ }, () => ({
+      build.onResolve({ filter: /^@huggingface\/transformers$/ }, () => ({
         path: mockFile,
       }));
     },

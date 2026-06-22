@@ -79,6 +79,7 @@
     "vite-plugin-static-copy": "^1.0.2"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.0.0",
     "d3": "^7.9.0",
     "fflate": "^0.8.3",
     "markmap-lib": "^0.18.12",
