@@ -987,7 +987,7 @@
 {/if}
 
 <style lang="scss">
-  .settings-panel { padding: 24px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+  .settings-panel { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
   .settings-group {
     display: flex; flex-direction: column; gap: 6px;
     h3 { font-size: var(--aio-fs-base); margin: 0; color: var(--b3-theme-primary); }
