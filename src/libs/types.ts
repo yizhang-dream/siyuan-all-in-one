@@ -117,6 +117,8 @@ export interface Provider {
     models: string[];
     /** 是否内置预设 */
     isBuiltIn: boolean;
+    /** 是否强制禁用思考/推理 token（如 DeepSeek 原生模型） */
+    disableThinking?: boolean;
 }
 
 /** 插件持久化配置 */

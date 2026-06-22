@@ -38,7 +38,7 @@ export interface UnstructuredPartitionOptions {
 }
 
 const MAX_CHARS_PER_ELEMENT = 4000;
-const MAX_ELEMENTS = 60;
+export const MAX_ELEMENTS = 60;
 
 /** 将 HTML/Markdown/纯文本分区为 Unstructured 兼容元素列表 */
 export function partitionText(text: string, options: UnstructuredPartitionOptions = {}): UnstructuredElement[] {
