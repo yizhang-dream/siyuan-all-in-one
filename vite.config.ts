@@ -23,6 +23,9 @@ export default defineConfig({
             // The node build has ort.webgpu.bundle.min.mjs already inlined by esbuild
             // with explicit __export({ InferenceSession: () => qf, … }), preserving the
             // export. Using it ensures InferenceSession is available at runtime.
+            // sharp — native C++ image processing addon. Stubbed because it cannot
+            // load in Electron's sandboxed renderer and is never called by our plugin.
+            "sharp": resolve(__dirname, "src/stubs/sharp.js"),
             "@huggingface/transformers": resolve(__dirname, "node_modules/@huggingface/transformers/dist/transformers.node.cjs"),
 
             // transformers.js uses onnxruntime-node by default; alias to the
@@ -67,7 +70,33 @@ export default defineConfig({
         },
         rollupOptions: {
             plugins: [],
-            external: ["siyuan", "process"],
+            external: [
+                "siyuan",
+                "process",
+                // Node.js built-in modules used by @huggingface/transformers (transformers.node.cjs)
+                // and onnxruntime (ort.node.min.js). These MUST be external so Electron's renderer
+                // can resolve them via require() at runtime.
+                "fs",
+                "path",
+                "url",
+                "stream",
+                "stream/promises",
+                "os",
+                "crypto",
+                "util",
+                "events",
+                "child_process",
+                "node:fs",
+                "node:fs/promises",
+                "node:os",
+                "node:util",
+                "node:path",
+                "node:stream",
+                "node:events",
+                "node:crypto",
+                "node:child_process",
+
+            ],
             output: {
                 entryFileNames: "[name].js",
                 // 禁止代码分割：所有依赖打进单个 index.js
