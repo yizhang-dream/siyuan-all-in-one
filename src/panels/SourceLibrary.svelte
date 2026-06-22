@@ -44,6 +44,7 @@
   let docQuery = '';
   let docResults: Array<{ id: string; title: string; path: string }> = [];
   let docSearching = false;
+  let siyuanSearchError = '';
 
   // File input refs
   let fileInput: HTMLInputElement;
@@ -66,7 +67,7 @@
     }
     return true;
   });
-  $: visibleSources = filteredSources.sort((a, b) => {
+  $: visibleSources = [...filteredSources].sort((a, b) => {
     if (sortBy === 'name') return a.title.localeCompare(b.title);
     if (sortBy === 'oldest') return a.metadata.addedAt - b.metadata.addedAt;
     return b.metadata.addedAt - a.metadata.addedAt; // newest first
@@ -88,6 +89,8 @@
 
   function loadSources() {
     sources = sourceStore.getAll();
+    const currentIds = new Set(sources.map(s => s.id));
+    selectedIds = new Set([...selectedIds].filter(id => currentIds.has(id)));
   }
 
   // ── 选择 ───────────────────────────────────────────
@@ -154,8 +157,10 @@
   async function confirmUrl() {
     if (!urlText.trim()) return;
     urlLoading = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const resp = await fetch(urlText.trim());
+      const resp = await fetch(urlText.trim(), { signal: controller.signal });
       let html = await resp.text();
       // Strip HTML tags
       html = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -166,6 +171,7 @@
     } catch (e: any) {
       showMessage('URL 读取失败: ' + e.message);
     } finally {
+      clearTimeout(timeout);
       urlLoading = false;
     }
   }
@@ -194,16 +200,19 @@
   async function searchDocs() {
     if (!docQuery.trim()) return;
     docSearching = true;
+    siyuanSearchError = '';
     try {
+      const escaped = docQuery.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
       const resp = await fetchSyncPost('/api/query/sql', {
-        stmt: `SELECT id, content as title, hpath as path FROM blocks WHERE type='d' AND content LIKE '%${docQuery.replace(/'/g, "''")}%' LIMIT 20`,
+        stmt: `SELECT id, content as title, hpath as path FROM blocks WHERE type='d' AND content LIKE '%${escaped}%' ESCAPE '\\' LIMIT 20`,
       });
       docResults = (resp?.data || []).map((d: any) => ({
         id: d.id || '',
         title: d.title || d.path || 'Untitled',
         path: d.path || '',
       }));
-    } catch {
+    } catch (e) {
+      siyuanSearchError = '搜索失败，请稍后重试';
       docResults = [];
     } finally {
       docSearching = false;
@@ -225,7 +234,7 @@
     });
     try {
       const resp = await fetchSyncPost('/api/query/sql', {
-        stmt: `SELECT markdown FROM blocks WHERE root_id='${doc.id}' ORDER BY sort LIMIT 500`,
+        stmt: `SELECT markdown FROM blocks WHERE root_id='${doc.id.replace(/'/g, "''")}' ORDER BY sort LIMIT 500`,
       });
       const blocks = resp?.data || [];
       const text = blocks.map((b: any) => (b.markdown || '')).join('\n\n');
@@ -412,14 +421,18 @@
     if (source.type === 'url' && source.metadata.url) {
       sourceStore.update(id, { chunkStatus: 'pending', errorMessage: undefined, retryCount: source.retryCount + 1 });
       sources = sourceStore.getAll();
+      const urlController = new AbortController();
+      const urlTimeout = setTimeout(() => urlController.abort(), 30000);
       try {
-        const resp = await fetch(source.metadata.url);
+        const resp = await fetch(source.metadata.url, { signal: urlController.signal });
         let html = await resp.text();
         html = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         const contentHash = await sha256(html);
         sourceStore.update(id, { content: html, contentHash, chunkStatus: 'done' });
       } catch (e: any) {
         sourceStore.update(id, { chunkStatus: 'error', errorMessage: e.message });
+      } finally {
+        clearTimeout(urlTimeout);
       }
       await sourceStore.save();
       loadSources();
@@ -429,7 +442,7 @@
       try {
         const docId = source.metadata.siyuanDocId;
         const resp = await fetchSyncPost('/api/query/sql', {
-          stmt: `SELECT markdown FROM blocks WHERE root_id='${docId}' ORDER BY sort LIMIT 500`,
+          stmt: `SELECT markdown FROM blocks WHERE root_id='${docId.replace(/'/g, "''")}' ORDER BY sort LIMIT 500`,
         });
         const blocks = resp?.data || [];
         const text = blocks.map((b: any) => (b.markdown || '')).join('\n\n');
@@ -453,35 +466,14 @@
 
   // ── 底部操作 ────────────────────────────────────────
 
-  function useForRag() {
-    if (selectedIds.size === 0) { showMessage('请先选择来源'); return; }
-    appStore.selectedSourceIds = Array.from(selectedIds);
-    // Track usage
-    for (const id of selectedIds) {
-      sourceStore.trackUsage(id, 'rag');
-    }
-    sourceStore.save();
-    appStore.onSwitchTab('rag');
-  }
-
-  function useForGenerate() {
+  function useFor(panel: 'rag' | 'generate' | 'concepts') {
     if (selectedIds.size === 0) { showMessage('请先选择来源'); return; }
     appStore.selectedSourceIds = Array.from(selectedIds);
     for (const id of selectedIds) {
-      sourceStore.trackUsage(id, 'generate');
+      sourceStore.trackUsage(id, panel);
     }
     sourceStore.save();
-    appStore.onSwitchTab('generate');
-  }
-
-  function useForConcepts() {
-    if (selectedIds.size === 0) { showMessage('请先选择来源'); return; }
-    appStore.selectedSourceIds = Array.from(selectedIds);
-    for (const id of selectedIds) {
-      sourceStore.trackUsage(id, 'concepts');
-    }
-    sourceStore.save();
-    appStore.onSwitchTab('concepts');
+    if (appStore.onSwitchTab) appStore.onSwitchTab(panel);
   }
 
   // ── 类型标签映射 ────────────────────────────────────
@@ -643,13 +635,13 @@
       <button class="b3-button b3-button--small b3-button--outline" on:click={deleteSelected} disabled={selectedIds.size === 0}>
         删除选中
       </button>
-      <button class="b3-button b3-button--small" on:click={useForRag} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('rag')} disabled={selectedIds.size === 0}>
         用于 RAG 对话
       </button>
-      <button class="b3-button b3-button--small" on:click={useForGenerate} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('generate')} disabled={selectedIds.size === 0}>
         用于制卡
       </button>
-      <button class="b3-button b3-button--small" on:click={useForConcepts} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('concepts')} disabled={selectedIds.size === 0}>
         用于导图
       </button>
     </div>
@@ -727,6 +719,9 @@
     </div>
     {#if docSearching}
       <p class="doc-search-status">搜索中…</p>
+    {/if}
+    {#if siyuanSearchError}
+      <p style="color: var(--b3-card-error-color)">{siyuanSearchError}</p>
     {/if}
     {#if docResults.length > 0}
       <div class="doc-result-list">
