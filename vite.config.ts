@@ -19,7 +19,11 @@ export default defineConfig({
                 { src: "./README*.md", dest: "./" },
                 { src: "./plugin.json", dest: "./" },
                 { src: "./icon.png", dest: "./" },
-                { src: "./public/i18n/*.json", dest: "./i18n/" }
+                { src: "./public/i18n/*.json", dest: "./i18n/" },
+                // 将 @huggingface/transformers 运行时文件打包进 dist/
+                // 只复制 dist/（编译后 JS）和 package.json，跳过 src/types/.cache
+                { src: "node_modules/@huggingface/transformers/dist/**/*", dest: "./node_modules/@huggingface/transformers/dist/" },
+                { src: "node_modules/@huggingface/transformers/package.json", dest: "./node_modules/@huggingface/transformers/" },
             ],
         }),
     ],
