@@ -29,7 +29,7 @@ export function buildExtractConceptsPrompt(chunks: PromptSourceChunk[], language
       "tags": ["可选标签"],
       "confidence": 0.0,
       "sourceRefs": [
-        {"type":"siyuan|opennotebook|manual|pdf|url","sourceId":"...","blockId":"...","chunkId":"...","quote":"短证据","page":1,"url":"..."}
+        {"type":"siyuan-doc|manual|source","sourceId":"...","blockId":"...","quote":"短证据","page":1}
       ]
     }
   ],

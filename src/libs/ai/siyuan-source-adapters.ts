@@ -25,7 +25,7 @@ export function siyuanDocsToPipelineSources(
             const title = String(doc.title || '').trim();
             return {
                 id: `siyuan-${id}`,
-                type: 'siyuan' as const,
+                type: 'siyuan-doc' as const,
                 sourceId: id,
                 blockId: id,
                 chunkId: id,

@@ -330,10 +330,8 @@ function normalizeSources(sources: PipelineSource[]): PromptSourceChunk[] {
                 type: source.type || 'manual',
                 sourceId: source.sourceId || id,
                 blockId: source.blockId,
-                chunkId: source.chunkId || id,
                 quote: source.quote,
                 page: source.page,
-                url: source.url,
             };
             return { id, text, sourceRef };
         })
@@ -558,8 +556,7 @@ function normalizeSourceRefs(raw: any, chunks: PromptSourceChunk[]): SourceRef[]
         byId.set(chunk.id, chunk);
         if (chunk.sourceRef.sourceId) byId.set(chunk.sourceRef.sourceId, chunk);
         if (chunk.sourceRef.blockId) byId.set(chunk.sourceRef.blockId, chunk);
-        if (chunk.sourceRef.chunkId) byId.set(chunk.sourceRef.chunkId, chunk);
-        if (chunk.sourceRef.url) byId.set(chunk.sourceRef.url, chunk);
+        // NOTE: chunkId and url are only on PipelineSource, not on SourceRef
     }
     const refs = toArray(raw)
         .flatMap((item: any) => {
@@ -584,12 +581,10 @@ function normalizeSourceRefs(raw: any, chunks: PromptSourceChunk[]): SourceRef[]
                 type: isValidSourceType(type) ? type : 'manual',
                 sourceId: toString(itemObj?.sourceId || itemObj?.source_id || itemObj?.source || base.sourceId) || undefined,
                 blockId: toString(itemObj?.blockId || itemObj?.block_id || base.blockId) || undefined,
-                chunkId: toString(itemObj?.chunkId || itemObj?.chunk_id || base.chunkId || refId) || undefined,
                 quote: (quoteText || toString(base.quote)).slice(0, 500) || undefined,
                 page: toOptionalNumber(itemObj?.page ?? base.page),
-                url: toString(itemObj?.url || base.url) || undefined,
             };
-            if (!ref.sourceId && !ref.blockId && !ref.chunkId && ref.quote) {
+            if (!ref.sourceId && !ref.blockId && ref.quote) {
                 const matchedChunks = findChunksByQuote(ref.quote, chunks);
                 if (matchedChunks.length > 0) {
                     return matchedChunks.map((matched) => ({
@@ -600,7 +595,7 @@ function normalizeSourceRefs(raw: any, chunks: PromptSourceChunk[]): SourceRef[]
             }
             return [ref];
         })
-        .filter((ref) => ref.sourceId || ref.blockId || ref.chunkId || ref.quote || ref.url);
+        .filter((ref) => ref.sourceId || ref.blockId || ref.quote);
 
     const deduped = dedupeRefs(refs);
     if (deduped.length === 0 && chunks.length === 1) {
@@ -639,7 +634,7 @@ function dedupeRefs(refs: SourceRef[]): SourceRef[] {
     const seen = new Set<string>();
     const out: SourceRef[] = [];
     for (const ref of refs) {
-        const key = [ref.type, ref.sourceId, ref.blockId, ref.chunkId, ref.page, ref.url, ref.quote].join('|');
+        const key = [ref.type, ref.sourceId, ref.blockId, ref.page, ref.quote].join('|');
         if (seen.has(key)) continue;
         seen.add(key);
         out.push(ref);
@@ -754,7 +749,7 @@ function withLowTemperature(config?: LLMConfig, temperature?: number): LLMConfig
 }
 
 function isValidSourceType(value: string): value is SourceRef['type'] {
-    return ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url'].includes(value);
+    return ['siyuan-doc', 'manual', 'source'].includes(value);
 }
 
 function clampConfidence(value: any): number {

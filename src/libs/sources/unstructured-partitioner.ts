@@ -242,7 +242,7 @@ export function unstructuredElementsToPipelineSources(
             currentTitle = el.text;
             sources.push({
                 id: `${sourceId}-title-${chunkIndex}`,
-                type: 'file',
+                type: 'source',
                 sourceId,
                 chunkId: `${sourceId}-title-${chunkIndex}`,
                 quote: el.text.slice(0, 240),
@@ -258,7 +258,7 @@ export function unstructuredElementsToPipelineSources(
         const elementType = el.type === 'CodeBlock' ? 'code' : el.type === 'Table' ? 'table' : el.type === 'ListItem' ? 'list' : 'text';
         sources.push({
             id: `${sourceId}-${chunkIndex}`,
-            type: 'file',
+            type: 'source',
             sourceId,
             chunkId: `${sourceId}-${chunkIndex}`,
             quote: text.slice(0, 240),

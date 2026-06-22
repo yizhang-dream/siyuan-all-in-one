@@ -49,7 +49,7 @@ export function webPageToPipelineSources(result: WebFetchResult, maxSources = 12
     const enriched = result.title
         ? `# ${result.title}\n\n${result.text}`
         : result.text;
-    return textToUnstructuredPipelineSources(enriched, result.url, { maxElements: maxSources }).map((s) => ({ ...s, type: 'url' as const }));
+    return textToUnstructuredPipelineSources(enriched, result.url, { maxElements: maxSources }).map((s) => ({ ...s, type: 'source' as const }));
 }
 
 function normalizeUrl(url: string): string {

@@ -58,7 +58,7 @@ export async function extractPdfText(
 export function pdfToPipelineSources(result: PdfExtractResult, maxSources = 16): PipelineSource[] {
     if (!result.text.trim()) return [];
     const enriched = `# ${result.fileName} (${result.pageCount} pages)\n\n${result.text}`;
-    return textToUnstructuredPipelineSources(enriched, result.fileName, { maxElements: maxSources }).map((s) => ({ ...s, type: 'pdf' as const }));
+    return textToUnstructuredPipelineSources(enriched, result.fileName, { maxElements: maxSources }).map((s) => ({ ...s, type: 'source' as const }));
 }
 
 /** 从 File 对象读取 PDF */

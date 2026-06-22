@@ -84,7 +84,7 @@ export function openNotebookResultsToPipelineSources(
                     : undefined;
             return {
                 id,
-                type: 'opennotebook' as const,
+                type: 'source' as const,
                 sourceId,
                 chunkId,
                 quote: clipped.slice(0, 500),
