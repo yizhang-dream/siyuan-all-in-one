@@ -112,6 +112,21 @@
 
   // ── 导入 ───────────────────────────────────────────
 
+  /** Click-outside action: closes menu when clicking outside the wrapper */
+  function clickOutside(node: HTMLElement) {
+    function handler(e: MouseEvent) {
+      if (!node.contains(e.target as Node)) {
+        closeImportMenu();
+      }
+    }
+    document.addEventListener('click', handler, true);
+    return {
+      destroy() {
+        document.removeEventListener('click', handler, true);
+      }
+    };
+  }
+
   function toggleImportMenu() {
     importMenuOpen = !importMenuOpen;
   }
@@ -525,14 +540,14 @@
   <!-- 顶部工具栏 -->
   <div class="source-toolbar">
     <!-- 导入按钮 + 下拉菜单 -->
-    <div class="import-wrapper" on:mouseleave={closeImportMenu}>
-      <button class="b3-button b3-button--outline import-trigger" on:click={toggleImportMenu} on:focus={closeImportMenu}>
+    <div class="import-wrapper" use:clickOutside on:mouseleave={closeImportMenu}>
+      <button class="b3-button b3-button--outline import-trigger" on:click={toggleImportMenu}>
         <svg><use xlink:href="#iconAdd"></use></svg>
         <span>导入</span>
         <span class="import-arrow">▾</span>
       </button>
       {#if importMenuOpen}
-        <div class="import-menu" on:mouseenter={() => {}}>
+        <div class="import-menu">
           <button class="import-menu-item" on:click={handleImportFile}>
             <span>📄</span><span>文件</span>
           </button>
