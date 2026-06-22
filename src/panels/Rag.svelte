@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
-  import { VectorStore, getRagEmbedder, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
-  import type { RagSearchResult } from '../libs/rag';
+  import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
+  import type { RagSearchResult, EmbeddingProvider } from '../libs/rag';
   import type { RagConceptRequest } from '../libs/rag';
   import { callLLM } from '../libs/llm';
   import type { LLMConfig } from '../libs/llm';
@@ -21,7 +21,7 @@
 
   let store: VectorStore;
   let selectedSourceIds: string[] = [];
-  let embedder = getRagEmbedder();
+  let embedder: EmbeddingProvider;
   let embedderReady = false;
   let embedderError = '';
 
@@ -41,9 +41,15 @@
     store = vectorStore || new VectorStore(plugin);
     if (!vectorStore) await store.load();
 
-    // Check embedder
-    embedderReady = embedder.isReady();
-    embedderError = embedder.getError();
+    // Initialize embedder via multi-provider system
+    try {
+      embedder = await getRagEmbedderProvider();
+      embedderReady = embedder.isReady();
+      embedderError = embedder.getError();
+    } catch (e: any) {
+      embedderError = e?.message || String(e);
+      embedderReady = false;
+    }
 
     // Pre-fill from sourceTarget
     if (sourceTarget?.quote) {
@@ -60,7 +66,8 @@
   async function initEmbedder() {
     try {
       embedderError = '';
-      await embedder.initialize();
+      resetEmbeddingProvider();
+      embedder = await getRagEmbedderProvider();
       embedderReady = embedder.isReady();
       embedderError = embedder.getError();
       if (embedderReady) showMessage('嵌入模型已就绪');
