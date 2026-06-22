@@ -25,6 +25,7 @@
   let selectedIds = new Set<string>();
   let filterType = '全部';
   let searchQuery = '';
+  let sortBy = 'newest';
 
   // Import 下拉
   let importMenuOpen = false;
@@ -65,8 +66,13 @@
     }
     return true;
   });
+  $: visibleSources = filteredSources.sort((a, b) => {
+    if (sortBy === 'name') return a.title.localeCompare(b.title);
+    if (sortBy === 'oldest') return a.metadata.addedAt - b.metadata.addedAt;
+    return b.metadata.addedAt - a.metadata.addedAt; // newest first
+  });
 
-  $: allSelected = filteredSources.length > 0 && filteredSources.every(s => selectedIds.has(s.id));
+  $: allSelected = visibleSources.length > 0 && visibleSources.every(s => selectedIds.has(s.id));
 
   $: typeFilterOptions = (() => {
     const types = new Set(sources.map(s => s.type));
@@ -561,6 +567,12 @@
       {/each}
     </select>
 
+    <select class="b3-select" bind:value={sortBy}>
+      <option value="newest">最新 ↑</option>
+      <option value="oldest">最早 ↑</option>
+      <option value="name">名称 ↑</option>
+    </select>
+
     <!-- 搜索框 -->
     <input class="b3-text-field search-input" type="text" placeholder="搜索标题…" bind:value={searchQuery} />
   </div>
@@ -575,7 +587,7 @@
       </label>
     </div>
 
-    {#if filteredSources.length === 0}
+    {#if visibleSources.length === 0}
       <div class="source-empty">
         {#if sources.length === 0}
           <p>暂无来源，点击「导入」添加</p>
@@ -585,7 +597,7 @@
       </div>
     {/if}
 
-    {#each filteredSources as source (source.id)}
+    {#each visibleSources as source (source.id)}
       <div
         class="source-item"
         class:source-item--error={source.chunkStatus === 'error'}
@@ -603,6 +615,7 @@
             <span class="source-item-meta">
               <span class="source-type-label">{typeLabel(source.type)}</span>
               <span class="source-status {statusClass(source)}">{statusLabel(source)}</span>
+              <span>{new Date(source.metadata.addedAt).toLocaleDateString()}</span>
               {#if source.whereUsed.usageCount > 0}
                 <span class="source-usage-badge">用了{source.whereUsed.usageCount}次</span>
               {/if}
