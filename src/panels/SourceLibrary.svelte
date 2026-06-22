@@ -45,9 +45,23 @@
   let docSearching = false;
   let siyuanSearchError = '';
 
-  // File input refs
-  let fileInput: HTMLInputElement;
-  let pdfFileInput: HTMLInputElement;
+  // 各扩展名文件输入框引用（每个按钮一个）
+  let fileInputRefs: Record<string, HTMLInputElement> = {};
+
+  const textFormats: Array<{ label: string; accept: string; force?: string }> = [
+    { label: '.txt', accept: '.txt' },
+    { label: '.md', accept: '.md,.markdown' },
+    { label: '.html', accept: '.html,.htm' },
+    { label: '.csv', accept: '.csv,.tsv' },
+  ];
+
+  const docFormats: Array<{ label: string; accept: string; force?: string }> = [
+    { label: '.pdf', accept: '.pdf', force: 'pdf' },
+    { label: '.docx', accept: '.docx,.doc' },
+    { label: '.pptx', accept: '.pptx,.ppt' },
+    { label: '.xlsx', accept: '.xlsx,.xls' },
+    { label: '.epub', accept: '.epub' },
+  ];
 
   onMount(() => {
     loadSources();
@@ -111,33 +125,7 @@
 
   // ── 导入 ───────────────────────────────────────────
 
-  /** ① 文件 */
-  function handleImportFile() {
-    fileInput.click();
-  }
-
-  async function onFileSelected(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    await importFile(file);
-    (e.target as HTMLInputElement).value = '';
-  }
-
-  /** ② 粘贴 */
-  function handleImportPaste() {
-    showPasteDialog = true;
-    pasteText = '';
-  }
-
-  async function confirmPaste() {
-    if (!pasteText.trim()) return;
-    await extractAndStore(genId(), pasteText.trim(), 'paste', pasteText.trim().slice(0, 80) + (pasteText.trim().length > 80 ? '…' : ''));
-    pasteText = '';
-    showPasteDialog = false;
-  }
-
-  /** ③ URL */
-  function handleImportUrl() {
+  function importUrl() {
     showUrlDialog = true;
     urlText = '';
   }
@@ -164,23 +152,29 @@
     }
   }
 
-  /** ④ PDF */
-  function handleImportPdf() {
-    pdfFileInput.click();
+  function importPaste() {
+    showPasteDialog = true;
+    pasteText = '';
   }
 
-  async function onPdfSelected(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    await importFile(file, 'pdf');
-    (e.target as HTMLInputElement).value = '';
+  async function confirmPaste() {
+    if (!pasteText.trim()) return;
+    await extractAndStore(genId(), pasteText.trim(), 'paste', pasteText.trim().slice(0, 80) + (pasteText.trim().length > 80 ? '…' : ''));
+    pasteText = '';
+    showPasteDialog = false;
   }
 
-  /** ⑤ 思源文档 */
-  function handleImportSiyuan() {
+  function importSiyuanDoc() {
     showDocSearch = true;
     docQuery = '';
     docResults = [];
+  }
+
+  async function onFileSelected(e: Event, forceType?: string) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    await importFile(file, forceType);
+    (e.target as HTMLInputElement).value = '';
   }
 
   async function searchDocs() {
@@ -452,11 +446,6 @@
       sourceStore.save();
       loadSources();
       showMessage('请重新导入文件');
-      if (source.type === 'pdf') {
-        pdfFileInput.click();
-      } else {
-        fileInput.click();
-      }
     }
   }
 
@@ -550,22 +539,59 @@
   <!-- 顶部工具栏 -->
   <div class="source-toolbar">
     <!-- 导入按钮 -->
-    <div class="toolbar-import-group">
-      <button class="b3-button b3-button--outline import-btn" on:click={handleImportFile} title="导入文件">
-        <span>📄</span><span>文件</span>
-      </button>
-      <button class="b3-button b3-button--outline import-btn" on:click={handleImportPaste} title="导入粘贴内容">
-        <span>📎</span><span>粘贴</span>
-      </button>
-      <button class="b3-button b3-button--outline import-btn" on:click={handleImportUrl} title="导入 URL">
-        <span>🌐</span><span>URL</span>
-      </button>
-      <button class="b3-button b3-button--outline import-btn" on:click={handleImportPdf} title="导入 PDF">
-        <span>📕</span><span>PDF</span>
-      </button>
-      <button class="b3-button b3-button--outline import-btn" on:click={handleImportSiyuan} title="导入思源文档">
-        <span>📑</span><span>思源</span>
-      </button>
+    <div class="toolbar-import-groups">
+      <div class="import-group">
+        <span class="import-group__label">文本格式：</span>
+        <div class="import-group__buttons">
+          {#each textFormats as fmt}
+            <button
+              class="b3-button b3-button--small import-ext-btn"
+              on:click={() => fileInputRefs[fmt.label]?.click()}
+              title="导入 {fmt.label} 文件"
+            >
+              {fmt.label}
+            </button>
+            <input
+              type="file"
+              class="import-file-input"
+              bind:this={fileInputRefs[fmt.label]}
+              on:change={(e) => onFileSelected(e, fmt.force)}
+              accept={fmt.accept}
+            />
+          {/each}
+        </div>
+      </div>
+
+      <div class="import-group">
+        <span class="import-group__label">文档格式：</span>
+        <div class="import-group__buttons">
+          {#each docFormats as fmt}
+            <button
+              class="b3-button b3-button--small import-ext-btn"
+              on:click={() => fileInputRefs[fmt.label]?.click()}
+              title="导入 {fmt.label} 文件"
+            >
+              {fmt.label}
+            </button>
+            <input
+              type="file"
+              class="import-file-input"
+              bind:this={fileInputRefs[fmt.label]}
+              on:change={(e) => onFileSelected(e, fmt.force)}
+              accept={fmt.accept}
+            />
+          {/each}
+        </div>
+      </div>
+
+      <div class="import-group">
+        <span class="import-group__label">其他：</span>
+        <div class="import-group__buttons">
+          <button class="b3-button b3-button--small import-ext-btn" on:click={importUrl} title="导入 URL">🌐 URL</button>
+          <button class="b3-button b3-button--small import-ext-btn" on:click={importPaste} title="粘贴文本">📎 粘贴</button>
+          <button class="b3-button b3-button--small import-ext-btn" on:click={importSiyuanDoc} title="思源文档">📑 思源</button>
+        </div>
+      </div>
     </div>
 
     <div class="toolbar-spacer"></div>
@@ -663,23 +689,6 @@
   </div>
 </div>
 
-<!-- 隐藏的文件输入 -->
-<input
-  type="file"
-  bind:this={fileInput}
-  on:change={onFileSelected}
-  accept=".txt,.md,.html,.csv,.json,.xml,.docx,.pptx,.xlsx,.epub"
-  style="display:none"
-/>
-
-<input
-  type="file"
-  bind:this={pdfFileInput}
-  on:change={onPdfSelected}
-  accept=".pdf"
-  style="display:none"
-/>
-
 <!-- 粘贴 Dialog -->
 {#if showPasteDialog}
 <div class="overlay" on:click|self={() => { showPasteDialog = false; }} on:keydown={onOverlayKeydown} role="button" tabindex="0" aria-label="关闭粘贴对话框">
@@ -770,30 +779,59 @@
   .source-toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     padding: 8px 12px;
     border-bottom: 1px solid var(--b3-theme-surface-lighter);
     flex-shrink: 0;
   }
 
-  .toolbar-import-group {
+  .toolbar-import-groups {
     display: flex;
     align-items: center;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
     flex-shrink: 0;
   }
 
-  .import-btn {
+  .import-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .import-group__label {
+    font-size: var(--aio-fs-xs);
+    opacity: 0.6;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .import-group__buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .import-ext-btn {
+    height: 32px;
+    min-width: 44px;
+    padding: 0 8px;
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    white-space: nowrap;
-    font-size: var(--aio-fs-sm);
-    padding: 3px 8px;
+    justify-content: center;
+    font-size: var(--aio-fs-xs);
+    flex-shrink: 0;
+  }
 
-    span:first-child {
-      font-size: 14px;
-    }
+  .import-file-input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .toolbar-spacer {
