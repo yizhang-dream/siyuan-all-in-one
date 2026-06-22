@@ -4,6 +4,8 @@
   import type { SourceRecord, SourceStore } from '../libs/source-store';
   import { ParserRegistry, TxtMdHtmlParser, PdfParser, PandocParser, XlsxParser, ImageOcrParser, SiyuanDocParser } from '../libs/parsers';
   import { genId } from '../libs/config';
+  import { ingestDocument } from '../libs/rag/ingest';
+  import { getRagEmbedderProvider } from '../libs/rag';
 
   export let plugin: any;
   export let sourceStore: SourceStore;
@@ -268,6 +270,9 @@
         chunkStatus: text ? 'done' : 'error',
         errorMessage: text ? undefined : '内容为空',
       });
+      if (text) {
+        await indexSource(id, text);
+      }
     } catch (e: any) {
       sourceStore.update(id, { chunkStatus: 'error', errorMessage: e.message });
     }
@@ -347,6 +352,7 @@
         contentHash,
         chunkStatus: 'done',
       });
+      await indexSource(id, text);
     } catch (e: any) {
       sourceStore.update(id, { chunkStatus: 'error', errorMessage: e.message });
     }
@@ -385,6 +391,7 @@
         contentHash,
         chunkStatus: 'done',
       });
+      await indexSource(id, text);
     } catch (e: any) {
       sourceStore.update(id, { chunkStatus: 'error', errorMessage: e.message });
     }
@@ -453,6 +460,7 @@
         html = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         const contentHash = await sha256(html);
         sourceStore.update(id, { content: html, contentHash, chunkStatus: 'done' });
+        await indexSource(id, html);
       } catch (e: any) {
         sourceStore.update(id, { chunkStatus: 'error', errorMessage: e.message });
       } finally {
@@ -472,6 +480,9 @@
         const text = blocks.map((b: any) => (b.markdown || '')).join('\n\n');
         const contentHash = await sha256(text);
         sourceStore.update(id, { content: text, contentHash, chunkStatus: text ? 'done' : 'error', errorMessage: text ? undefined : '内容为空' });
+        if (text) {
+          await indexSource(id, text);
+        }
       } catch (e: any) {
         sourceStore.update(id, { chunkStatus: 'error', errorMessage: e.message });
       }
@@ -488,6 +499,26 @@
       } else {
         fileInput.click();
       }
+    }
+  }
+
+  // ── RAG 索引 ─────────────────────────────────────────
+
+  /**
+   * After a source is imported and its text stored, index it into the
+   * vector store so RAG queries can find it. Gracefully skips if the
+   * embedding provider is not yet ready (e.g. model still downloading).
+   */
+  async function indexSource(sourceId: string, text: string) {
+    const source = sourceStore.getById(sourceId);
+    if (!source) return;
+    try {
+      const embedder = await getRagEmbedderProvider(plugin);
+      if (embedder && embedder.isReady()) {
+        await ingestDocument(text, { sourceId, title: source.title }, vectorStore, embedder as any);
+      }
+    } catch (e: any) {
+      console.warn('[siyuan-all-in-one] indexSource failed:', sourceId, e?.message);
     }
   }
 
