@@ -257,7 +257,6 @@
           context = parts.join('\n\n---\n\n');
           aiStatus = `已从 ${parts.length} 个来源获取 ${context.length} 字上下文，AI 生成中...`;
           aiStatusKind = 'info';
-          sourceStore.trackUsageForIds?.(appStore.selectedSourceIds, 'generate');
           appStore.selectedSourceIds = [];
         } else {
           aiStatus = '未能获取来源内容，将无上下文生成...';

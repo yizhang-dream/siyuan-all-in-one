@@ -190,7 +190,6 @@
           });
         }
       }
-      sourceStore.trackUsageForIds?.(appStore.selectedSourceIds, 'concepts');
       appStore.selectedSourceIds = [];
     }
 

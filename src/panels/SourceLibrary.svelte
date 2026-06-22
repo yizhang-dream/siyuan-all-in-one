@@ -239,16 +239,15 @@
   async function selectDoc(doc: { id: string; title: string }) {
     showDocSearch = false;
     const id = genId();
-    sourceStore.add({
-      id,
-      title: doc.title,
-      type: 'siyuan-doc',
-      content: '',
-      metadata: { siyuanDocId: doc.id, addedAt: Date.now() },
-      whereUsed: { rag: false, generate: false, concepts: false, usageCount: 0 },
-      chunkStatus: 'pending',
-      retryCount: 0,
-    });
+      sourceStore.add({
+        id,
+        title: doc.title,
+        type: 'siyuan-doc',
+        content: '',
+        metadata: { siyuanDocId: doc.id, addedAt: Date.now() },
+        chunkStatus: 'pending',
+        retryCount: 0,
+      });
     try {
       const resp = await fetchSyncPost('/api/query/sql', {
         stmt: `SELECT markdown FROM blocks WHERE root_id='${doc.id.replace(/'/g, "''")}' ORDER BY sort LIMIT 500`,
@@ -295,7 +294,6 @@
       type: sourceType,
       content: '',
       metadata: { fileName: file.name, fileSize: file.size, addedAt: Date.now(), mimeType: file.type },
-      whereUsed: { rag: false, generate: false, concepts: false, usageCount: 0 },
       chunkStatus: 'pending',
       retryCount: 0,
     });
@@ -370,7 +368,6 @@
       type,
       content: '',
       metadata: { ...extraMeta, addedAt: Date.now() },
-      whereUsed: { rag: false, generate: false, concepts: false, usageCount: 0 },
       chunkStatus: 'pending',
       retryCount: 0,
     });
@@ -530,9 +527,6 @@
     if (validIds.length === 0) return;
 
     appStore.selectedSourceIds = validIds;
-    for (const id of validIds) {
-      sourceStore.trackUsage(id, panel);
-    }
     sourceStore.save();
     if (appStore.onSwitchTab) appStore.onSwitchTab(panel);
   }
@@ -669,9 +663,6 @@
               <span class="source-type-label">{typeLabel(source.type)}</span>
               <span class="source-status {statusClass(source)}" title={source.errorMessage || ''}>{statusLabel(source)}</span>
               <span>{new Date(source.metadata.addedAt).toLocaleDateString()}</span>
-              {#if source.whereUsed.usageCount > 0}
-                <span class="source-usage-badge">用了{source.whereUsed.usageCount}次</span>
-              {/if}
             </span>
           </div>
         </div>
@@ -1011,15 +1002,6 @@
     &.status--done { color: var(--b3-card-success-color); }
     &.status--error { color: var(--b3-card-error-color); }
     &.status--pending { color: var(--b3-card-warning-color); }
-  }
-
-  .source-usage-badge {
-    font-size: var(--aio-fs-xs);
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: var(--b3-theme-surface-lighter);
-    color: var(--b3-theme-on-surface);
-    white-space: nowrap;
   }
 
   .source-item-actions {

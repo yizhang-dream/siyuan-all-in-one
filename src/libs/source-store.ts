@@ -22,12 +22,6 @@ export interface SourceRecord {
         fileSize?: number;
         addedAt: number;
     };
-    whereUsed: {
-        rag: boolean;
-        generate: boolean;
-        concepts: boolean;
-        usageCount: number;
-    };
     chunkStatus: 'pending' | 'done' | 'error';
     errorMessage?: string;
     retryCount: number;
@@ -87,10 +81,4 @@ export class SourceStore {
         this.sources = this.sources.filter(s => s.id !== id);
     }
 
-    trackUsage(sourceId: string, panel: 'rag' | 'generate' | 'concepts'): void {
-        const source = this.getById(sourceId);
-        if (!source) return;
-        source.whereUsed[panel] = true;
-        source.whereUsed.usageCount += 1;
-    }
 }
