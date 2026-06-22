@@ -408,7 +408,7 @@
   async function deleteItem(id: string) {
     const source = sourceStore.getById(id);
     if (!source) return;
-    if (source.whereUsed.usageCount > 0) {
+    if (source.whereUsed.usageCount > 0 && source.chunkStatus !== 'error') {
       showMessage(`无法删除「${source.title}」：已被使用 ${source.whereUsed.usageCount} 次`);
       return;
     }
@@ -422,7 +422,7 @@
 
   async function deleteSelected() {
     const toDelete = filteredSources.filter(s => selectedIds.has(s.id));
-    const blocked = toDelete.filter(s => s.whereUsed.usageCount > 0);
+    const blocked = toDelete.filter(s => s.whereUsed.usageCount > 0 && s.chunkStatus !== 'error');
     if (blocked.length > 0) {
       showMessage(`以下 ${blocked.length} 项已被使用，无法删除：${blocked.map(b => b.title).join('、')}`);
       return;
@@ -613,7 +613,7 @@
   <div class="source-list">
     <!-- 全选行 -->
     <div class="source-list-header">
-      <label class="source-checkbox" role="button" tabindex="0" on:click={toggleSelectAll} on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSelectAll(); } }}>
+      <label class="source-checkbox">
         <input type="checkbox" checked={allSelected} on:change={toggleSelectAll} />
         <span class="checkbox-count">{selectedIds.size > 0 ? `已选 ${selectedIds.size}` : '全选'}</span>
       </label>
@@ -636,7 +636,7 @@
         class:source-item--selected={selectedIds.has(source.id)}
       >
         <div class="source-item-left">
-          <label class="source-checkbox" on:click={() => toggleSelect(source.id)} on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSelect(source.id); } }} role="button" tabindex="0">
+          <label class="source-checkbox">
             <input type="checkbox" checked={selectedIds.has(source.id)} on:change={() => toggleSelect(source.id)} />
           </label>
           <span class="source-item-icon">
