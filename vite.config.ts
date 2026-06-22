@@ -36,6 +36,13 @@ export default defineConfig({
             "onnxruntime-node": resolve(__dirname, "node_modules/onnxruntime-web/dist/ort.node.min.js"),
         },
     },
+    optimizeDeps: {
+        exclude: [
+            // pdfjs-dist uses web workers and DOM APIs that break under Vite CJS
+            // bundling. Loading it at runtime via require() avoids the issue.
+            'pdfjs-dist',
+        ],
+    },
     plugins: [
         svelte(),
         viteStaticCopy({
@@ -95,6 +102,11 @@ export default defineConfig({
                 "node:events",
                 "node:crypto",
                 "node:child_process",
+
+                // pdfjs-dist — externalised so it loads at runtime via require()
+                // instead of being bundled by Vite CJS (which breaks web worker
+                // and DOM API usage).
+                "pdfjs-dist",
 
             ],
             output: {

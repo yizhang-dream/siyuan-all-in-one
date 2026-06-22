@@ -651,6 +651,9 @@
             <span class="source-item-meta">
               <span class="source-type-label">{typeLabel(source.type)}</span>
               <span class="source-status {statusClass(source)}" title={source.errorMessage || ''}>{statusLabel(source)}</span>
+              {#if source.chunkStatus === 'error' && source.errorMessage}
+                <span class="source-error-text" title={source.errorMessage}>{source.errorMessage}</span>
+              {/if}
               <span>{new Date(source.metadata.addedAt).toLocaleDateString()}</span>
             </span>
           </div>
@@ -968,6 +971,16 @@
     &.status--done { color: var(--b3-card-success-color); }
     &.status--error { color: var(--b3-card-error-color); }
     &.status--pending { color: var(--b3-card-warning-color); }
+  }
+
+  .source-error-text {
+    color: var(--b3-card-error-color);
+    font-size: var(--aio-fs-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+    opacity: 0.8;
   }
 
   .source-item-actions {
