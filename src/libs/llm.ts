@@ -200,7 +200,7 @@ export function getProviderCapabilities(providerId = 'openai-compatible'): Provi
 }
 
 const DEFAULT_CONFIG: Required<LLMConfig> = {
-    endpoint: 'http://localhost:15721/v1/chat/completions',
+    endpoint: 'https://api.deepseek.com/v1/chat/completions',
     model: 'deepseek-chat',
     apiKey: '',
     providerId: 'openai-compatible',
