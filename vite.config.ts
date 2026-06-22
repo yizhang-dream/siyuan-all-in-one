@@ -10,7 +10,12 @@ const outputDir = isDev ? "dev" : "dist";
 
 export default defineConfig({
     resolve: {
-        alias: { "@": resolve(__dirname, "src") }
+        alias: {
+            "@": resolve(__dirname, "src"),
+            // transformers.js uses onnxruntime-node by default; alias to web variant
+            // so Vite can bundle it for the Electron renderer.
+            "onnxruntime-node": "onnxruntime-web",
+        },
     },
     plugins: [
         svelte(),
@@ -20,10 +25,6 @@ export default defineConfig({
                 { src: "./plugin.json", dest: "./" },
                 { src: "./icon.png", dest: "./" },
                 { src: "./public/i18n/*.json", dest: "./i18n/" },
-                // 将 @huggingface/transformers 运行时文件打包进 dist/
-                // 只复制 dist/（编译后 JS）和 package.json，跳过 src/types/.cache
-                { src: "node_modules/@huggingface/transformers/dist/**/*", dest: "./node_modules/@huggingface/transformers/dist/" },
-                { src: "node_modules/@huggingface/transformers/package.json", dest: "./node_modules/@huggingface/transformers/" },
                 // Bundle the ONNX embedding model so it works offline without downloading at runtime
                 // Copy root-level model config/tokenizer files
                 { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/config.json", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/" },
@@ -50,7 +51,7 @@ export default defineConfig({
         },
         rollupOptions: {
             plugins: [],
-            external: ["siyuan", "process", "@huggingface/transformers", "@xenova/transformers"],
+            external: ["siyuan", "process"],
             output: {
                 entryFileNames: "[name].js",
                 // 禁止代码分割：所有依赖打进单个 index.js

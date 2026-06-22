@@ -60,29 +60,17 @@ export class RagEmbedder {
 
     private async _init(): Promise<void> {
         try {
-            // Dynamic ESM import — works in dev/test environments but may fail in
-            // Electron renderer because the plugin's node_modules aren't on the
-            // ESM resolver path.
+            // Dynamic import of @huggingface/transformers — Vite bundles it into index.js
+            // so it resolves correctly in Electron's renderer process.
             const mod = await import('@huggingface/transformers');
             const { pipeline, env } = mod;
             this.configureLocalModelPath(env);
             env.remoteHost = 'https://hf-mirror.com';
             this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
             this.ready = true;
-        } catch (importErr: any) {
-            // Fallback: eval('require') to bypass Vite's bundler transformation.
-            // In CJS output Electron resolves bare specifiers from the plugin dir correctly.
-            try {
-                // @ts-ignore - eval('require') avoids Vite/Rollup static analysis
-                const { pipeline, env } = eval('require')('@huggingface/transformers');
-                this.configureLocalModelPath(env);
-                env.remoteHost = 'https://hf-mirror.com';
-                this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
-                this.ready = true;
-            } catch (requireErr: any) {
-                this.initError = `import: ${importErr?.message || importErr}, require: ${requireErr?.message || requireErr}`;
-                console.warn('[siyuan-all-in-one] RAG embedder init failed:', this.initError);
-            }
+        } catch (err: any) {
+            this.initError = err?.message || String(err);
+            console.warn('[siyuan-all-in-one] RAG embedder init failed:', this.initError);
         }
     }
 
@@ -90,31 +78,55 @@ export class RagEmbedder {
      * Point transformers.js to the bundled local model files so no download is needed.
      * Resolution order:
      *   1. this.pluginDirPath (explicitly provided by caller)
-     *   2. import.meta.url (Vite ESM bundle — extract plugin dir from script URL)
-     *   3. No local path — fall back to downloading from network
+     *   2. __dirname (CJS bundle — available in Node.js/Electron require() scope)
+     *   3. import.meta.url (ESM fallback — may be mangled by Vite CJS transform)
+     *   4. No local path — fall back to downloading from network
+     *
+     * IMPORTANT: Vite's CJS build (formats: ["cjs"]) breaks `new URL('.', import.meta.url)`:
+     *   - `import.meta.url` → CJS shim resolving to wrong URL in Electron
+     *   - `'.'` → base64 data URL (pathname always "")
+     *   Using __dirname instead, which is correct in CJS context.
      */
     private configureLocalModelPath(env: any): void {
         let baseDir = this.pluginDirPath;
         if (!baseDir) {
-            try {
-                const url = new URL('.', import.meta.url);
-                // url.pathname is like /C:/Users/.../plugins/siyuan-all-in-one/
-                let path = url.pathname;
-                // On Windows, remove leading / so /C:/... becomes C:/...
-                if (path.startsWith('/') && /^\/[A-Z]:\//i.test(path)) {
-                    path = path.slice(1);
+            // CJS bundle (Vite outputs 'cjs'): __dirname is available and points to dist/
+            if (typeof __dirname !== 'undefined') {
+                baseDir = __dirname;
+                // Normalize path separators for Windows
+                if (baseDir.includes('\\')) {
+                    baseDir = baseDir.replace(/\\/g, '/');
                 }
-                // Replace forward slashes with backslashes on Windows
-                if (path.includes(':\\') || path.includes(':/')) {
-                    path = path.replace(/\//g, '\\');
+                if (!baseDir.endsWith('/')) {
+                    baseDir += '/';
                 }
-                baseDir = path;
-            } catch {
-                // import.meta.url unavailable — fall through to no local path
+            } else {
+                // ESM fallback: derive from import.meta.url
+                try {
+                    const url = new URL('.', import.meta.url);
+                    // url.pathname is like /C:/Users/.../plugins/siyuan-all-in-one/
+                    let path = url.pathname;
+                    // On Windows, remove leading / so /C:/... becomes C:/...
+                    if (path.startsWith('/') && /^\/[A-Z]:\//i.test(path)) {
+                        path = path.slice(1);
+                    }
+                    // Replace forward slashes with backslashes on Windows
+                    if (path.includes(':\\') || path.includes(':/')) {
+                        path = path.replace(/\//g, '\\');
+                    }
+                    baseDir = path;
+                } catch {
+                    // import.meta.url unavailable — fall through to no local path
+                }
             }
         }
         if (baseDir) {
-            env.localModelPath = baseDir + 'models/';
+            // Ensure trailing separator for path joining
+            const sep = baseDir.includes('\\') ? '\\' : '/';
+            if (!baseDir.endsWith(sep)) {
+                baseDir += sep;
+            }
+            env.localModelPath = baseDir + 'models' + sep;
             env.allowLocalModels = true;
         }
     }
@@ -171,14 +183,17 @@ let _provider: EmbeddingProvider | null = null;
  * Get or create the singleton EmbeddingProvider based on current AppConfig.
  * Dispatches to BuiltinEmbedder, OllamaEmbedder, OpenAIEmbedder, or CustomEmbedder.
  *
- * @param pluginDir - Optional plugin directory path for local model resolution (builtin only).
+ * @param plugin - Optional plugin instance; its getPluginDir() is used for local model path resolution (builtin only).
  */
-export async function getRagEmbedderProvider(pluginDir?: string): Promise<EmbeddingProvider> {
+export async function getRagEmbedderProvider(plugin?: any): Promise<EmbeddingProvider> {
     if (_provider) return _provider;
 
     // Dynamic import to avoid circular dependency at module level
     const { getAppConfig } = await import('../config-helper');
     const cfg: { ragEmbeddingProvider: EmbeddingProviderType; ragEmbeddingConfig: EmbeddingConfig } = getAppConfig();
+
+    // Extract plugin directory if plugin has a getPluginDir() method
+    const pluginDir = plugin?.getPluginDir?.();
 
     switch (cfg.ragEmbeddingProvider) {
         case 'ollama': {

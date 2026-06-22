@@ -54,7 +54,7 @@
     // Auto-initialize embedder on page load
     embedderLoading = true;
     try {
-      embedder = await getRagEmbedderProvider();
+      embedder = await getRagEmbedderProvider(plugin);
       embedderReady = embedder.isReady();
       embedderError = embedder.getError();
     } catch (e: any) {
@@ -81,7 +81,7 @@
     embedderError = '';
     try {
       resetEmbeddingProvider();
-      embedder = await getRagEmbedderProvider();
+      embedder = await getRagEmbedderProvider(plugin);
       embedderReady = embedder.isReady();
       embedderError = embedder.getError();
       if (embedderReady) showMessage('嵌入模型已就绪');
