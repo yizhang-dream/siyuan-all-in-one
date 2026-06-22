@@ -25,6 +25,12 @@
   let embedderReady = false;
   let embedderError = '';
 
+  // Reactively sync displayed status when embedder changes
+  $: if (embedder) {
+    embedderReady = embedder.isReady();
+    embedderError = embedder.getError();
+  }
+
   // Chat state
   interface ChatMessage {
     id: string;
@@ -40,6 +46,9 @@
   onMount(async () => {
     store = vectorStore || new VectorStore(plugin);
     if (!vectorStore) await store.load();
+
+    // Reset singleton so provider config is re-read on every tab re-entry
+    resetEmbeddingProvider();
 
     // Initialize embedder via multi-provider system
     try {
@@ -212,7 +221,7 @@
             <span>已就绪 ({embedder.getModelName().split('/').pop()})</span>
           {:else if embedderError}
             <svg><use xlink:href="#iconInfo"></use></svg>
-            <span>不可用（回退顺序匹配）</span>
+            <span title={embedderError}>不可用：{embedderError}</span>
           {:else}
             <svg><use xlink:href="#iconRefresh"></use></svg>
             <span>未加载</span>
