@@ -3,7 +3,11 @@
  */
 import type { PipelineSource } from '../ai/pipeline';
 import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
-import * as pdfjsLib from 'pdfjs-dist';
+// Use the legacy CJS build for Electron compatibility
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
+// Register pdf.js worker on the main thread (no separate worker file needed)
+// This is the official v3 approach for Node.js/Electron environments
+import 'pdfjs-dist/legacy/build/pdf.worker.entry';
 
 export interface PdfExtractResult {
     fileName: string;
@@ -21,10 +25,8 @@ export async function extractPdfText(
     try {
         const doc = await pdfjsLib.getDocument({
             data: new Uint8Array(buffer),
-            disableWorker: true,
-            useWorkerFetch: false,
-            isEvalSupported: false,
-        } as any).promise;
+            useSystemFonts: true,
+        }).promise;
 
         const pageCount = doc.numPages;
         const pageTexts: string[] = [];
