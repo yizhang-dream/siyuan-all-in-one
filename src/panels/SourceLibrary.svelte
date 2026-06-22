@@ -22,7 +22,7 @@
 
   // ── 状态 ───────────────────────────────────────────
   let sources: SourceRecord[] = [];
-  let selectedIds = new Set<string>();
+  let selectedIds: string[] = [];
   let filterType = '全部';
   let searchQuery = '';
   let sortBy = 'newest';
@@ -54,8 +54,7 @@
     loadSources();
     // Pre-select specified IDs
     if (preSelectedIds.length > 0) {
-      selectedIds = new Set(preSelectedIds.filter(id => sources.some(s => s.id === id)));
-      selectedIds = new Set(selectedIds);
+      selectedIds = [...preSelectedIds.filter(id => sources.some(s => s.id === id))];
     }
   });
 
@@ -73,7 +72,7 @@
     return b.metadata.addedAt - a.metadata.addedAt; // newest first
   });
 
-  $: allSelected = visibleSources.length > 0 && visibleSources.every(s => selectedIds.has(s.id));
+  $: allSelected = visibleSources.length > 0 && selectedIds.length === visibleSources.length;
 
   $: typeFilterOptions = (() => {
     const types = new Set(sources.map(s => s.type));
@@ -89,25 +88,26 @@
 
   function loadSources() {
     sources = sourceStore.getAll();
-    const currentIds = new Set(sources.map(s => s.id));
-    selectedIds = new Set([...selectedIds].filter(id => currentIds.has(id)));
+    selectedIds = selectedIds.filter(id => sources.some(s => s.id === id));
   }
 
   // ── 选择 ───────────────────────────────────────────
 
   function toggleSelectAll() {
     if (allSelected) {
-      selectedIds = new Set();
+      selectedIds = [];
     } else {
-      selectedIds = new Set(filteredSources.map(s => s.id));
+      selectedIds = [...filteredSources.map(s => s.id)];
     }
   }
 
   function toggleSelect(id: string) {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedIds = next;
+    const idx = selectedIds.indexOf(id);
+    if (idx >= 0) {
+      selectedIds = [...selectedIds.slice(0, idx), ...selectedIds.slice(idx + 1)];
+    } else {
+      selectedIds = [...selectedIds, id];
+    }
   }
 
   // ── 导入 ───────────────────────────────────────────
@@ -414,14 +414,13 @@
     }
     confirm('删除来源', `确定删除「${source.title}」？`, () => {
       sourceStore.remove(id);
-      selectedIds.delete(id);
-      selectedIds = new Set(selectedIds);
+      selectedIds = selectedIds.filter(sid => sid !== id);
       sourceStore.save().then(() => loadSources());
     });
   }
 
   async function deleteSelected() {
-    const toDelete = filteredSources.filter(s => selectedIds.has(s.id));
+    const toDelete = filteredSources.filter(s => selectedIds.includes(s.id));
     const blocked = toDelete.filter(s => s.whereUsed.usageCount > 0 && s.chunkStatus !== 'error');
     if (blocked.length > 0) {
       showMessage(`以下 ${blocked.length} 项已被使用，无法删除：${blocked.map(b => b.title).join('、')}`);
@@ -432,7 +431,7 @@
       for (const s of toDelete) {
         sourceStore.remove(s.id);
       }
-      selectedIds = new Set();
+      selectedIds = [];
       sourceStore.save().then(() => loadSources());
     });
   }
@@ -495,14 +494,14 @@
   // ── 底部操作 ────────────────────────────────────────
 
   function useFor(panel: 'rag' | 'generate' | 'concepts') {
-    if (selectedIds.size === 0) { showMessage('请先选择来源'); return; }
+    if (selectedIds.length === 0) { showMessage('请先选择来源'); return; }
 
     // Filter out errored items — they can't be used
-    const validIds = Array.from(selectedIds).filter(id => {
+    const validIds = selectedIds.filter(id => {
       const s = sourceStore.getById(id);
       return s && s.chunkStatus !== 'error';
     });
-    const skipped = selectedIds.size - validIds.length;
+    const skipped = selectedIds.length - validIds.length;
     if (skipped > 0) {
       showMessage(`已跳过 ${skipped} 个导入失败的项目`);
     }
@@ -615,7 +614,7 @@
     <div class="source-list-header">
       <label class="source-checkbox">
         <input type="checkbox" checked={allSelected} on:change={toggleSelectAll} />
-        <span class="checkbox-count">{selectedIds.size > 0 ? `已选 ${selectedIds.size}` : '全选'}</span>
+        <span class="checkbox-count">{selectedIds.length > 0 ? `已选 ${selectedIds.length}` : '全选'}</span>
       </label>
     </div>
 
@@ -633,11 +632,11 @@
       <div
         class="source-item"
         class:source-item--error={source.chunkStatus === 'error'}
-        class:source-item--selected={selectedIds.has(source.id)}
+        class:source-item--selected={selectedIds.includes(source.id)}
       >
         <div class="source-item-left">
           <label class="source-checkbox">
-            <input type="checkbox" checked={selectedIds.has(source.id)} on:change={() => toggleSelect(source.id)} />
+            <input type="checkbox" bind:group={selectedIds} value={source.id} />
           </label>
           <span class="source-item-icon">
             <svg><use xlink:href={typeIcon(source.type)}></use></svg>
@@ -670,18 +669,18 @@
 
   <!-- 底部操作栏 -->
   <div class="source-bottom-bar">
-    <span class="bottom-selected-count">已选 {selectedIds.size} 项</span>
+    <span class="bottom-selected-count">已选 {selectedIds.length} 项</span>
     <div class="bottom-actions">
-      <button class="b3-button b3-button--small b3-button--outline" on:click={deleteSelected} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small b3-button--outline" on:click={deleteSelected} disabled={selectedIds.length === 0}>
         删除选中
       </button>
-      <button class="b3-button b3-button--small" on:click={() => useFor('rag')} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('rag')} disabled={selectedIds.length === 0}>
         用于 RAG 对话
       </button>
-      <button class="b3-button b3-button--small" on:click={() => useFor('generate')} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('generate')} disabled={selectedIds.length === 0}>
         用于制卡
       </button>
-      <button class="b3-button b3-button--small" on:click={() => useFor('concepts')} disabled={selectedIds.size === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('concepts')} disabled={selectedIds.length === 0}>
         用于导图
       </button>
     </div>
