@@ -26,8 +26,8 @@
     "zh_CN": "知识闪卡 All-in-One"
   },
   "description": {
-    "default": "Concept-centered SM-2 flashcards with AI generation, OpenNotebook integration, and bidirectional concept mindmaps.",
-    "zh_CN": "以概念为中心的 SM-2 闪卡插件，集成 AI 候选生成、OpenNotebook 资源检索和双向概念导图。"
+    "default": "Concept-centered SM-2 flashcards with AI generation, local RAG search, and bidirectional concept mindmaps.",
+    "zh_CN": "以概念为中心的 SM-2 闪卡插件，集成 AI 候选生成、本地 RAG 检索和双向概念导图。"
   },
   "readme": {
     "default": "README.md",
@@ -49,6 +49,7 @@
     "间隔重复",
     "思维导图",
     "概念图谱",
-    "OpenNotebook"
+    "RAG",
+    "来源库"
   ]
 }

@@ -10,6 +10,7 @@ import './index.scss';
 
 import App from './App.svelte';
 import SettingsPanel from './panels/Settings.svelte';
+import { AIO_ICONS } from './icons';
 import { CardStore } from './libs/store';
 import { MindmapStore } from './libs/mindmap-store';
 import { ConceptStore } from './libs/store/concept-store';
@@ -34,6 +35,7 @@ export default class SiYuanAllInOne extends Plugin {
 
     async onload() {
         console.debug('[all-in-one] loading...');
+        (this as any).addIcons(AIO_ICONS);
 
         this.cardStore = new CardStore(this);
         await this.cardStore.load();
