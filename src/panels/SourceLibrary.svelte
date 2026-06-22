@@ -452,6 +452,26 @@
   // ── RAG 索引 ─────────────────────────────────────────
 
   /**
+   * Wait up to 60 s for the embedding provider to be ready.
+   * Throws with a Chinese error message on failure.
+   */
+  async function ensureEmbedderReady(): Promise<any> {
+    const embedder = await getRagEmbedderProvider(plugin);
+    if (!embedder.isReady()) {
+      try {
+        await embedder.initialize();
+      } catch (e: any) {
+        throw new Error('嵌入模型初始化失败: ' + (e?.message || e));
+      }
+    }
+    for (let i = 0; i < 120; i++) {
+      if (embedder.isReady()) return embedder;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    throw new Error('嵌入模型等待超时（60秒）');
+  }
+
+  /**
    * After a source is imported and its text stored, index it into the
    * vector store so RAG queries can find it. Gracefully skips if the
    * embedding provider is not yet ready (e.g. model still downloading).
@@ -462,6 +482,8 @@
     try {
       const embedder = await getRagEmbedderProvider(plugin);
       if (embedder && embedder.isReady()) {
+        // Clear stale vectors for this source first
+        vectorStore.removeBySourceId(sourceId);
         await ingestDocument(text, { sourceId, title: source.title }, vectorStore, embedder as any);
       } else {
         console.warn('[siyuan-all-in-one] indexSource skipped: embedder not ready');
@@ -481,6 +503,61 @@
       await sourceStore.save();
       sources = sourceStore.getAll();
     }
+  }
+
+  /**
+   * Re-index a single source, waiting up to 60 s for the embedder to
+   * become ready. Used by the per-item re-index button.
+   */
+  async function reIndex(sourceId: string) {
+    const source = sourceStore.getById(sourceId);
+    if (!source || !source.content) {
+      showMessage('来源内容为空，无法重建索引');
+      return;
+    }
+    try {
+      sourceStore.update(sourceId, { chunkStatus: 'pending', errorMessage: undefined });
+      loadSources();
+
+      const embedder = await ensureEmbedderReady();
+
+      // Clear old vectors for this source
+      vectorStore.removeBySourceId(sourceId);
+      await vectorStore.save();
+
+      // Re-ingest
+      await ingestDocument(source.content, { sourceId, title: source.title }, vectorStore, embedder);
+      await vectorStore.save();
+
+      sourceStore.update(sourceId, { chunkStatus: 'done' });
+      await sourceStore.save();
+      loadSources();
+      showMessage('重建索引完成');
+    } catch (e: any) {
+      sourceStore.update(sourceId, {
+        chunkStatus: 'error',
+        errorMessage: '重建索引失败: ' + (e?.message || '未知错误')
+      });
+      await sourceStore.save();
+      loadSources();
+      showMessage('重建索引失败: ' + (e?.message || e));
+    }
+  }
+
+  /** Remove vectors whose sourceId does not match any known source. */
+  async function cleanupOrphanedVectors() {
+    const knownIds = new Set(sources.map(s => s.id));
+    const allVectors = vectorStore.getAll();
+    const orphaned = allVectors.filter(v => !knownIds.has(v.sourceId));
+    if (orphaned.length === 0) {
+      showMessage('没有发现无效向量');
+      return;
+    }
+    for (const v of orphaned) {
+      vectorStore.removeBySourceId(v.sourceId);
+    }
+    await vectorStore.save();
+    showMessage(`已清理 ${orphaned.length} 个无效向量`);
   }
 
   // ── 底部操作 ────────────────────────────────────────
@@ -678,6 +755,9 @@
               <svg><use xlink:href="#iconRefresh"></use></svg>
             </button>
           {/if}
+          <button class="b3-button b3-button--small b3-button--text source-reindex-btn" on:click={() => reIndex(source.id)} title="重建向量索引">
+            <svg><use xlink:href="#iconRefresh"></use></svg>
+          </button>
           <button class="b3-button b3-button--small b3-button--text source-delete-btn" on:click={() => deleteItem(source.id)} title="删除">
             <svg><use xlink:href="#iconTrash"></use></svg>
           </button>
@@ -692,6 +772,9 @@
     <div class="bottom-actions">
       <button class="b3-button b3-button--small b3-button--outline" on:click={deleteSelected} disabled={selectedIds.length === 0}>
         删除选中
+      </button>
+      <button class="b3-button b3-button--small b3-button--outline" on:click={cleanupOrphanedVectors}>
+        清理无效向量
       </button>
       <button class="b3-button b3-button--small" on:click={() => useFor('rag')} disabled={selectedIds.length === 0}>
         用于 RAG 对话
@@ -1010,6 +1093,14 @@
       width: 14px;
       height: 14px;
       color: var(--b3-card-warning-color);
+    }
+  }
+
+  .source-reindex-btn {
+    svg {
+      width: 14px;
+      height: 14px;
+      color: var(--b3-theme-primary);
     }
   }
 
