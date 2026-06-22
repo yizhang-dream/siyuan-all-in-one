@@ -415,10 +415,6 @@
   async function deleteItem(id: string) {
     const source = sourceStore.getById(id);
     if (!source) return;
-    if (source.whereUsed.usageCount > 0 && source.chunkStatus !== 'error') {
-      showMessage(`无法删除「${source.title}」：已被使用 ${source.whereUsed.usageCount} 次`);
-      return;
-    }
     confirm('删除来源', `确定删除「${source.title}」？`, () => {
       sourceStore.remove(id);
       selectedIds = selectedIds.filter(sid => sid !== id);
@@ -428,11 +424,6 @@
 
   async function deleteSelected() {
     const toDelete = filteredSources.filter(s => selectedIds.includes(s.id));
-    const blocked = toDelete.filter(s => s.whereUsed.usageCount > 0 && s.chunkStatus !== 'error');
-    if (blocked.length > 0) {
-      showMessage(`以下 ${blocked.length} 项已被使用，无法删除：${blocked.map(b => b.title).join('、')}`);
-      return;
-    }
     if (toDelete.length === 0) return;
     confirm('删除选中', `确定删除选中的 ${toDelete.length} 项？`, () => {
       for (const s of toDelete) {
