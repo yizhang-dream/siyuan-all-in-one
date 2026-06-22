@@ -12,11 +12,25 @@ export default defineConfig({
     resolve: {
         alias: {
             "@": resolve(__dirname, "src"),
+            // ── @huggingface/transformers: force Node.js entry ──────────────────────
+            // The package.json exports field has 'node' → transformers.node.cjs (CJS) /
+            // transformers.node.mjs (ESM) vs 'default' → transformers.web.js.
+            // Vite resolves to 'default' because it does not set the 'node' condition.
+            // The web build (a) stubs onnxruntime-node as empty {} and (b) leaves the
+            // onnxruntime-web/webgpu import as a raw ESM import — Vite's CJS conversion
+            // of the complex ESM bundle silently drops the InferenceSession named export.
+            //
+            // The node build has ort.webgpu.bundle.min.mjs already inlined by esbuild
+            // with explicit __export({ InferenceSession: () => qf, … }), preserving the
+            // export. Using it ensures InferenceSession is available at runtime.
+            "@huggingface/transformers": resolve(__dirname, "node_modules/@huggingface/transformers/dist/transformers.node.cjs"),
+
             // transformers.js uses onnxruntime-node by default; alias to the
             // Node.js entry of onnxruntime-web so Vite bundles the correct runtime variant.
             // Using the bare specifier 'onnxruntime-web' resolves to the browser entry (ort.min.js)
-            // via the exports field. Directly target the Node.js CJS entry instead.
-            "onnxruntime-node": "onnxruntime-web/dist/ort.node.min.js",
+            // via the exports field. Use an absolute path to bypass exports field restrictions
+            // (the exports field doesn't expose ./dist/ort.node.min.js).
+            "onnxruntime-node": resolve(__dirname, "node_modules/onnxruntime-web/dist/ort.node.min.js"),
         },
     },
     plugins: [
