@@ -13,6 +13,7 @@ import SettingsPanel from './panels/Settings.svelte';
 import { CardStore } from './libs/store';
 import { MindmapStore } from './libs/mindmap-store';
 import { ConceptStore } from './libs/store/concept-store';
+import { SourceStore } from './libs/source-store';
 import type { AppConfig } from './libs/types';
 import { DEFAULT_CONFIG, cleanConfig } from './libs/config';
 
@@ -23,6 +24,7 @@ export default class SiYuanAllInOne extends Plugin {
     private cardStore!: CardStore;
     private mindmapStore!: MindmapStore;
     private conceptStore!: ConceptStore;
+    private sourceStore!: SourceStore;
     private appInstance: any = null;
     private settingsDialog: Dialog | null = null;
     private settingsApp: any = null;
@@ -39,6 +41,9 @@ export default class SiYuanAllInOne extends Plugin {
         await this.mindmapStore.load();
         this.conceptStore = new ConceptStore(this);
         await this.conceptStore.load();
+        this.sourceStore = new SourceStore(this);
+        await this.sourceStore.load();
+        await this.migrateSourceRefs();
         await this.loadConfig();
 
         // 同步 SiYuan 字号/字体到插件 CSS 变量
@@ -63,6 +68,7 @@ export default class SiYuanAllInOne extends Plugin {
                             cardStore: plugin.cardStore,
                             mindmapStore: plugin.mindmapStore,
                             conceptStore: plugin.conceptStore,
+                            sourceStore: plugin.sourceStore,
                             config: plugin.getConfig(),
                         },
                     });
@@ -160,6 +166,42 @@ export default class SiYuanAllInOne extends Plugin {
         this.settingsApp = null;
     }
 
+    // ── 数据迁移 ──────────────────────────────────────────
+
+    private async migrateSourceRefs() {
+        const migrateRef = (ref: any) => {
+            if (!ref || !ref.type) return ref;
+            switch (ref.type) {
+                case 'file': case 'url': case 'pdf': case 'rag': case 'opennotebook':
+                    return { ...ref, type: 'source' };
+                case 'siyuan': return { ...ref, type: 'siyuan-doc' };
+                default: return ref;
+            }
+        };
+
+        // Migrate cards
+        try {
+            const cards = await this.loadData('cards');
+            if (Array.isArray(cards)) {
+                let changed = false;
+                for (const card of cards) {
+                    if (Array.isArray(card.sourceRefs)) {
+                        card.sourceRefs = card.sourceRefs.map(migrateRef);
+                        changed = true;
+                    }
+                }
+                if (changed) await this.saveData('cards', cards);
+            }
+        } catch {}
+
+        // Migrate concepts + relations via ConceptStore
+        try {
+            if (typeof (this as any).conceptStore?.migrateSourceRefs === 'function') {
+                await (this as any).conceptStore.migrateSourceRefs(migrateRef);
+            }
+        } catch {}
+    }
+
     // ── 打开主工作台 Tab ──────────────────────────────────
 
     private openMainTab() {
@@ -243,5 +285,9 @@ export default class SiYuanAllInOne extends Plugin {
 
     getConceptStore(): ConceptStore {
         return this.conceptStore;
+    }
+
+    getSourceStore(): SourceStore {
+        return this.sourceStore;
     }
 }

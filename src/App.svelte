@@ -19,6 +19,7 @@
   export let cardStore: any;
   export let mindmapStore: any;
   export let conceptStore: any;
+  export let sourceStore: any;
   export let config: any;
 
   const t = getT(plugin);
