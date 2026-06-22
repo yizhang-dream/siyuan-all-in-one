@@ -12,9 +12,11 @@ export default defineConfig({
     resolve: {
         alias: {
             "@": resolve(__dirname, "src"),
-            // transformers.js uses onnxruntime-node by default; alias to web variant
-            // so Vite can bundle it for the Electron renderer.
-            "onnxruntime-node": "onnxruntime-web",
+            // transformers.js uses onnxruntime-node by default; alias to the
+            // Node.js entry of onnxruntime-web so Vite bundles the correct runtime variant.
+            // Using the bare specifier 'onnxruntime-web' resolves to the browser entry (ort.min.js)
+            // via the exports field. Directly target the Node.js CJS entry instead.
+            "onnxruntime-node": "onnxruntime-web/dist/ort.node.min.js",
         },
     },
     plugins: [
