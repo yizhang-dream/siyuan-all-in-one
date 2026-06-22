@@ -24,6 +24,13 @@ export default defineConfig({
                 // 只复制 dist/（编译后 JS）和 package.json，跳过 src/types/.cache
                 { src: "node_modules/@huggingface/transformers/dist/**/*", dest: "./node_modules/@huggingface/transformers/dist/" },
                 { src: "node_modules/@huggingface/transformers/package.json", dest: "./node_modules/@huggingface/transformers/" },
+                // Bundle the ONNX embedding model so it works offline without downloading at runtime
+                // Copy root-level model config/tokenizer files
+                { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/config.json", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/" },
+                { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/tokenizer.json", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/" },
+                { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/tokenizer_config.json", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/" },
+                // Copy the ONNX model binary (preserves onnx/ structure)
+                { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/model_quantized.onnx", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/" },
             ],
         }),
     ],

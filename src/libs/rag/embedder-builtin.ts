@@ -12,8 +12,8 @@ import { DEFAULT_EMBEDDING_DIM } from './embedder-types';
 export class BuiltinEmbedder implements EmbeddingProvider {
     private inner: RagEmbedder;
 
-    constructor() {
-        this.inner = new RagEmbedder();
+    constructor(pluginDirPath?: string) {
+        this.inner = new RagEmbedder(undefined, pluginDirPath);
     }
 
     async initialize(): Promise<void> {

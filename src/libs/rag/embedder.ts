@@ -9,8 +9,8 @@
 /** Singleton embedder instance. */
 let _instance: RagEmbedder | null = null;
 
-export function getRagEmbedder(): RagEmbedder {
-    if (!_instance) _instance = new RagEmbedder();
+export function getRagEmbedder(pluginDirPath?: string): RagEmbedder {
+    if (!_instance) _instance = new RagEmbedder(undefined, pluginDirPath);
     return _instance;
 }
 
@@ -21,13 +21,15 @@ export function resetRagEmbedder(): void {
 export class RagEmbedder {
     private pipeline: any = null;
     private modelName: string;
+    private pluginDirPath: string;
     private ready = false;
     private initError: string = '';
     private initPromise: Promise<void> | null = null;
     private cache: Map<string, number[]>;
 
-    constructor(modelName?: string) {
+    constructor(modelName?: string, pluginDirPath?: string) {
         this.modelName = modelName || 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+        this.pluginDirPath = pluginDirPath || '';
         this.cache = new Map();
     }
 
@@ -63,6 +65,7 @@ export class RagEmbedder {
             // ESM resolver path.
             const mod = await import('@huggingface/transformers');
             const { pipeline, env } = mod;
+            this.configureLocalModelPath(env);
             env.remoteHost = 'https://hf-mirror.com';
             this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
             this.ready = true;
@@ -72,6 +75,7 @@ export class RagEmbedder {
             try {
                 // @ts-ignore - eval('require') avoids Vite/Rollup static analysis
                 const { pipeline, env } = eval('require')('@huggingface/transformers');
+                this.configureLocalModelPath(env);
                 env.remoteHost = 'https://hf-mirror.com';
                 this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
                 this.ready = true;
@@ -79,6 +83,18 @@ export class RagEmbedder {
                 this.initError = `import: ${importErr?.message || importErr}, require: ${requireErr?.message || requireErr}`;
                 console.warn('[siyuan-all-in-one] RAG embedder init failed:', this.initError);
             }
+        }
+    }
+
+    /**
+     * Point transformers.js to the bundled local model files so no download is needed.
+     * Uses either the explicitly provided pluginDirPath or __dirname (CJS build output dir).
+     */
+    private configureLocalModelPath(env: any): void {
+        const baseDir = this.pluginDirPath || (typeof __dirname !== 'undefined' ? __dirname : '');
+        if (baseDir) {
+            env.localModelPath = baseDir + '/models/';
+            env.allowLocalModels = true;
         }
     }
 
@@ -133,8 +149,10 @@ let _provider: EmbeddingProvider | null = null;
 /**
  * Get or create the singleton EmbeddingProvider based on current AppConfig.
  * Dispatches to BuiltinEmbedder, OllamaEmbedder, OpenAIEmbedder, or CustomEmbedder.
+ *
+ * @param pluginDir - Optional plugin directory path for local model resolution (builtin only).
  */
-export async function getRagEmbedderProvider(): Promise<EmbeddingProvider> {
+export async function getRagEmbedderProvider(pluginDir?: string): Promise<EmbeddingProvider> {
     if (_provider) return _provider;
 
     // Dynamic import to avoid circular dependency at module level
@@ -159,7 +177,7 @@ export async function getRagEmbedderProvider(): Promise<EmbeddingProvider> {
         }
         default: {
             const { BuiltinEmbedder } = await import('./embedder-builtin');
-            _provider = new BuiltinEmbedder();
+            _provider = new BuiltinEmbedder(pluginDir);
             break;
         }
     }
