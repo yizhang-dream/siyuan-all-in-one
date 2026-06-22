@@ -86,11 +86,12 @@ export const DEFAULT_CONFIG: AppConfig = {
     flashcardModel: '',
     mindmapProviderId: 'deepseek',
     mindmapModel: '',
-    notebookEndpoint: 'http://localhost:5055',
     cardsPerDay: 30,
     scheduler: 'sm2',
     defaultDeck: '默认',
     agents: [],
+    ragEmbeddingProvider: 'builtin',
+    ragEmbeddingConfig: { endpoint: '', apiKey: '', model: '' },
 };
 
 /** 生成唯一 id（用于自定义 Provider） */
@@ -179,10 +180,15 @@ export function cleanConfig(cfg: any): AppConfig {
         flashcardModel: String(cfg?.flashcardModel ?? (hasOldLlmConfig ? cfg.llmModel : d.flashcardModel)),
         mindmapProviderId,
         mindmapModel: String(cfg?.mindmapModel ?? (hasOldLlmConfig ? cfg.llmModel : d.mindmapModel)),
-        notebookEndpoint: cfg?.notebookEndpoint ?? d.notebookEndpoint,
         cardsPerDay: cfg?.cardsPerDay ?? d.cardsPerDay,
         scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',
         defaultDeck: cfg?.defaultDeck ?? d.defaultDeck,
         agents: rawAgents.map(cleanAgent),
+        ragEmbeddingProvider: cfg?.ragEmbeddingProvider === 'ollama' || cfg?.ragEmbeddingProvider === 'openai' || cfg?.ragEmbeddingProvider === 'custom' ? cfg.ragEmbeddingProvider : 'builtin',
+        ragEmbeddingConfig: {
+            endpoint: String(cfg?.ragEmbeddingConfig?.endpoint ?? ''),
+            apiKey: String(cfg?.ragEmbeddingConfig?.apiKey ?? ''),
+            model: String(cfg?.ragEmbeddingConfig?.model ?? ''),
+        },
     };
 }

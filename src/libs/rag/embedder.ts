@@ -109,3 +109,52 @@ export class RagEmbedder {
         return results;
     }
 }
+
+// ── Multi-provider singleton ────────────────────────────────────────────────
+
+import type { EmbeddingProviderType, EmbeddingConfig, EmbeddingProvider } from './embedder-types';
+
+let _provider: EmbeddingProvider | null = null;
+
+/**
+ * Get or create the singleton EmbeddingProvider based on current AppConfig.
+ * Dispatches to BuiltinEmbedder, OllamaEmbedder, OpenAIEmbedder, or CustomEmbedder.
+ */
+export async function getRagEmbedderProvider(): Promise<EmbeddingProvider> {
+    if (_provider) return _provider;
+
+    // Dynamic import to avoid circular dependency at module level
+    const { getAppConfig } = await import('../config-helper');
+    const cfg: { ragEmbeddingProvider: EmbeddingProviderType; ragEmbeddingConfig: EmbeddingConfig } = getAppConfig();
+
+    switch (cfg.ragEmbeddingProvider) {
+        case 'ollama': {
+            const { OllamaEmbedder } = await import('./embedder-remote');
+            _provider = new OllamaEmbedder(cfg.ragEmbeddingConfig);
+            break;
+        }
+        case 'openai': {
+            const { OpenAIEmbedder } = await import('./embedder-remote');
+            _provider = new OpenAIEmbedder(cfg.ragEmbeddingConfig);
+            break;
+        }
+        case 'custom': {
+            const { CustomEmbedder } = await import('./embedder-remote');
+            _provider = new CustomEmbedder(cfg.ragEmbeddingConfig);
+            break;
+        }
+        default: {
+            const { BuiltinEmbedder } = await import('./embedder-builtin');
+            _provider = new BuiltinEmbedder();
+            break;
+        }
+    }
+
+    await _provider.initialize();
+    return _provider;
+}
+
+/** Reset the cached embedding provider singleton. */
+export function resetEmbeddingProvider(): void {
+    _provider = null;
+}

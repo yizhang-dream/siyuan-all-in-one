@@ -29,3 +29,9 @@ export type {
     RagConfig,
     IngestedDocRecord,
 } from './types';
+
+export type { EmbeddingProviderType, EmbeddingConfig, EmbeddingProvider } from './embedder-types';
+export { DEFAULT_EMBEDDING_DIM } from './embedder-types';
+export { BuiltinEmbedder } from './embedder-builtin';
+export { RemoteEmbedderBase, OllamaEmbedder, OpenAIEmbedder, CustomEmbedder } from './embedder-remote';
+export { getRagEmbedderProvider, resetEmbeddingProvider } from './embedder';

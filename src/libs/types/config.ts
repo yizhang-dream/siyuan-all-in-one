@@ -34,9 +34,14 @@ export interface AppConfig {
     flashcardModel: string;
     mindmapProviderId: string;
     mindmapModel: string;
-    notebookEndpoint: string;
+    ragProviderId?: string;
+    ragModel?: string;
     cardsPerDay: number;
     scheduler: 'sm2' | 'fsrs';
     defaultDeck: string;
     agents: AgentConfig[];
+    /** RAG 嵌入向量提供方类型 */
+    ragEmbeddingProvider: 'builtin' | 'ollama' | 'openai' | 'custom';
+    /** RAG 嵌入向量提供方连接配置 */
+    ragEmbeddingConfig: { endpoint: string; apiKey: string; model: string; };
 }
