@@ -6,20 +6,27 @@ import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
 // Static import — Vite CJS bundler converts ESM → CJS require at build time
 import * as pdfjsLib from 'pdfjs-dist';
 
-// pdfjs-dist needs GlobalWorkerOptions.workerSrc to locate the worker file.
-// In CJS mode, __dirname is the dist/ directory. The worker is copied there
-// by viteStaticCopy (see vite.config.ts).
-const pdfWorkerSrc = (() => {
-    try {
-        const req = eval('require');
-        const path = req('path');
-        return path.join(__dirname, 'pdf.worker.min.mjs');
-    } catch {
-        // Fallback for environments where require/path/__dirname aren't available
-        return 'pdf.worker.min.mjs';
-    }
-})();
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+// pdfjs-dist v6 tries to spawn a Web Worker for off-thread parsing.
+// In Electron's sandboxed renderer, `new Worker(filesystemPath)` fails because
+// Electron only accepts HTTP/blob URLs for worker constructors. The fallback
+// "fake worker" then attempts `import(filesystemPath)` which also fails.
+//
+// Our fix: read the bundled worker file at init and create a blob:// URL.
+// blob:// URLs are valid Worker sources in all Chromium-based renderers
+// (including Electron's sandboxed context). This allows the real worker to
+// start successfully.
+try {
+    const req = eval('require');
+    const path = req('path');
+    const fs = req('fs');
+    const workerPath = path.join(__dirname, 'pdf.worker.min.mjs');
+    const workerCode = fs.readFileSync(workerPath, 'utf-8');
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+} catch {
+    // If blob URL creation fails, leave workerSrc unset — pdfjs will try its
+    // built-in fallbacks (may or may not work depending on environment).
+}
 
 export interface PdfExtractResult {
     fileName: string;
