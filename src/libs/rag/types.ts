@@ -22,6 +22,8 @@ export interface RagChunkMetadata {
     url?: string;
     title?: string;
     sectionHeading?: string;
+    /** Source record ID from sourceStore (e.g. "p<random>") */
+    sourceId?: string;
 }
 
 /** A stored vector entry. */

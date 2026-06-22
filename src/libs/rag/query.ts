@@ -12,6 +12,7 @@ import type { RagSearchResult } from './types';
 export interface QueryOptions {
     topK?: number;
     minScore?: number;
+    sourceIds?: string[];
 }
 
 /** Search vector store for chunks relevant to the question. */
@@ -25,7 +26,7 @@ export async function ragQuery(
     const minScore = options.minScore ?? 0;
 
     const [qEmbedding] = await embedder.embed([question]);
-    const results = store.search(qEmbedding, topK);
+    const results = store.search(qEmbedding, topK, options.sourceIds);
     return results.filter((r) => r.score >= minScore);
 }
 

@@ -463,9 +463,23 @@
       const embedder = await getRagEmbedderProvider(plugin);
       if (embedder && embedder.isReady()) {
         await ingestDocument(text, { sourceId, title: source.title }, vectorStore, embedder as any);
+      } else {
+        console.warn('[siyuan-all-in-one] indexSource skipped: embedder not ready');
+        sourceStore.update(sourceId, {
+          chunkStatus: 'error',
+          errorMessage: '嵌入模型未就绪，无法建立向量索引'
+        });
+        await sourceStore.save();
+        sources = sourceStore.getAll();
       }
     } catch (e: any) {
       console.warn('[siyuan-all-in-one] indexSource failed:', sourceId, e?.message);
+      sourceStore.update(sourceId, {
+        chunkStatus: 'error',
+        errorMessage: '向量索引失败: ' + (e?.message || '未知错误')
+      });
+      await sourceStore.save();
+      sources = sourceStore.getAll();
     }
   }
 

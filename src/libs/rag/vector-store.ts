@@ -101,10 +101,11 @@ export class VectorStore {
         this.entries = [];
     }
 
-    search(queryEmbedding: number[], topK = 5): RagSearchResult[] {
+    search(queryEmbedding: number[], topK = 5, sourceIds?: string[]): RagSearchResult[] {
         const results: RagSearchResult[] = [];
         for (const entry of this.entries) {
             if (!entry.embedding || entry.embedding.length === 0) continue;
+            if (sourceIds && sourceIds.length > 0 && !sourceIds.includes(entry.sourceId)) continue;
             const score = cosineSimilarity(queryEmbedding, entry.embedding);
             const chunk: RagChunk = {
                 id: entry.id,

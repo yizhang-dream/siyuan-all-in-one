@@ -110,12 +110,11 @@
     try {
       if (!embedderReady) await initEmbedder();
 
-      // RAG retrieval
-      let results = await ragQuery(text, store, embedder, { topK: config?.ragTopK || 5 });
-      // Filter by selected sources if any
-      if (selectedSourceIds.length > 0) {
-        results = results.filter((r: any) => selectedSourceIds.includes(r.entry?.sourceId || r.sourceId));
-      }
+      // RAG retrieval — pass sourceIds filter so only selected sources are searched
+      const results = await ragQuery(text, store, embedder, {
+        topK: config?.ragTopK || 5,
+        sourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
+      });
       const ctx = formatRagContext(results);
 
       // LLM call

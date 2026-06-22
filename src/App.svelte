@@ -18,8 +18,8 @@
   export let sourceStore: any;
   export let config: any;
 
-  // vectorStore is not yet a plugin-level store; placeholder for Phase 4+
-  let vectorStore: any;
+  import { VectorStore } from './libs/rag';
+  let vectorStore = new VectorStore(plugin);
 
   let activeTab = 'sources';
   let activeSubTab = 'generate';
@@ -43,6 +43,10 @@
     selectedSourceIds: [] as string[],
     onSwitchTab: (tab: string) => { activeTab = tab; },
   };
+
+  onMount(async () => {
+    await vectorStore.load();
+  });
 
   function switchTab(id: string) {
     if (id === 'make') {

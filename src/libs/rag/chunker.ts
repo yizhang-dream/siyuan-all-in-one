@@ -38,11 +38,12 @@ function genChunkId(sourceId: string, index: number): string {
 export function chunkText(
     text: string,
     metadata: RagChunkMetadata,
-    options: ChunkerOptions = {}
+    options: ChunkerOptions = {},
+    explicitSourceId?: string
 ): RagChunk[] {
     const chunkSizeTokens = options.chunkSize || DEFAULT_CHUNK_TOKENS;
     const overlapFraction = options.chunkOverlap ?? DEFAULT_OVERLAP;
-    const sourceId = hashFileName(metadata.fileName || metadata.title || text.slice(0, 80));
+    const sourceId = explicitSourceId || metadata.sourceId || hashFileName(metadata.fileName || metadata.title || text.slice(0, 80));
 
     if (!text.trim()) return [];
 
