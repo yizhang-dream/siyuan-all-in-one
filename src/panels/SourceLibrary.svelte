@@ -299,10 +299,20 @@
       let text: string;
       const parser = registry.getParser(ext);
 
-      if (parser && typeof (parser as any).parseBuffer === 'function') {
-        const buffer = await file.arrayBuffer();
-        const result = await (parser as any).parseBuffer(new Uint8Array(buffer), file.name);
-        text = result.text;
+      if (parser) {
+        // All parsers use fs.readFileSync internally — write buffer to temp file as shim
+        const fs = await import('fs');
+        const os = await import('os');
+        const path = await import('path');
+        const tmpPath = path.join(os.tmpdir(), `siyuan-import-${Date.now()}-${file.name}`);
+        const buf = Buffer.from(await file.arrayBuffer());
+        fs.writeFileSync(tmpPath, buf);
+        try {
+          const result = await parser.parse(tmpPath);
+          text = result.text;
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup errors */ }
+        }
       } else if (TEXT_EXTENSIONS.has(ext)) {
         text = await file.text();
         if (ext === '.html' || ext === '.htm') {
@@ -469,7 +479,10 @@
       await sourceStore.save();
       loadSources();
     } else {
-      // file / pdf / paste — 提示重新上传
+      // Remove old errored record first, then prompt re-upload
+      sourceStore.remove(id);
+      sourceStore.save();
+      loadSources();
       showMessage('请重新导入文件');
       if (source.type === 'pdf') {
         pdfFileInput.click();
@@ -483,8 +496,20 @@
 
   function useFor(panel: 'rag' | 'generate' | 'concepts') {
     if (selectedIds.size === 0) { showMessage('请先选择来源'); return; }
-    appStore.selectedSourceIds = Array.from(selectedIds);
-    for (const id of selectedIds) {
+
+    // Filter out errored items — they can't be used
+    const validIds = Array.from(selectedIds).filter(id => {
+      const s = sourceStore.getById(id);
+      return s && s.chunkStatus !== 'error';
+    });
+    const skipped = selectedIds.size - validIds.length;
+    if (skipped > 0) {
+      showMessage(`已跳过 ${skipped} 个导入失败的项目`);
+    }
+    if (validIds.length === 0) return;
+
+    appStore.selectedSourceIds = validIds;
+    for (const id of validIds) {
       sourceStore.trackUsage(id, panel);
     }
     sourceStore.save();
@@ -621,7 +646,7 @@
             <span class="source-item-title" title={source.title}>{source.title}</span>
             <span class="source-item-meta">
               <span class="source-type-label">{typeLabel(source.type)}</span>
-              <span class="source-status {statusClass(source)}">{statusLabel(source)}</span>
+              <span class="source-status {statusClass(source)}" title={source.errorMessage || ''}>{statusLabel(source)}</span>
               <span>{new Date(source.metadata.addedAt).toLocaleDateString()}</span>
               {#if source.whereUsed.usageCount > 0}
                 <span class="source-usage-badge">用了{source.whereUsed.usageCount}次</span>
