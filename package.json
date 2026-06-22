@@ -81,6 +81,8 @@
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
     "sql.js": "^1.14.1",
-    "ts-fsrs": "^5.4.1"
+    "tesseract.js": "^7.0.0",
+    "ts-fsrs": "^5.4.1",
+    "xlsx": "^0.18.5"
   }
 }
