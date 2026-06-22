@@ -45,12 +45,7 @@ export async function extractPdfText(
             pageCount,
         };
     } catch (err: any) {
-        return {
-            fileName,
-            text: '',
-            pageCount: 0,
-            error: err?.message || String(err),
-        };
+        throw new Error(`PDF 解析失败: ${err?.message || String(err)}`);
     }
 }
 

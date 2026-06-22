@@ -8,6 +8,7 @@ export class PdfParser implements SourceFileParser {
         const fs = await import('fs');
         const buf = fs.readFileSync(filePath);
         const result = await extractPdfText(new Uint8Array(buf).buffer, filePath);
+        if (result.error) throw new Error(result.error);
         return { text: result.text, metadata: { format: 'pdf' } };
     }
 }
