@@ -4,8 +4,7 @@
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
   import type { RagSearchResult, EmbeddingProvider } from '../libs/rag';
   import type { RagConceptRequest } from '../libs/rag';
-  import { callLLM } from '../libs/llm';
-  import type { LLMConfig } from '../libs/llm';
+  import { callLLM, resolveLLMConfig } from '../libs/llm';
   import { renderMath } from '../libs/render';
   import { getT } from '../libs/i18n';
 
@@ -135,11 +134,7 @@
         return;
       }
 
-      const llmConfig: LLMConfig = {
-        providerId,
-        model,
-        providers: cfg.providers || [],
-      };
+      const llmConfig = resolveLLMConfig(cfg, providerId, model);
 
       const systemPrompt = ctx
         ? `你是一个知识助手。根据提供的上下文回答问题。如果上下文不包含足够信息，请如实说明。\n\n上下文：\n${ctx}`
