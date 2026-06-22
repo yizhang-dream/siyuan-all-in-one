@@ -119,12 +119,20 @@
     try {
       if (embeddingProvider === 'ollama') {
         const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/api/tags`);
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`Ollama API error ${resp.status}: ${text}`);
+        }
         const json = await resp.json();
         embeddingModelList = (json.models || []).map((m: any) => m.name);
       } else if (embeddingProvider === 'openai') {
         const resp = await fetch('https://api.openai.com/v1/models', {
           headers: { 'Authorization': `Bearer ${embeddingApiKey}` },
         });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`OpenAI API error ${resp.status}: ${text}`);
+        }
         const json = await resp.json();
         embeddingModelList = (json.data || [])
           .filter((m: any) => m.id.startsWith('text-embedding-'))
@@ -133,6 +141,10 @@
         const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
           headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
         });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`Custom embedding API error ${resp.status}: ${text}`);
+        }
         const json = await resp.json();
         embeddingModelList = (json.data || []).map((m: any) => m.id);
       }

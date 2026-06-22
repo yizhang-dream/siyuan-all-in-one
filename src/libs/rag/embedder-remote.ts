@@ -83,7 +83,16 @@ export abstract class RemoteEmbedderBase implements EmbeddingProvider {
             throw new Error(`Embedding API error ${response.status}: ${errorText}`);
         }
 
-        const json = await response.json();
+        const text = await response.text();
+        if (!text) {
+            throw new Error(`Embedding API returned empty response (status ${response.status})`);
+        }
+        let json: any;
+        try {
+            json = JSON.parse(text);
+        } catch {
+            throw new Error(`Embedding API returned non-JSON response: ${text.slice(0, 200)}`);
+        }
         return this.parseResponse(json);
     }
 }
