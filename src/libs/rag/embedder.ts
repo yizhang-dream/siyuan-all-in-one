@@ -2,7 +2,7 @@
  * Copyright (c) 2026 siyuan-all-in-one
  * MIT License
  *
- * Embedding layer: lazy-loads @huggingface/transformers + bge-base-zh-v1.5 (Q8, ~103MB).
+ * Embedding layer: lazy-loads @huggingface/transformers + paraphrase-multilingual-MiniLM-L12-v2 (Q8, ~118MB).
  * Graceful fallback to zero-vectors if the model is unavailable.
  */
 
@@ -27,7 +27,7 @@ export class RagEmbedder {
     private cache: Map<string, number[]>;
 
     constructor(modelName?: string) {
-        this.modelName = modelName || 'Xenova/bge-base-zh-v1.5';
+        this.modelName = modelName || 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
         this.cache = new Map();
     }
 

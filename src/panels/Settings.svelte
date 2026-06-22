@@ -104,7 +104,7 @@
   function onEmbeddingProviderChange() {
     embeddingModelList = [];
     if (embeddingProvider === 'builtin') {
-      embeddingModel = 'Xenova/bge-base-zh-v1.5';
+      embeddingModel = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
     } else if (embeddingProvider === 'ollama') {
       embeddingEndpoint = embeddingEndpoint || 'http://localhost:11434';
       embeddingModel = embeddingModel || '';
@@ -424,7 +424,7 @@
         <label class="b3-label">
           <span class="b3-label__text">嵌入模型</span>
           <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
-            <option value="builtin">内置 (bge-base-zh-v1.5, 768维)</option>
+            <option value="builtin">内置 (paraphrase-multilingual-MiniLM-L12-v2, 768维)</option>
             <option value="ollama">Ollama 本地</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
@@ -764,7 +764,7 @@
         <label class="b3-label">
           <span class="b3-label__text">嵌入模型</span>
           <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
-            <option value="builtin">内置 (bge-base-zh-v1.5, 768维)</option>
+            <option value="builtin">内置 (paraphrase-multilingual-MiniLM-L12-v2, 768维)</option>
             <option value="ollama">Ollama 本地</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
