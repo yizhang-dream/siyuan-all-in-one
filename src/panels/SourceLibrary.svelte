@@ -29,9 +29,6 @@
   let searchQuery = '';
   let sortBy = 'newest';
 
-  // Import 下拉
-  let importMenuOpen = false;
-
   // 粘贴 dialog
   let showPasteDialog = false;
   let pasteText = '';
@@ -114,32 +111,8 @@
 
   // ── 导入 ───────────────────────────────────────────
 
-  /** Click-outside action: closes menu when clicking outside the wrapper */
-  function clickOutside(node: HTMLElement) {
-    function handler(e: MouseEvent) {
-      if (!node.contains(e.target as Node)) {
-        closeImportMenu();
-      }
-    }
-    document.addEventListener('click', handler);
-    return {
-      destroy() {
-        document.removeEventListener('click', handler, true);
-      }
-    };
-  }
-
-  function toggleImportMenu() {
-    importMenuOpen = !importMenuOpen;
-  }
-
-  function closeImportMenu() {
-    importMenuOpen = false;
-  }
-
   /** ① 文件 */
   function handleImportFile() {
-    closeImportMenu();
     fileInput.click();
   }
 
@@ -152,7 +125,6 @@
 
   /** ② 粘贴 */
   function handleImportPaste() {
-    closeImportMenu();
     showPasteDialog = true;
     pasteText = '';
   }
@@ -166,7 +138,6 @@
 
   /** ③ URL */
   function handleImportUrl() {
-    closeImportMenu();
     showUrlDialog = true;
     urlText = '';
   }
@@ -195,7 +166,6 @@
 
   /** ④ PDF */
   function handleImportPdf() {
-    closeImportMenu();
     pdfFileInput.click();
   }
 
@@ -208,7 +178,6 @@
 
   /** ⑤ 思源文档 */
   function handleImportSiyuan() {
-    closeImportMenu();
     showDocSearch = true;
     docQuery = '';
     docResults = [];
@@ -307,7 +276,8 @@
         const fs = await import('fs');
         const os = await import('os');
         const path = await import('path');
-        const tmpPath = path.join(os.tmpdir(), `siyuan-import-${Date.now()}-${file.name}`);
+        const ext = file.name.split('.').pop() || 'tmp';
+        const tmpPath = path.join(os.tmpdir(), `import_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
         const buf = Buffer.from(await file.arrayBuffer());
         fs.writeFileSync(tmpPath, buf);
         try {
@@ -579,33 +549,29 @@
 <div class="source-library">
   <!-- 顶部工具栏 -->
   <div class="source-toolbar">
-    <!-- 导入按钮 + 下拉菜单 -->
-    <div class="import-wrapper" use:clickOutside>
-      <button class="b3-button b3-button--outline import-trigger" on:click={toggleImportMenu}>
-        <svg><use xlink:href="#iconAdd"></use></svg>
-        <span>导入</span>
-        <span class="import-arrow">▾</span>
+    <!-- 导入按钮 -->
+    <div class="toolbar-import-group">
+      <button class="b3-button b3-button--outline import-btn" on:click={handleImportFile} title="导入文件">
+        <span>📄</span><span>文件</span>
       </button>
-      {#if importMenuOpen}
-        <div class="import-menu">
-          <button class="import-menu-item" on:click={handleImportFile}>
-            <span>📄</span><span>文件</span>
-          </button>
-          <button class="import-menu-item" on:click={handleImportPaste}>
-            <span>📎</span><span>粘贴</span>
-          </button>
-          <button class="import-menu-item" on:click={handleImportUrl}>
-            <span>🌐</span><span>URL</span>
-          </button>
-          <button class="import-menu-item" on:click={handleImportPdf}>
-            <span>📕</span><span>PDF</span>
-          </button>
-          <button class="import-menu-item" on:click={handleImportSiyuan}>
-            <span>📑</span><span>思源文档</span>
-          </button>
-        </div>
-      {/if}
+      <button class="b3-button b3-button--outline import-btn" on:click={handleImportPaste} title="导入粘贴内容">
+        <span>📎</span><span>粘贴</span>
+      </button>
+      <button class="b3-button b3-button--outline import-btn" on:click={handleImportUrl} title="导入 URL">
+        <span>🌐</span><span>URL</span>
+      </button>
+      <button class="b3-button b3-button--outline import-btn" on:click={handleImportPdf} title="导入 PDF">
+        <span>📕</span><span>PDF</span>
+      </button>
+      <button class="b3-button b3-button--outline import-btn" on:click={handleImportSiyuan} title="导入思源文档">
+        <span>📑</span><span>思源</span>
+      </button>
     </div>
+
+    <div class="toolbar-spacer"></div>
+
+    <!-- 搜索框 -->
+    <input class="b3-text-field search-input" type="text" placeholder="搜索标题…" bind:value={searchQuery} />
 
     <!-- 过滤器 -->
     <select class="b3-select filter-select" bind:value={filterType}>
@@ -619,9 +585,6 @@
       <option value="oldest">最早 ↑</option>
       <option value="name">名称 ↑</option>
     </select>
-
-    <!-- 搜索框 -->
-    <input class="b3-text-field search-input" type="text" placeholder="搜索标题…" bind:value={searchQuery} />
   </div>
 
   <!-- 来源列表 -->
@@ -705,7 +668,7 @@
   type="file"
   bind:this={fileInput}
   on:change={onFileSelected}
-  accept={registry.getSupportedExtensions().join(',')}
+  accept=".txt,.md,.html,.csv,.json,.xml,.docx,.pptx,.xlsx,.epub"
   style="display:none"
 />
 
@@ -807,70 +770,35 @@
   .source-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 8px 12px;
     border-bottom: 1px solid var(--b3-theme-surface-lighter);
     flex-shrink: 0;
   }
 
-  .import-wrapper {
-    position: relative;
-  }
-
-  .import-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-
-    svg {
-      width: 14px;
-      height: 14px;
-    }
-  }
-
-  .import-arrow {
-    font-size: 10px;
-    margin-left: 2px;
-  }
-
-  .import-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 4px;
-    background: var(--b3-theme-background);
-    border: 1px solid var(--b3-theme-surface-lighter);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-    z-index: 100;
-    min-width: 160px;
-    padding: 4px;
-  }
-
-  .import-menu-item {
+  .toolbar-import-group {
     display: flex;
     align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 12px;
-    border: none;
-    background: none;
-    color: var(--b3-theme-on-background);
-    font-size: var(--aio-fs-base);
-    cursor: pointer;
-    border-radius: 4px;
-    text-align: left;
+    gap: 4px;
+    flex-shrink: 0;
+  }
 
-    &:hover {
-      background: var(--b3-theme-surface-light);
-    }
+  .import-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+    font-size: var(--aio-fs-sm);
+    padding: 3px 8px;
 
     span:first-child {
-      font-size: 16px;
-      width: 20px;
-      text-align: center;
+      font-size: 14px;
     }
+  }
+
+  .toolbar-spacer {
+    flex: 1;
+    min-width: 0;
   }
 
   .filter-select {
