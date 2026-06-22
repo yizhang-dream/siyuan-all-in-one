@@ -6,6 +6,12 @@
   import { genId } from '../libs/config';
   import { ingestDocument } from '../libs/rag/ingest';
   import { getRagEmbedderProvider } from '../libs/rag';
+  import { createRequire } from 'module';
+
+  const require = createRequire(import.meta.url);
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
 
   export let plugin: any;
   export let sourceStore: SourceStore;
@@ -267,9 +273,6 @@
 
       if (parser) {
         // All parsers use fs.readFileSync internally — write buffer to temp file as shim
-        const fs = await import('fs');
-        const os = await import('os');
-        const path = await import('path');
         const ext = file.name.split('.').pop() || 'tmp';
         const tmpPath = path.join(os.tmpdir(), `import_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
         const buf = Buffer.from(await file.arrayBuffer());

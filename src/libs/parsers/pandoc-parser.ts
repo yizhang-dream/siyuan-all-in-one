@@ -1,4 +1,9 @@
+import { createRequire } from 'module';
 import type { SourceFileParser, ParseResult } from './types';
+
+const require = createRequire(import.meta.url);
+const fs = require('fs');
+const path = require('path');
 
 /**
  * 通过 SiYuan 内置 Pandoc API 转换文档格式。
@@ -8,8 +13,6 @@ export class PandocParser implements SourceFileParser {
     supportedExtensions = ['.docx', '.doc', '.pptx', '.ppt', '.epub', '.odt', '.rtf', '.org', '.rst', '.tex'];
 
     async parse(filePath: string): Promise<ParseResult> {
-        const path = await import('path');
-        const fs = await import('fs');
         
         const fileName = path.basename(filePath);
         const ext = path.extname(filePath).slice(1);

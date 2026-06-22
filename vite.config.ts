@@ -37,11 +37,7 @@ export default defineConfig({
         },
     },
     optimizeDeps: {
-        exclude: [
-            // pdfjs-dist uses web workers and DOM APIs that break under Vite CJS
-            // bundling. Loading it at runtime via require() avoids the issue.
-            'pdfjs-dist',
-        ],
+        exclude: [],
     },
     plugins: [
         svelte(),
@@ -80,6 +76,7 @@ export default defineConfig({
             external: [
                 "siyuan",
                 "process",
+                "module",
                 // Node.js built-in modules used by @huggingface/transformers (transformers.node.cjs)
                 // and onnxruntime (ort.node.min.js). These MUST be external so Electron's renderer
                 // can resolve them via require() at runtime.
@@ -102,12 +99,6 @@ export default defineConfig({
                 "node:events",
                 "node:crypto",
                 "node:child_process",
-
-                // pdfjs-dist — externalised so it loads at runtime via require()
-                // instead of being bundled by Vite CJS (which breaks web worker
-                // and DOM API usage).
-                "pdfjs-dist",
-
             ],
             output: {
                 entryFileNames: "[name].js",
