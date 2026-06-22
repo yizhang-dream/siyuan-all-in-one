@@ -88,12 +88,33 @@ export class RagEmbedder {
 
     /**
      * Point transformers.js to the bundled local model files so no download is needed.
-     * Uses either the explicitly provided pluginDirPath or __dirname (CJS build output dir).
+     * Resolution order:
+     *   1. this.pluginDirPath (explicitly provided by caller)
+     *   2. import.meta.url (Vite ESM bundle — extract plugin dir from script URL)
+     *   3. No local path — fall back to downloading from network
      */
     private configureLocalModelPath(env: any): void {
-        const baseDir = this.pluginDirPath || (typeof __dirname !== 'undefined' ? __dirname : '');
+        let baseDir = this.pluginDirPath;
+        if (!baseDir) {
+            try {
+                const url = new URL('.', import.meta.url);
+                // url.pathname is like /C:/Users/.../plugins/siyuan-all-in-one/
+                let path = url.pathname;
+                // On Windows, remove leading / so /C:/... becomes C:/...
+                if (path.startsWith('/') && /^\/[A-Z]:\//i.test(path)) {
+                    path = path.slice(1);
+                }
+                // Replace forward slashes with backslashes on Windows
+                if (path.includes(':\\') || path.includes(':/')) {
+                    path = path.replace(/\//g, '\\');
+                }
+                baseDir = path;
+            } catch {
+                // import.meta.url unavailable — fall through to no local path
+            }
+        }
         if (baseDir) {
-            env.localModelPath = baseDir + '/models/';
+            env.localModelPath = baseDir + 'models/';
             env.allowLocalModels = true;
         }
     }
