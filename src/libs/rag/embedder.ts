@@ -59,7 +59,9 @@ export class RagEmbedder {
     private async _init(): Promise<void> {
         try {
             const mod = await import('@huggingface/transformers');
-            const { pipeline } = mod;
+            const { pipeline, env } = mod;
+            // Use HF mirror for users in China where huggingface.co is blocked
+            env.remoteHost = 'https://hf-mirror.com';
             this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
             this.ready = true;
         } catch (err: any) {
@@ -89,7 +91,7 @@ export class RagEmbedder {
             }
 
             if (!this.ready || !this.pipeline) {
-                const zero = new Array(768).fill(0);
+                const zero = new Array(DEFAULT_EMBEDDING_DIM).fill(0);
                 results.push(zero);
                 continue;
             }
@@ -101,7 +103,7 @@ export class RagEmbedder {
                 results.push(vec);
             } catch (err: any) {
                 console.warn('[siyuan-all-in-one] Embed failed for text:', err?.message);
-                const zero = new Array(768).fill(0);
+                const zero = new Array(DEFAULT_EMBEDDING_DIM).fill(0);
                 results.push(zero);
             }
         }
@@ -112,7 +114,7 @@ export class RagEmbedder {
 
 // ── Multi-provider singleton ────────────────────────────────────────────────
 
-import type { EmbeddingProviderType, EmbeddingConfig, EmbeddingProvider } from './embedder-types';
+import { DEFAULT_EMBEDDING_DIM, type EmbeddingProviderType, type EmbeddingConfig, type EmbeddingProvider } from './embedder-types';
 
 let _provider: EmbeddingProvider | null = null;
 

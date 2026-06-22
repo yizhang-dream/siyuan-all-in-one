@@ -22,4 +22,4 @@ export interface EmbeddingProvider {
     embed(texts: string[]): Promise<number[][]>;
 }
 
-export const DEFAULT_EMBEDDING_DIM = 768;
+export const DEFAULT_EMBEDDING_DIM = 384;
