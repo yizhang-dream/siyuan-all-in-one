@@ -5,7 +5,7 @@
  * Local RAG barrel export.
  */
 
-export { chunkText } from './chunker';
+export { chunkText, splitIntoSentences } from './chunker';
 export type { ChunkerOptions } from './chunker';
 
 export { RagEmbedder, getRagEmbedder, resetRagEmbedder } from './embedder';

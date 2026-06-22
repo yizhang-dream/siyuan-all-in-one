@@ -4,7 +4,13 @@
  *
  * Embedding layer: lazy-loads @huggingface/transformers + paraphrase-multilingual-MiniLM-L12-v2 (Q8, ~118MB).
  * Graceful fallback to zero-vectors if the model is unavailable.
+ *
+ * Performance: embeddings are L2-normalized ({ normalize: true }) so cosine similarity
+ * in the vector store can use a simple dot product. For long texts (>500 chars),
+ * sentence-level splitting with weighted-averaging produces better semantic representations.
  */
+
+import { splitIntoSentences } from './chunker';
 
 /** Singleton embedder instance. */
 let _instance: RagEmbedder | null = null;
@@ -131,6 +137,9 @@ export class RagEmbedder {
         }
     }
 
+    /** Threshold in chars above which sentence-level weighted embedding is used. */
+    private static readonly SENTENCE_EMBED_THRESHOLD = 500;
+
     /** Embed texts to float vectors. Returns zero-vectors on failure. */
     async embed(texts: string[]): Promise<number[][]> {
         const results: number[][] = [];
@@ -158,8 +167,9 @@ export class RagEmbedder {
             }
 
             try {
-                const output = await this.pipeline(text, { pooling: 'mean', normalize: true });
-                const vec = Array.from(output.data as Float32Array) as number[];
+                const vec = text.length > RagEmbedder.SENTENCE_EMBED_THRESHOLD
+                    ? await this.embedSentencesWeighted(text)
+                    : await this.embedDirect(text);
                 this.cache.set(text, vec);
                 results.push(vec);
             } catch (err: any) {
@@ -170,6 +180,76 @@ export class RagEmbedder {
         }
 
         return results;
+    }
+
+    /** Direct pipeline call for short texts. */
+    private async embedDirect(text: string): Promise<number[]> {
+        const output = await this.pipeline(text, { pooling: 'mean', normalize: true });
+        return Array.from(output.data as Float32Array);
+    }
+
+    /**
+     * Sentence-level weighted embedding for long texts.
+     *
+     * Splits the text into sentences, embeds each independently, then computes a
+     * weighted average (weights = sentence character length). The result is
+     * L2-normalized to maintain unit-vector invariants for dot-product search.
+     *
+     * This avoids truncating or splitting mid-sentence, producing better semantic
+     * representations for retrieval.
+     */
+    private async embedSentencesWeighted(text: string): Promise<number[]> {
+        const sentences = splitIntoSentences(text);
+        // Short-circuit: if single sentence, embed directly (avoids averaging overhead)
+        if (sentences.length <= 1) {
+            return this.embedDirect(text);
+        }
+
+        const dim = DEFAULT_EMBEDDING_DIM;
+        const weightedSum = new Array(dim).fill(0);
+        let totalWeight = 0;
+
+        for (const sentence of sentences) {
+            const weight = sentence.length;
+            if (weight === 0) continue;
+
+            try {
+                const output = await this.pipeline(sentence, { pooling: 'mean', normalize: true });
+                const embedding = Array.from(output.data as Float32Array);
+
+                for (let i = 0; i < dim; i++) {
+                    weightedSum[i] += embedding[i] * weight;
+                }
+                totalWeight += weight;
+            } catch {
+                // Skip failed sentences — they contribute 0 to the weighted sum
+            }
+        }
+
+        // All sentences failed — return zero vector
+        if (totalWeight === 0) {
+            return new Array(dim).fill(0);
+        }
+
+        // Weighted average
+        for (let i = 0; i < dim; i++) {
+            weightedSum[i] /= totalWeight;
+        }
+
+        // L2-normalize: pipeline normalizes each sentence, but the weighted
+        // average of unit vectors is not necessarily a unit vector.
+        let norm = 0;
+        for (let i = 0; i < dim; i++) {
+            norm += weightedSum[i] * weightedSum[i];
+        }
+        norm = Math.sqrt(norm);
+        if (norm > 0) {
+            for (let i = 0; i < dim; i++) {
+                weightedSum[i] /= norm;
+            }
+        }
+
+        return weightedSum;
     }
 }
 

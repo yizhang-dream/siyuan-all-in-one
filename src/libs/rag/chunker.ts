@@ -207,6 +207,39 @@ function splitWithOverlap(parts: string[], maxChars: number, overlapChars: numbe
     return result;
 }
 
+// ── Sentence-level splitting ────────────────────────────
+
+/**
+ * Split text into sentence-level segments for sentence-aware embedding refinement.
+ * Handles Chinese (。！？) and English (. ! ?) sentence boundaries, plus newlines.
+ * Returns the original text as a single element array if no sentence boundaries found.
+ */
+export function splitIntoSentences(text: string): string[] {
+    if (!text.trim()) return [];
+    const result: string[] = [];
+    let current = '';
+    for (let i = 0; i < text.length; i++) {
+        current += text[i];
+        const char = text[i];
+        const nextChar = text[i + 1] || '';
+        // Chinese sentence ending (no whitespace needed)
+        if (/[。！？\n]/.test(char)) {
+            const trimmed = current.trim();
+            if (trimmed) result.push(trimmed);
+            current = '';
+        }
+        // English sentence ending (followed by whitespace, newline, or end-of-string)
+        else if (/[.!?]/.test(char) && (!nextChar || /\s/.test(nextChar))) {
+            const trimmed = current.trim();
+            if (trimmed) result.push(trimmed);
+            current = '';
+        }
+    }
+    const remaining = current.trim();
+    if (remaining) result.push(remaining);
+    return result.length > 0 ? result : [text.trim()];
+}
+
 // ── Helpers ───────────────────────────────────────────────
 
 function hashFileName(name: string): string {
