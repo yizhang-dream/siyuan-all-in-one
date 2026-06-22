@@ -13,6 +13,7 @@ export const BUILTIN_PROVIDERS: Provider[] = [
         apiKey: '',
         models: [],
         isBuiltIn: true,
+        disableThinking: true,
     },
     {
         id: 'zhipu',
@@ -88,7 +89,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     mindmapModel: '',
     cardsPerDay: 30,
     scheduler: 'sm2',
-    defaultDeck: '默认',
+    defaultDeck: 'Default',
     agents: [],
     ragEmbeddingProvider: 'builtin',
     ragEmbeddingConfig: { endpoint: '', apiKey: '', model: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2' },
@@ -117,9 +118,9 @@ export function cleanAgent(raw: any): AgentConfig {
         name: String(raw?.name ?? '未命名 Agent'),
         prompt: String(raw?.prompt ?? ''),
         suggestedCount: Number(raw?.suggestedCount) || 10,
-        language: String(raw?.language || 'zh-CN'),
-        style: String(raw?.style || '简洁'),
-        difficulty: String(raw?.difficulty || '进阶'),
+        language: String(raw?.language || 'auto'),
+        style: String(raw?.style || 'standard'),
+        difficulty: String(raw?.difficulty || 'intermediate'),
         tokensPerCard: Number(raw?.tokensPerCard) || 400,
     };
 }

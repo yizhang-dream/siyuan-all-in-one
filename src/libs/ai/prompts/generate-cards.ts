@@ -7,7 +7,7 @@ export function buildGenerateCardsPrompt(
     relations: RelationCandidate[],
     chunks: PromptSourceChunk[],
     targetCount: number,
-    language = 'zh-CN',
+    language = 'auto',
     cdfMode = false
 ): string {
     const cdfSection = cdfMode ? buildCDFSection(language) : '';
@@ -67,7 +67,7 @@ SOURCES:
 ${JSON.stringify(chunks, null, 2)}`;
 }
 
-function buildCDFSection(language = 'zh-CN'): string {
+function buildCDFSection(language = 'auto'): string {
     return `
 
 CDF (Concept Descriptor Framework) 模式：

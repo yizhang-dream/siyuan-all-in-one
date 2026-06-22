@@ -11,6 +11,12 @@
 import type { AgentConfig } from './types';
 import type { AppConfig, Provider } from './types';
 
+/** Anthropic API 版本头，用于 Anthropic Claude 请求 */
+const ANTHROPIC_API_VERSION = '2023-06-01';
+
+/** 单次 LLM 调用的输出 token 上限 */
+const MAX_OUTPUT_TOKENS = 8192;
+
 /**
  * URL 解析辅助函数。
  * 处理用户粘贴的各种 baseUrl 格式，自动拼接正确的端点路径。
@@ -89,6 +95,7 @@ export function resolveLLMConfig(
         model: model || provider?.models?.[0] || '',
         apiKey: provider?.apiKey || '',
         providerId,
+        disableThinking: provider?.disableThinking,
     };
 }
 
@@ -106,7 +113,7 @@ export async function fetchProviderModels(provider: Provider): Promise<string[]>
         if (provider.apiKey) headers['x-goog-api-key'] = provider.apiKey;
     } else if (provider.id === 'anthropic') {
         if (provider.apiKey) headers['x-api-key'] = provider.apiKey;
-        headers['anthropic-version'] = '2023-06-01';
+        headers['anthropic-version'] = ANTHROPIC_API_VERSION;
     } else {
         if (provider.apiKey) headers['Authorization'] = 'Bearer ' + provider.apiKey;
     }
@@ -154,6 +161,12 @@ export interface LLMConfig {
     maxTokens?: number;
     temperature?: number;
     timeout?: number;
+    /** 是否禁用思考/推理 token（如 DeepSeek） */
+    disableThinking?: boolean;
+    /** 请求失败时的最大重试次数（默认 5） */
+    maxRetries?: number;
+    /** 指数退避的初始延迟（ms）（默认 15000） */
+    retryDelayMs?: number;
 }
 
 export interface ChatMessage {
@@ -200,14 +213,17 @@ export function getProviderCapabilities(providerId = 'openai-compatible'): Provi
 }
 
 const DEFAULT_CONFIG: Required<LLMConfig> = {
-    endpoint: 'https://api.deepseek.com/v1/chat/completions',
-    model: 'deepseek-chat',
+    endpoint: '',
+    model: '',
     apiKey: '',
-    providerId: 'openai-compatible',
+    providerId: '',
     responseFormat: 'text',
-    maxTokens: 8192,
+    maxTokens: MAX_OUTPUT_TOKENS,
     temperature: 0.7,
     timeout: 300_000,
+    disableThinking: false,
+    maxRetries: 5,
+    retryDelayMs: 15_000,
 };
 
 export class LLMError extends Error {
@@ -260,7 +276,7 @@ export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMCon
 
     if (providerId === 'anthropic') {
         if (config.apiKey) headers['x-api-key'] = config.apiKey;
-        headers['anthropic-version'] = '2023-06-01';
+        headers['anthropic-version'] = ANTHROPIC_API_VERSION;
         const systemText = joinMessages(messages, 'system');
         const body: Record<string, any> = {
             model: config.model,
@@ -287,7 +303,7 @@ export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMCon
     if (config.responseFormat === 'json_object' && capabilities.structuredOutputStrategy === 'openai-compatible') {
         body.response_format = { type: 'json_object' };
     }
-    if ((providerId === 'deepseek' || config.model.startsWith('deepseek-')) && config.model) {
+    if (config.disableThinking || providerId === 'deepseek') {
         body.thinking = { type: 'disabled' };
     }
     return { headers, body };
@@ -358,8 +374,21 @@ export async function callLLM(
         }
     }
     const cfg = { ...DEFAULT_CONFIG, ...effectiveConfig } as Required<LLMConfig>;
-    const maxRetries = 5;
-    const baseDelay = 15_000;
+
+    // 校验必要字段：用户必须在设置中配置 Provider
+    if (!cfg.endpoint || !cfg.model || !cfg.providerId) {
+        const missing = [];
+        if (!cfg.endpoint) missing.push('endpoint');
+        if (!cfg.model) missing.push('model');
+        if (!cfg.providerId) missing.push('providerId');
+        throw new LLMError(
+            `请先在设置中配置 AI Provider（缺少: ${missing.join(', ')}）`,
+            0
+        );
+    }
+
+    const maxRetries = cfg.maxRetries;
+    const baseDelay = cfg.retryDelayMs;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -434,7 +463,7 @@ export async function generateFlashcards(
     context?: string
 ): Promise<GeneratedCard[]> {
     // 按 count + agent.tokensPerCard 动态计算 maxTokens
-    const estimatedTokens = Math.min(8192, count * (agent.tokensPerCard || 400) + 500);
+    const estimatedTokens = Math.min(MAX_OUTPUT_TOKENS, count * (agent.tokensPerCard || 400) + 500);
     const effectiveConfig: LLMConfig = {
         ...config,
         maxTokens: Math.max(config?.maxTokens || 0, estimatedTokens),
@@ -444,9 +473,9 @@ export async function generateFlashcards(
     const filledPrompt = (agent.prompt || '')
         .replace(/\{topic\}/g, topic)
         .replace(/\{count\}/g, String(count))
-        .replace(/\{language\}/g, agent.language || 'zh-CN')
-        .replace(/\{style\}/g, agent.style || '简洁')
-        .replace(/\{difficulty\}/g, agent.difficulty || '进阶')
+        .replace(/\{language\}/g, agent.language || 'auto')
+        .replace(/\{style\}/g, agent.style || 'standard')
+        .replace(/\{difficulty\}/g, agent.difficulty || 'intermediate')
         .replace(/\{context\}/g, context || '');
 
     // 固定的输出格式约束（代码追加，用户不用写）

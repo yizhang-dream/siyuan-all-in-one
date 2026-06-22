@@ -7,7 +7,7 @@ export interface PromptSourceChunk {
     sourceRef: SourceRef;
 }
 
-export function buildExtractConceptsPrompt(chunks: PromptSourceChunk[], language = 'zh-CN'): string {
+export function buildExtractConceptsPrompt(chunks: PromptSourceChunk[], language = 'auto'): string {
     return `你是一个保守的学习材料结构化助手。你的任务是从给定资料中抽取“概念节点候选”。
 
 硬性规则：

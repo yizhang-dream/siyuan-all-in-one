@@ -74,7 +74,7 @@
         }
         throw new Error(parsed.warnings.join('；') || '未识别为插件备份文件');
       }
-      const defaultDeck = config?.defaultDeck || 'Anki 导入';
+      const defaultDeck = config?.defaultDeck || 'Imported from Anki';
       const parsed = await parseAnkiFile(file, defaultDeck, (q) => cardStore.isDuplicate(q));
       cards = parsed;
       stats = calcStats(parsed);

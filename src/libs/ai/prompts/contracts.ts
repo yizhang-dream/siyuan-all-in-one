@@ -1,4 +1,4 @@
-export function buildPromptContract(language = 'zh-CN'): string {
+export function buildPromptContract(language = 'auto'): string {
     return [
         'STRICT OUTPUT CONTRACT',
         '- Return one JSON object only. Do not return markdown fences, prose, comments, or XML.',

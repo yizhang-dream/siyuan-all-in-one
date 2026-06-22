@@ -108,7 +108,7 @@ export async function runPromptPipeline(
     options: PipelineOptions = {}
 ): Promise<PipelineResult> {
     const chunks = normalizeSources(sources);
-    const language = options.language || 'zh-CN';
+    const language = options.language || 'auto';
     const llmConfig = withLowTemperature(options.llmConfig, options.temperature);
     if (chunks.length === 0) {
         return emptyPipelineResult('No usable source text was provided');
@@ -171,7 +171,7 @@ export async function assignCardsToConcepts(
     cards: CardCandidate[],
     options: PipelineOptions = {}
 ): Promise<CardAssignmentResult> {
-    const language = options.language || 'zh-CN';
+    const language = options.language || 'auto';
     const warnings: string[] = [];
     options.onStep?.('assign-cards', 'Assigning cards to concepts');
     const json = await callStepJson(

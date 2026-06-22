@@ -5,7 +5,7 @@ import { buildPromptContract, buildRelationRubric } from './contracts';
 export function buildInferRelationsPrompt(
     concepts: ConceptCandidate[],
     chunks: PromptSourceChunk[],
-    language = 'zh-CN'
+    language = 'auto'
 ): string {
     return `你是一个知识图谱关系审校助手。你的任务是在概念候选之间判断可证据支持的关系。
 

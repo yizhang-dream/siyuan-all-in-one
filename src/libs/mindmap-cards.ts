@@ -49,7 +49,7 @@ export function extractMindmapTopics(markdown: string): MindmapTopic[] {
     return topics.filter((topic) => topic.path.length > 1 || topics.length === 1);
 }
 
-export function buildMindmapToCardsPrompt(topics: MindmapTopic[], targetCount: number, language = 'zh-CN'): string {
+export function buildMindmapToCardsPrompt(topics: MindmapTopic[], targetCount: number, language = 'auto'): string {
     const clippedTopics = topics.slice(0, 80).map((topic) => ({
         id: topic.id,
         title: topic.title,
@@ -92,7 +92,7 @@ export async function generateMindmapCardDrafts(
     markdown: string,
     llmConfig: LLMConfig,
     targetCount = 8,
-    language = 'zh-CN'
+    language = 'auto'
 ): Promise<{ cards: MindmapCardDraft[]; warnings: string[]; topics: MindmapTopic[] }> {
     const topics = extractMindmapTopics(markdown);
     if (topics.length === 0) {

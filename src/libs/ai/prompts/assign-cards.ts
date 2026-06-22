@@ -4,7 +4,7 @@ import { buildPromptContract } from './contracts';
 export function buildAssignCardsPrompt(
     concepts: ConceptCandidate[],
     cards: CardCandidate[],
-    language = 'zh-CN'
+    language = 'auto'
 ): string {
     return `你是一个闪卡归类助手。你的任务是把未归类卡片匹配到最合适的概念候选。
 
