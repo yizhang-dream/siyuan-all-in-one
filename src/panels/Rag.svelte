@@ -24,6 +24,7 @@
   let embedder: EmbeddingProvider;
   let embedderReady = false;
   let embedderError = '';
+  let embedderLoading = false;
 
   // Reactively sync displayed status when embedder changes
   $: if (embedder) {
@@ -50,7 +51,8 @@
     // Reset singleton so provider config is re-read on every tab re-entry
     resetEmbeddingProvider();
 
-    // Initialize embedder via multi-provider system
+    // Auto-initialize embedder on page load
+    embedderLoading = true;
     try {
       embedder = await getRagEmbedderProvider();
       embedderReady = embedder.isReady();
@@ -58,6 +60,8 @@
     } catch (e: any) {
       embedderError = e?.message || String(e);
       embedderReady = false;
+    } finally {
+      embedderLoading = false;
     }
 
     // Pre-fill from sourceTarget
@@ -73,8 +77,9 @@
   });
 
   async function initEmbedder() {
+    embedderLoading = true;
+    embedderError = '';
     try {
-      embedderError = '';
       resetEmbeddingProvider();
       embedder = await getRagEmbedderProvider();
       embedderReady = embedder.isReady();
@@ -82,6 +87,9 @@
       if (embedderReady) showMessage('嵌入模型已就绪');
     } catch (e: any) {
       embedderError = e?.message || String(e);
+      embedderReady = false;
+    } finally {
+      embedderLoading = false;
     }
   }
 
@@ -216,12 +224,16 @@
       <div class="rag-section">
         <h4 class="rag-section-title">嵌入模型</h4>
         <div class="rag-model-status" class:rag-model-ok={embedderReady} class:rag-model-err={!!embedderError}>
-          {#if embedderReady}
+          {#if embedderLoading}
+            <svg><use xlink:href="#iconRefresh"></use></svg>
+            <span>加载中...</span>
+          {:else if embedderReady}
             <svg><use xlink:href="#iconCheck"></use></svg>
             <span>已就绪 ({embedder.getModelName().split('/').pop()})</span>
           {:else if embedderError}
             <svg><use xlink:href="#iconInfo"></use></svg>
             <span title={embedderError}>不可用：{embedderError}</span>
+            <button class="b3-button b3-button--small" on:click={initEmbedder}>重试</button>
           {:else}
             <svg><use xlink:href="#iconRefresh"></use></svg>
             <span>未加载</span>
