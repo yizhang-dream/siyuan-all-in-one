@@ -58,15 +58,27 @@ export class RagEmbedder {
 
     private async _init(): Promise<void> {
         try {
+            // Dynamic ESM import — works in dev/test environments but may fail in
+            // Electron renderer because the plugin's node_modules aren't on the
+            // ESM resolver path.
             const mod = await import('@huggingface/transformers');
             const { pipeline, env } = mod;
-            // Use HF mirror for users in China where huggingface.co is blocked
             env.remoteHost = 'https://hf-mirror.com';
             this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
             this.ready = true;
-        } catch (err: any) {
-            this.initError = err?.message || String(err);
-            console.warn('[siyuan-all-in-one] RAG embedder init failed:', this.initError);
+        } catch (importErr: any) {
+            // Fallback: eval('require') to bypass Vite's bundler transformation.
+            // In CJS output Electron resolves bare specifiers from the plugin dir correctly.
+            try {
+                // @ts-ignore - eval('require') avoids Vite/Rollup static analysis
+                const { pipeline, env } = eval('require')('@huggingface/transformers');
+                env.remoteHost = 'https://hf-mirror.com';
+                this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
+                this.ready = true;
+            } catch (requireErr: any) {
+                this.initError = `import: ${importErr?.message || importErr}, require: ${requireErr?.message || requireErr}`;
+                console.warn('[siyuan-all-in-one] RAG embedder init failed:', this.initError);
+            }
         }
     }
 

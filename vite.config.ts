@@ -39,7 +39,7 @@ export default defineConfig({
         },
         rollupOptions: {
             plugins: [],
-            external: ["siyuan", "process"],
+            external: ["siyuan", "process", "@huggingface/transformers", "@xenova/transformers"],
             output: {
                 entryFileNames: "[name].js",
                 // 禁止代码分割：所有依赖打进单个 index.js
