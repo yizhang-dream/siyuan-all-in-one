@@ -17,6 +17,7 @@ import { ConceptStore } from './libs/store/concept-store';
 import { SourceStore } from './libs/source-store';
 import type { AppConfig } from './libs/types';
 import { DEFAULT_CONFIG, cleanConfig } from './libs/config';
+import { setAppConfig } from './libs/config-helper';
 
 const TAB_TYPE = 'siyuan-all-in-one-tab';
 const STORAGE_CONFIG = 'config';
@@ -230,12 +231,14 @@ export default class SiYuanAllInOne extends Plugin {
         } catch {
             this.appConfig = { ...DEFAULT_CONFIG };
         }
+        setAppConfig(this.appConfig);
     }
 
     async saveConfig(config: AppConfig) {
         this.appConfig = { ...config };
         await this.saveData(STORAGE_CONFIG, cleanConfig(config));
         this.appInstance?.$set({ config: this.getConfig() });
+        setAppConfig(config);
     }
 
     getConfig(): AppConfig {
