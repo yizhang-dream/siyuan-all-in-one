@@ -3,6 +3,7 @@ dist/
 dev/
 release/
 .deploy-backups/
+.worktrees/
 .env
 .env.*
 *.zip
