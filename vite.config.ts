@@ -54,6 +54,8 @@ export default defineConfig({
                 { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/tokenizer_config.json", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/" },
                 // Copy the ONNX model binary (preserves onnx/ structure)
                 { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/model_quantized.onnx", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/" },
+                // pdfjs-dist Web Worker — required at runtime by pdfjs-dist for PDF parsing
+                { src: "node_modules/pdfjs-dist/build/pdf.worker.min.mjs", dest: "./" },
             ],
         }),
     ],

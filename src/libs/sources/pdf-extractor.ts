@@ -3,6 +3,23 @@
  */
 import type { PipelineSource } from '../ai/pipeline';
 import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
+// Static import — Vite CJS bundler converts ESM → CJS require at build time
+import * as pdfjsLib from 'pdfjs-dist';
+
+// pdfjs-dist needs GlobalWorkerOptions.workerSrc to locate the worker file.
+// In CJS mode, __dirname is the dist/ directory. The worker is copied there
+// by viteStaticCopy (see vite.config.ts).
+const pdfWorkerSrc = (() => {
+    try {
+        const req = eval('require');
+        const path = req('path');
+        return path.join(__dirname, 'pdf.worker.min.mjs');
+    } catch {
+        // Fallback for environments where require/path/__dirname aren't available
+        return 'pdf.worker.min.mjs';
+    }
+})();
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 export interface PdfExtractResult {
     fileName: string;
@@ -18,7 +35,6 @@ export async function extractPdfText(
     signal?: AbortSignal
 ): Promise<PdfExtractResult> {
     try {
-        const pdfjsLib = await import('pdfjs-dist');
         const doc = await pdfjsLib.getDocument({
             data: new Uint8Array(buffer),
             useWorkerFetch: false,
