@@ -1,8 +1,8 @@
-import { createRequire } from 'module';
 import type { SourceFileParser, ParseResult } from './types';
 
-const require = createRequire(import.meta.url);
-const fs = require('fs');
+// Use eval('require') — works in Electron renderer's CJS context without throwing.
+// createRequire(import.meta.url) throws in Vite CJS bundle because import.meta.url is shimmed.
+const fs: typeof import('fs') = eval('require')('fs');
 
 export class PdfParser implements SourceFileParser {
     supportedExtensions = ['.pdf'];

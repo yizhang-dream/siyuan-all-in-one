@@ -6,12 +6,9 @@
   import { genId } from '../libs/config';
   import { ingestDocument } from '../libs/rag/ingest';
   import { getRagEmbedderProvider } from '../libs/rag';
-  import { createRequire } from 'module';
-
-  const require = createRequire(import.meta.url);
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
+  const fs: typeof import('fs') = eval('require')('fs');
+  const os: typeof import('os') = eval('require')('os');
+  const path: typeof import('path') = eval('require')('path');
 
   export let plugin: any;
   export let sourceStore: SourceStore;

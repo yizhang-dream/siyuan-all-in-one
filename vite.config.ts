@@ -76,7 +76,6 @@ export default defineConfig({
             external: [
                 "siyuan",
                 "process",
-                "module",
                 // Node.js built-in modules used by @huggingface/transformers (transformers.node.cjs)
                 // and onnxruntime (ort.node.min.js). These MUST be external so Electron's renderer
                 // can resolve them via require() at runtime.

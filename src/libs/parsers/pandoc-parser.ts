@@ -1,9 +1,7 @@
-import { createRequire } from 'module';
 import type { SourceFileParser, ParseResult } from './types';
 
-const require = createRequire(import.meta.url);
-const fs = require('fs');
-const path = require('path');
+const fs: typeof import('fs') = eval('require')('fs');
+const path: typeof import('path') = eval('require')('path');
 
 /**
  * 通过 SiYuan 内置 Pandoc API 转换文档格式。
