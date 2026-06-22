@@ -5,14 +5,10 @@
   import { buildConfirmationOptions, createCandidateSelection, trimSelectionForAcceptedConcepts } from '../libs/ai/selection';
   import { syncConceptMindmap } from '../libs/concept-mindmap-sync';
   import { resolveLLMConfig } from '../libs/llm';
-  import { OpenNotebookClient, type Notebook, type Source } from '../libs/notebook';
   import type { NotebookConceptRequest } from '../libs/notebook-bridge';
   import { buildConceptGraph, type ConceptGraphNode } from '../libs/render/concept-graph';
   import { renderToHTML, renderMath } from '../libs/render';
   import { activateSourceRef, formatSourceLabel, formatSourceText, getSourceAction } from '../libs/source-actions';
-  import { searchSiyuanDocs, type DocItem } from '../libs/sources';
-  import { collectPipelineSources } from '../libs/sources/source-hub';
-  import { fileToLocalTextInput, type LocalTextFileInput } from '../libs/sources/local-file-adapters';
   import { CARD_TYPE_LABELS, type PipelineResult, type RelationType, type SourceRef } from '../libs/types/concept';
 
   export let plugin: any;
@@ -24,56 +20,12 @@
   export let jumpToMindmap: (mindmapId: string) => void = () => {};
   export let notebookTarget: NotebookConceptRequest | null = null;
   export let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
+  export let appStore: any = null;
+  export let sourceStore: any = null;
 
   let query = '';
   let refreshKey = 0;
-  let sourceMode: 'manual' | 'opennotebook' | 'mixed' = 'manual';
-  $: hasOpenNotebook = Boolean(config?.notebookEndpoint);
   let sourceText = '';
-  let notebookQuery = '';
-  let notebookSourceIds: string[] = [];
-  let notebookNoteIds: string[] = [];
-  let openNotebookNotebooks: Notebook[] = [];
-  let selectedOpenNotebookId = '';
-  let openNotebookSources: Source[] = [];
-  let isLoadingOpenNotebookSources = false;
-  let openNotebookSourceError = '';
-  let openNotebookPickerLoadedFor = '';
-  let siyuanDocQuery = '';
-  let siyuanDocResults: DocItem[] = [];
-  let selectedSiyuanDocs: DocItem[] = [];
-  let isSearchingSiyuanDocs = false;
-  let localFiles: LocalTextFileInput[] = [];
-  let localFileError = '';
-  let urlInput = '';
-  let addedUrls: string[] = [];
-  let urlError = '';
-
-  function addUrls() {
-    const raw = urlInput.trim();
-    if (!raw) return;
-    addedUrls = [...addedUrls, ...raw.split(/[,，\n]+/).map((s) => s.trim()).filter(Boolean)];
-    urlInput = '';
-    urlError = '';
-  }
-
-  function clearUrls() { addedUrls = []; urlInput = ''; urlError = ''; }
-
-  let pdfFiles: File[] = [];
-
-  async function addPdfFiles(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const files = target.files;
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      if (!pdfFiles.some((f) => f.name === file.name)) pdfFiles = [...pdfFiles, file];
-    }
-    target.value = '';
-  }
-
-  function clearPdfFiles() { pdfFiles = []; }
-
-  function removePdfFile(name: string) { pdfFiles = pdfFiles.filter((f) => f.name !== name); }
   let appliedNotebookTargetKey = '';
   let appliedMindmapGapTargetKey = 0;
   let targetCardCount = 8;
@@ -131,15 +83,6 @@
   $: selectedGraphNode = conceptGraph.nodes.find((node) => node.id === selectedGraphNodeId) || null;
   $: applyNotebookTarget(notebookTarget);
   $: applyMindmapGapTarget(mindmapGapTarget);
-  $: if (!hasOpenNotebook && sourceMode !== 'manual') sourceMode = 'manual';
-  $: if (
-    (sourceMode === 'opennotebook' || sourceMode === 'mixed') &&
-    config?.notebookEndpoint &&
-    !isLoadingOpenNotebookSources &&
-    openNotebookPickerLoadedFor !== config.notebookEndpoint
-  ) {
-    loadOpenNotebookSourcePicker();
-  }
 
   afterUpdate(() => {
     if (candidateReviewEl) renderMath(candidateReviewEl);
@@ -157,17 +100,8 @@
 
   async function runPipeline() {
     const text = sourceText.trim();
-    const query = notebookQuery.trim();
-    if (sourceMode === 'manual' && !text) {
-      showMessage('请先粘贴一段来源文本');
-      return;
-    }
-    if (sourceMode === 'opennotebook' && !query && notebookSourceIds.length === 0 && notebookNoteIds.length === 0) {
-      showMessage('请输入 OpenNotebook 搜索问题，或直接选择 OpenNotebook 来源/笔记');
-      return;
-    }
-    if (sourceMode === 'mixed' && !text && !query && notebookSourceIds.length === 0 && notebookNoteIds.length === 0 && selectedSiyuanDocs.length === 0 && localFiles.length === 0) {
-      showMessage('请至少提供一种来源：手动文本、OpenNotebook 或思源文档');
+    if (!text && !appStore?.selectedSourceIds?.length) {
+      showMessage('请粘贴一段来源文本，或先从来源库选取来源');
       return;
     }
 
@@ -175,10 +109,6 @@
     const llmConfig = resolveLLMConfig(cfg, cfg.flashcardProviderId, cfg.flashcardModel);
     if (!llmConfig.endpoint) {
       showMessage('请先在设置中配置制卡 AI Provider');
-      return;
-    }
-    if ((sourceMode === 'opennotebook' || sourceMode === 'mixed') && (query || notebookNoteIds.length > 0) && !cfg.notebookEndpoint) {
-      showMessage('请先在设置中配置 OpenNotebook 端点');
       return;
     }
 
@@ -225,10 +155,7 @@
   function applyNotebookTarget(target: NotebookConceptRequest | null) {
     if (!target || target.key === appliedNotebookTargetKey) return;
     appliedNotebookTargetKey = target.key;
-    sourceMode = selectedSiyuanDocs.length > 0 || sourceText.trim() ? 'mixed' : 'opennotebook';
-    notebookQuery = target.query;
-    notebookSourceIds = target.sourceIds || [];
-    notebookNoteIds = target.noteIds || [];
+    sourceText = target.query || sourceText;
     status = target.sourceLabel ? `已接收 Notebook 来源：${target.sourceLabel}` : '已接收 Notebook 来源';
     if (target.autoRun) {
       setTimeout(() => {
@@ -240,146 +167,43 @@
   function applyMindmapGapTarget(target: { manualText: string; label: string; key: number } | null) {
     if (!target || target.key === appliedMindmapGapTargetKey) return;
     appliedMindmapGapTargetKey = target.key;
-    sourceMode = 'manual';
     sourceText = target.manualText;
-    notebookQuery = '';
-    notebookSourceIds = [];
-    notebookNoteIds = [];
-    selectedSiyuanDocs = [];
-    localFiles = [];
     status = target.label || '已接收导图缺卡节点';
     setTimeout(() => {
       if (!isRunning && appliedMindmapGapTargetKey === target.key) runPipeline();
     }, 0);
   }
 
-  async function buildPipelineSources(cfg: any): Promise<PipelineSource[]> {
+  function buildPipelineSources(cfg: any): PipelineSource[] {
+    const sources: PipelineSource[] = [];
+
+    // Read from SourceStore if sources were pre-selected
+    if (appStore?.selectedSourceIds?.length && sourceStore) {
+      for (const id of appStore.selectedSourceIds) {
+        const record = sourceStore.getById(id);
+        if (record?.content) {
+          sources.push({
+            id: record.id,
+            text: record.content,
+            type: 'source',
+            sourceId: record.id,
+          });
+        }
+      }
+      sourceStore.trackUsageForIds?.(appStore.selectedSourceIds, 'concepts');
+      appStore.selectedSourceIds = [];
+    }
+
+    // Keep manual text source mode if user typed text
     const text = sourceText.trim();
-    const query = notebookQuery.trim();
-    const result = await collectPipelineSources({
-      mode: sourceMode,
-      manualText: text,
-      notebookEndpoint: cfg.notebookEndpoint,
-      notebookQuery: query,
-      notebookSourceIds,
-      notebookNoteIds,
-      siyuanDocs: selectedSiyuanDocs,
-      localFiles,
-      urls: addedUrls,
-      pdfBuffers: await Promise.all(pdfFiles.map(async (file) => ({
-        buffer: await file.arrayBuffer(),
-        fileName: file.name,
-      }))),
-      openNotebookLimit: 12,
-      openNotebookSearchType: 'text',
-      maxCharsPerSiyuanDoc: 8000,
-      maxCharsPerLocalFileChunk: 6000,
-    });
-    return result.sources;
-  }
-
-  async function loadOpenNotebookSourcePicker(force = false) {
-    const cfg = plugin?.getConfig?.() || config || {};
-    if (!cfg.notebookEndpoint) {
-      openNotebookSourceError = '未配置 OpenNotebook 端点';
-      return;
+    if (text) {
+      sources.push({ id: 'manual', text, type: 'manual' });
     }
-    if (!force && openNotebookSources.length > 0) return;
-    isLoadingOpenNotebookSources = true;
-    openNotebookPickerLoadedFor = cfg.notebookEndpoint;
-    openNotebookSourceError = '';
-    try {
-      const client = new OpenNotebookClient(cfg.notebookEndpoint);
-      openNotebookNotebooks = await client.listNotebooks();
-      const preferred = openNotebookNotebooks.find((notebook) => notebook.id === selectedOpenNotebookId) ||
-        openNotebookNotebooks.find((notebook) => notebook.source_count > 0) ||
-        openNotebookNotebooks[0];
-      selectedOpenNotebookId = preferred?.id || '';
-      openNotebookSources = selectedOpenNotebookId ? await client.listSources(selectedOpenNotebookId, 200) : [];
-    } catch (err: any) {
-      openNotebookNotebooks = [];
-      openNotebookSources = [];
-      openNotebookSourceError = err?.message || String(err);
-    } finally {
-      isLoadingOpenNotebookSources = false;
-    }
+
+    return sources;
   }
 
-  async function changeOpenNotebookNotebook(event: Event) {
-    selectedOpenNotebookId = (event.target as HTMLSelectElement).value;
-    openNotebookSources = [];
-    await loadOpenNotebookSourcePicker(true);
-  }
-
-  function toggleOpenNotebookSource(sourceId: string) {
-    const next = new Set(notebookSourceIds);
-    if (next.has(sourceId)) next.delete(sourceId);
-    else next.add(sourceId);
-    notebookSourceIds = [...next];
-  }
-
-  function clearOpenNotebookSources() {
-    notebookSourceIds = [];
-  }
-
-  async function searchSiyuanDocCandidates() {
-    const keyword = siyuanDocQuery.trim();
-    if (!keyword) return;
-    isSearchingSiyuanDocs = true;
-    try {
-      siyuanDocResults = await searchSiyuanDocs(keyword);
-      if (siyuanDocResults.length === 0) showMessage('没有找到匹配的思源文档');
-    } catch (err: any) {
-      showMessage('搜索思源文档失败：' + (err?.message || err));
-    } finally {
-      isSearchingSiyuanDocs = false;
-    }
-  }
-
-  function addSiyuanDoc(doc: DocItem) {
-    if (selectedSiyuanDocs.some((item) => item.id === doc.id)) return;
-    selectedSiyuanDocs = [...selectedSiyuanDocs, doc];
-  }
-
-  function removeSiyuanDoc(docId: string) {
-    selectedSiyuanDocs = selectedSiyuanDocs.filter((doc) => doc.id !== docId);
-  }
-
-  async function addLocalFiles(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const files = Array.from(input.files || []);
-    input.value = '';
-    if (files.length === 0) return;
-    localFileError = '';
-    const accepted: LocalTextFileInput[] = [];
-    for (const file of files) {
-      if (!isSupportedLocalFile(file.name, file.type)) {
-        localFileError = '仅支持 txt、md、markdown、html、htm';
-        continue;
-      }
-      try {
-        accepted.push(await fileToLocalTextInput(file));
-      } catch (err: any) {
-        localFileError = err?.message || String(err);
-      }
-    }
-    const byName = new Map(localFiles.map((file) => [file.name, file]));
-    accepted.forEach((file) => byName.set(file.name, file));
-    localFiles = [...byName.values()];
-  }
-
-  function removeLocalFile(name: string) {
-    localFiles = localFiles.filter((file) => file.name !== name);
-  }
-
-  function clearLocalFiles() {
-    localFiles = [];
-    localFileError = '';
-  }
-
-  function isSupportedLocalFile(name: string, type = ''): boolean {
-    return /\.(txt|md|markdown|html?|xhtml)$/i.test(name) || /^text\/|markdown|html/i.test(type);
-  }
+  // Phase 4: Removed independent source selection (OpenNotebook, SiYuan docs, local files, URLs, PDFs)
 
   async function confirmCandidates() {
     if (!result) return;
@@ -594,203 +418,18 @@
       </div>
     </div>
 
-    <div class="source-mode-tabs">
-      <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'manual'} on:click={() => (sourceMode = 'manual')}>手动文本</button>
-      {#if hasOpenNotebook}
-        <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'opennotebook'} on:click={() => (sourceMode = 'opennotebook')}>OpenNotebook</button>
-        <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'mixed'} on:click={() => (sourceMode = 'mixed')}>混合来源</button>
-      {:else}
-        <button class="b3-button b3-button--small" class:b3-button--outline={sourceMode !== 'mixed'} on:click={() => (sourceMode = 'mixed')}>手动 + 文档</button>
-      {/if}
+    <div class="concept-actions-row">
+      <button class="b3-button b3-button--small" on:click={() => appStore?.onSwitchTab?.('sources')}>
+        从来源库选取来源
+      </button>
     </div>
 
-    {#if sourceMode === 'manual' || sourceMode === 'mixed'}
-      <textarea
-        class="b3-text-field source-input"
-        bind:value={sourceText}
-        rows="5"
-        placeholder={sourceMode === 'mixed' ? '可选：粘贴额外片段，与 OpenNotebook / 思源文档一起生成。' : '粘贴一段笔记、教材摘录、网页内容或任意来源文本。'}
-      ></textarea>
-    {/if}
-
-    {#if (sourceMode === 'opennotebook' || sourceMode === 'mixed') && hasOpenNotebook}
-      <div class="notebook-source-box">
-        <input
-          class="b3-text-field"
-          type="text"
-          bind:value={notebookQuery}
-          placeholder="输入 OpenNotebook 搜索问题，例如：SM-2 为什么能改善长期记忆？"
-        />
-        <span>{config?.notebookEndpoint ? `端点：${config.notebookEndpoint}` : '未配置 OpenNotebook 端点'}</span>
-        <div class="notebook-picker-row">
-          <select class="b3-select" bind:value={selectedOpenNotebookId} on:change={changeOpenNotebookNotebook} disabled={isLoadingOpenNotebookSources || openNotebookNotebooks.length === 0}>
-            <option value="">选择 notebook</option>
-            {#each openNotebookNotebooks as notebook (notebook.id)}
-              <option value={notebook.id}>{notebook.name} ({notebook.source_count || 0})</option>
-            {/each}
-          </select>
-          <button class="b3-button b3-button--small b3-button--outline" type="button" on:click={() => loadOpenNotebookSourcePicker(true)} disabled={isLoadingOpenNotebookSources || !config?.notebookEndpoint}>
-            {isLoadingOpenNotebookSources ? '加载中...' : '刷新来源'}
-          </button>
-        </div>
-        {#if openNotebookSourceError}
-          <div class="notebook-source-error">{openNotebookSourceError}</div>
-        {/if}
-        {#if notebookSourceIds.length > 0}
-          <div class="siyuan-selected">
-            {#each notebookSourceIds as sourceId}
-              <span class="siyuan-chip" title={sourceId}>
-                {shortTitle(openNotebookSources.find((source) => source.id === sourceId)?.title || sourceId, 20)}
-                <button type="button" aria-label="移除 OpenNotebook 来源" title="移除" on:click={() => toggleOpenNotebookSource(sourceId)}>
-                  <svg><use xlink:href="#iconClose"></use></svg>
-                </button>
-              </span>
-            {/each}
-          </div>
-        {/if}
-        {#if openNotebookSources.length > 0}
-          <div class="notebook-source-results">
-            {#each openNotebookSources as source (source.id)}
-              <button
-                class="notebook-source-result"
-                class:selected={notebookSourceIds.includes(source.id)}
-                type="button"
-                on:click={() => toggleOpenNotebookSource(source.id)}
-                title={source.id}
-              >
-                <svg><use xlink:href="#iconFiles"></use></svg>
-                <span>{source.title || source.id}</span>
-                <em>{notebookSourceIds.includes(source.id) ? '已选' : '添加'}</em>
-              </button>
-            {/each}
-          </div>
-        {/if}
-        {#if notebookSourceIds.length > 0}
-          <div class="notebook-scope">
-            <span>限定来源：{notebookSourceIds.join(', ')}</span>
-            <button class="nb-link" type="button" on:click={clearOpenNotebookSources}>清除限定</button>
-          </div>
-        {/if}
-        {#if notebookNoteIds.length > 0}
-          <div class="notebook-scope">
-            <span>限定笔记：{notebookNoteIds.join(', ')}</span>
-            <button class="nb-link" type="button" on:click={() => (notebookNoteIds = [])}>清除限定</button>
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    {#if sourceMode === 'mixed'}
-      <div class="siyuan-source-box">
-        <div class="siyuan-search-row">
-          <input
-            class="b3-text-field"
-            type="text"
-            bind:value={siyuanDocQuery}
-            placeholder="搜索思源文档标题或路径"
-            on:keydown={(event) => { if (event.key === 'Enter') searchSiyuanDocCandidates(); }}
-          />
-          <button class="b3-button b3-button--small b3-button--outline" type="button" on:click={searchSiyuanDocCandidates} disabled={isSearchingSiyuanDocs}>
-            {isSearchingSiyuanDocs ? '搜索中...' : '搜索文档'}
-          </button>
-        </div>
-
-        {#if selectedSiyuanDocs.length > 0}
-          <div class="siyuan-selected">
-            {#each selectedSiyuanDocs as doc (doc.id)}
-              <span class="siyuan-chip" title={doc.id}>
-                {shortTitle(doc.title || doc.id, 18)}
-                <button type="button" aria-label="移除思源文档" title="移除" on:click={() => removeSiyuanDoc(doc.id)}>
-                  <svg><use xlink:href="#iconClose"></use></svg>
-                </button>
-              </span>
-            {/each}
-          </div>
-        {/if}
-
-        {#if siyuanDocResults.length > 0}
-          <div class="siyuan-doc-results">
-            {#each siyuanDocResults.slice(0, 8) as doc (doc.id)}
-              <button
-                type="button"
-                class="siyuan-doc-result"
-                class:selected={selectedSiyuanDocs.some((item) => item.id === doc.id)}
-                on:click={() => addSiyuanDoc(doc)}
-                title={doc.id}
-              >
-                <span>{doc.title}</span>
-                <em>{selectedSiyuanDocs.some((item) => item.id === doc.id) ? '已选' : '加入'}</em>
-              </button>
-            {/each}
-          </div>
-        {/if}
-
-        <div class="local-file-row">
-          <input class="b3-text-field" type="text" bind:value={urlInput} placeholder="输入网页 URL（多个用逗号分隔）" on:keydown={(e) => { if (e.key === 'Enter') addUrls(); }} />
-          {#if addedUrls.length > 0}
-            <button class="nb-link" type="button" on:click={clearUrls}>清除 URL</button>
-          {/if}
-        </div>
-        {#if urlError}
-          <div class="notebook-source-error">{urlError}</div>
-        {/if}
-        <div class="local-file-row">
-          <label class="b3-button b3-button--small b3-button--outline local-file-picker">
-            <svg><use xlink:href="#iconUpload"></use></svg>
-            <span>加入本地文本</span>
-            <input
-              type="file"
-              multiple
-              accept=".txt,.md,.markdown,.html,.htm,text/plain,text/markdown,text/html"
-              on:change={addLocalFiles}
-            />
-          </label>
-          {#if localFiles.length > 0}
-            <button class="nb-link" type="button" on:click={clearLocalFiles}>清除文件</button>
-          {/if}
-        </div>
-
-        {#if localFileError}
-          <div class="notebook-source-error">{localFileError}</div>
-        {/if}
-
-        {#if localFiles.length > 0}
-          <div class="siyuan-selected">
-            {#each localFiles as file (file.name)}
-              <span class="siyuan-chip" title={file.name}>
-                {shortTitle(file.name, 22)}
-                <button type="button" aria-label="移除本地文件" title="移除" on:click={() => removeLocalFile(file.name)}>
-                  <svg><use xlink:href="#iconClose"></use></svg>
-                </button>
-              </span>
-            {/each}
-          </div>
-        {/if}
-
-        <div class="local-file-row">
-          <label class="b3-button b3-button--small b3-button--outline local-file-picker">
-            <svg><use xlink:href="#iconUpload"></use></svg>
-            <span>加入 PDF</span>
-            <input type="file" multiple accept=".pdf,application/pdf" on:change={addPdfFiles} />
-          </label>
-          {#if pdfFiles.length > 0}
-            <button class="nb-link" type="button" on:click={clearPdfFiles}>清除 PDF</button>
-          {/if}
-        </div>
-        {#if pdfFiles.length > 0}
-          <div class="siyuan-selected">
-            {#each pdfFiles as file (file.name)}
-              <span class="siyuan-chip" title={file.name}>
-                {shortTitle(file.name, 22)}
-                <button type="button" aria-label="移除 PDF" title="移除" on:click={() => removePdfFile(file.name)}>
-                  <svg><use xlink:href="#iconClose"></use></svg>
-                </button>
-              </span>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/if}
+    <textarea
+      class="b3-text-field source-input"
+      bind:value={sourceText}
+      rows="5"
+      placeholder="粘贴一段笔记、教材摘录、网页内容或任意来源文本（可选）"
+    ></textarea>
 
     <div class="candidate-settings">
       <label>
@@ -1215,235 +854,10 @@
     resize: vertical;
   }
 
-  .source-mode-tabs {
+  .concept-actions-row {
     display: flex;
     gap: 6px;
-    flex-shrink: 0;
-
-    .b3-button {
-      min-width: 96px;
-    }
-  }
-
-  .notebook-source-box {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-
-    span {
-      font-size: var(--aio-fs-xs);
-      opacity: 0.55;
-    }
-  }
-
-  .notebook-picker-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 6px;
     align-items: center;
-  }
-
-  .notebook-source-error {
-    padding: 5px 7px;
-    border-radius: 4px;
-    color: var(--b3-card-error-color);
-    background: var(--b3-card-error-background);
-    font-size: var(--aio-fs-xs);
-  }
-
-  .notebook-source-results {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    gap: 6px;
-    max-height: 150px;
-    overflow-y: auto;
-  }
-
-  .notebook-source-result {
-    display: grid;
-    grid-template-columns: 14px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding: 5px 7px;
-    border: 1px solid var(--b3-theme-surface-lighter);
-    border-radius: 4px;
-    background: var(--b3-theme-background);
-    color: var(--b3-theme-on-background);
-    cursor: pointer;
-    text-align: left;
-
-    svg {
-      width: 14px;
-      height: 14px;
-      color: var(--b3-theme-primary);
-    }
-
-    span {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: var(--aio-fs-xs);
-    }
-
-    em {
-      flex-shrink: 0;
-      font-style: normal;
-      font-size: var(--aio-fs-xs);
-      color: var(--b3-theme-primary);
-    }
-
-    &.selected {
-      border-color: var(--b3-theme-primary-light);
-      background: var(--b3-theme-primary-lightest);
-    }
-  }
-
-  .notebook-scope {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 4px 6px;
-    border-radius: 4px;
-    background: var(--b3-theme-surface-light);
-
-    span {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-
-  .siyuan-source-box {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .siyuan-search-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .local-file-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .local-file-picker {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-  }
-
-  .local-file-picker svg {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
-  }
-
-  .local-file-picker input {
-    display: none;
-  }
-
-  .siyuan-selected {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .siyuan-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
-    max-width: 220px;
-    padding: 3px 6px;
-    border-radius: 4px;
-    color: var(--b3-theme-on-surface);
-    background: var(--b3-theme-surface-light);
-    font-size: var(--aio-fs-xs);
-
-    button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      width: 16px;
-      height: 16px;
-      border: none;
-      background: transparent;
-      color: var(--b3-theme-on-surface);
-      cursor: pointer;
-      opacity: 0.65;
-      padding: 0;
-
-      svg {
-        width: 12px;
-        height: 12px;
-      }
-    }
-
-    button:hover {
-      opacity: 1;
-    }
-  }
-
-  .siyuan-doc-results {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 6px;
-  }
-
-  .siyuan-doc-result {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-width: 0;
-    border: 1px solid var(--b3-theme-surface-lighter);
-    border-radius: 4px;
-    padding: 5px 7px;
-    background: var(--b3-theme-background);
-    color: var(--b3-theme-on-background);
-    cursor: pointer;
-    text-align: left;
-
-    span {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: var(--aio-fs-xs);
-    }
-
-    em {
-      flex-shrink: 0;
-      font-style: normal;
-      font-size: var(--aio-fs-xs);
-      color: var(--b3-theme-primary);
-    }
-
-    &.selected {
-      border-color: var(--b3-theme-primary-light);
-      background: var(--b3-theme-primary-lightest);
-    }
-  }
-
-  .nb-link {
-    border: none;
-    background: none;
-    color: var(--b3-theme-primary);
-    cursor: pointer;
-    font-size: var(--aio-fs-xs);
     flex-shrink: 0;
   }
 
@@ -1999,19 +1413,6 @@
     .candidate-review-head {
       align-items: stretch;
       flex-direction: column;
-    }
-
-    .siyuan-search-row {
-      grid-template-columns: 1fr;
-    }
-
-    .source-mode-tabs {
-      flex-wrap: wrap;
-    }
-
-    .source-mode-tabs .b3-button {
-      flex: 1 1 120px;
-      min-width: 0;
     }
 
     .candidate-review {

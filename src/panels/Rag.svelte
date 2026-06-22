@@ -1,13 +1,12 @@
 <script lang="ts">
   import { onMount, afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
-  import { VectorStore, getRagEmbedder, ingestFile, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
-  import type { RagChunkMetadata, RagSearchResult, IngestedDocRecord } from '../libs/rag';
+  import { VectorStore, getRagEmbedder, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
+  import type { RagSearchResult } from '../libs/rag';
   import type { RagConceptRequest } from '../libs/rag';
   import { callLLM } from '../libs/llm';
   import type { LLMConfig } from '../libs/llm';
   import { renderMath } from '../libs/render';
-  import { fetchWebPage } from '../libs/sources/web-fetcher';
   import { getT } from '../libs/i18n';
 
   export let plugin: any;
@@ -16,16 +15,15 @@
   export let sourceTarget: Partial<{ type: string; sourceId?: string; chunkId?: string; quote?: string }> | null = null;
   export let openConceptsFromRag: (request: RagConceptRequest) => void = () => {};
 
+  export let appStore: any = null;
+
   const t = getT(plugin);
 
   let store: VectorStore;
+  let selectedSourceIds: string[] = [];
   let embedder = getRagEmbedder();
   let embedderReady = false;
   let embedderError = '';
-
-  // Document list
-  let documents: IngestedDocRecord[] = [];
-  let uploading = false;
 
   // Chat state
   interface ChatMessage {
@@ -38,14 +36,6 @@
   let inputText = '';
   let sending = false;
 
-  // Text paste modal
-  let showPasteModal = false;
-  let pasteText = '';
-  let pasteTitle = '';
-
-  // URL fetch
-  let urlInput = '';
-  let urlFetching = false;
 
   onMount(async () => {
     store = vectorStore || new VectorStore(plugin);
@@ -55,31 +45,17 @@
     embedderReady = embedder.isReady();
     embedderError = embedder.getError();
 
-    // Load document list from store
-    refreshDocs();
-
     // Pre-fill from sourceTarget
     if (sourceTarget?.quote) {
       inputText = sourceTarget.quote;
     }
-  });
 
-  function refreshDocs() {
-    const seen = new Map<string, IngestedDocRecord>();
-    for (const entry of store.getAll()) {
-      if (!seen.has(entry.sourceId)) {
-        seen.set(entry.sourceId, {
-          sourceId: entry.sourceId,
-          fileName: entry.metadata.fileName || entry.metadata.title,
-          ingestedAt: 0,
-          chunkCount: 0,
-        });
-      }
-      const doc = seen.get(entry.sourceId)!;
-      doc.chunkCount++;
+    // Read pre-selected source IDs from appStore
+    if (appStore?.selectedSourceIds?.length) {
+      selectedSourceIds = [...appStore.selectedSourceIds];
+      appStore.selectedSourceIds = [];
     }
-    documents = [...seen.values()];
-  }
+  });
 
   async function initEmbedder() {
     try {
@@ -91,99 +67,6 @@
     } catch (e: any) {
       embedderError = e?.message || String(e);
     }
-  }
-
-  // ── File upload ─────────────────────────────────────────
-
-  async function handleFileUpload(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const files = target.files;
-    if (!files || files.length === 0) return;
-    uploading = true;
-
-    try {
-      if (!embedderReady) await initEmbedder();
-      for (const file of Array.from(files)) {
-        await ingestFile(file, store, embedder, {
-          chunkSize: config?.ragChunkSize || 500,
-          chunkOverlap: config?.ragChunkOverlap ?? 0.1,
-        });
-      }
-      refreshDocs();
-      showMessage(`已索引 ${files.length} 个文件`);
-    } catch (e: any) {
-      showMessage(`文件索引失败：${e?.message || e}`);
-    }
-
-    uploading = false;
-    target.value = '';
-  }
-
-  // ── Text paste ──────────────────────────────────────────
-
-  function openPasteModal() {
-    pasteText = '';
-    pasteTitle = '';
-    showPasteModal = true;
-  }
-
-  async function confirmPaste() {
-    if (!pasteText.trim()) return;
-    uploading = true;
-    showPasteModal = false;
-
-    try {
-      if (!embedderReady) await initEmbedder();
-      const { ingestDocument } = await import('../libs/rag');
-      await ingestDocument(pasteText, {
-        title: pasteTitle || '粘贴文本',
-        mimeType: 'text/plain',
-      }, store, embedder, {
-        chunkSize: config?.ragChunkSize || 500,
-        chunkOverlap: config?.ragChunkOverlap ?? 0.1,
-      });
-      refreshDocs();
-      showMessage('文本已索引');
-    } catch (e: any) {
-      showMessage(`文本索引失败：${e?.message || e}`);
-    }
-
-    uploading = false;
-  }
-
-  // ── URL fetch ───────────────────────────────────────────
-
-  async function fetchUrl() {
-    const url = urlInput.trim();
-    if (!url) return;
-    urlFetching = true;
-
-    try {
-      const result = await fetchWebPage(url);
-      if (!result.text) {
-        showMessage('未能获取网页内容');
-        urlFetching = false;
-        return;
-      }
-      if (!embedderReady) await initEmbedder();
-      const { ingestDocument } = await import('../libs/rag');
-      const metadata: RagChunkMetadata = {
-        url,
-        title: result.title || url,
-        mimeType: 'text/html',
-      };
-      await ingestDocument(result.text, metadata, store, embedder, {
-        chunkSize: config?.ragChunkSize || 500,
-        chunkOverlap: config?.ragChunkOverlap ?? 0.1,
-      });
-      refreshDocs();
-      showMessage('网页已索引');
-    } catch (e: any) {
-      showMessage(`网页索引失败：${e?.message || e}`);
-    }
-
-    urlInput = '';
-    urlFetching = false;
   }
 
   // ── Chat ────────────────────────────────────────────────
@@ -205,7 +88,11 @@
       if (!embedderReady) await initEmbedder();
 
       // RAG retrieval
-      const results = await ragQuery(text, store, embedder, { topK: config?.ragTopK || 5 });
+      let results = await ragQuery(text, store, embedder, { topK: config?.ragTopK || 5 });
+      // Filter by selected sources if any
+      if (selectedSourceIds.length > 0) {
+        results = results.filter((r: any) => selectedSourceIds.includes(r.entry?.sourceId || r.sourceId));
+      }
       const ctx = formatRagContext(results);
 
       // LLM call
@@ -291,15 +178,6 @@
     if (request) openConceptsFromRag(request);
   }
 
-  // ── Delete document ─────────────────────────────────────
-
-  async function deleteDoc(sourceId: string) {
-    const removed = store.removeBySourceId(sourceId);
-    await store.save();
-    refreshDocs();
-    showMessage(`已删除 ${removed} 个分块`);
-  }
-
   // ── Keyboard ────────────────────────────────────────────
 
   function handleKeydown(e: KeyboardEvent) {
@@ -317,7 +195,7 @@
 
 <div class="rag-panel">
   <div class="rag-layout">
-    <!-- Left sidebar: document management -->
+    <!-- Left sidebar: embedder status only (Phase 4: removed import UI) -->
     <div class="rag-left">
       <div class="rag-section">
         <h4 class="rag-section-title">嵌入模型</h4>
@@ -335,51 +213,23 @@
           {/if}
         </div>
       </div>
-
-      <div class="rag-section">
-        <h4 class="rag-section-title">文档</h4>
-        <div class="rag-doc-actions">
-          <label class="b3-button b3-button--small b3-button--outline rag-upload-btn">
-            <svg><use xlink:href="#iconAdd"></use></svg> 上传文件
-            <input type="file" accept=".txt,.md,.markdown,.html,.htm" multiple on:change={handleFileUpload} hidden />
-          </label>
-          <button class="b3-button b3-button--small b3-button--outline" on:click={openPasteModal}>
-            <svg><use xlink:href="#iconPaste"></use></svg> 粘贴
-          </button>
-        </div>
-        <div class="rag-url-row">
-          <input class="b3-text-field" type="text" placeholder="网页 URL..." bind:value={urlInput} on:keydown={(e) => { if (e.key === 'Enter') fetchUrl(); }} />
-          <button class="b3-button b3-button--small" on:click={fetchUrl} disabled={urlFetching}>
-            {urlFetching ? '...' : '抓取'}
-          </button>
-        </div>
-      </div>
-
-      <div class="rag-doc-list">
-        {#if documents.length === 0}
-          <p class="rag-doc-empty">暂无文档，上传文件、粘贴文本或抓取网页开始</p>
-        {:else}
-          {#each documents as doc (doc.sourceId)}
-            <div class="rag-doc-item">
-              <div class="rag-doc-info">
-                <span class="rag-doc-name">{doc.fileName || doc.sourceId}</span>
-                <span class="rag-doc-meta">{doc.chunkCount} 块</span>
-              </div>
-              <button class="rag-doc-del" on:click={() => deleteDoc(doc.sourceId)} title="删除">
-                <svg><use xlink:href="#iconClose"></use></svg>
-              </button>
-            </div>
-          {/each}
-        {/if}
-      </div>
-
-      <div class="rag-stats">
-        <span>{store?.getCount() || 0} 块 · {documents.length} 个文档</span>
-      </div>
     </div>
 
     <!-- Right panel: chat -->
     <div class="rag-right">
+      <!-- Source scope selector (Phase 4) -->
+      <div class="source-scope">
+        <span class="source-scope-label">对话范围:</span>
+        {#if !selectedSourceIds || selectedSourceIds.length === 0}
+          <span class="source-scope-all">全部来源</span>
+        {:else}
+          <span class="source-scope-count">{selectedSourceIds.length} 个来源</span>
+        {/if}
+        <button class="b3-button b3-button--small" on:click={() => appStore?.onSwitchTab?.('sources')}>
+          选择来源
+        </button>
+      </div>
+
       <div class="rag-chat-toolbar">
         <span class="rag-model-badge" title="RAG 对话模型">
           <svg><use xlink:href="#iconSettings"></use></svg>
@@ -397,7 +247,7 @@
             {#if store?.getCount() > 0}
               <p>已索引 {store.getCount()} 个文本块，可以开始提问</p>
             {:else}
-              <p>上传文档或粘贴文本后开始提问</p>
+              <p>从来源库选择来源后开始提问</p>
             {/if}
           </div>
         {:else}
@@ -444,23 +294,6 @@
   </div>
 </div>
 
-<!-- Paste modal -->
-{#if showPasteModal}
-  <div class="rag-overlay" on:click={() => showPasteModal = false} on:keydown={(e) => { if (e.key === 'Escape') showPasteModal = false; }}>
-    <div class="rag-modal" on:click|stopPropagation>
-      <h4>粘贴文本</h4>
-      <input class="b3-text-field" type="text" placeholder="标题（可选）" bind:value={pasteTitle} />
-      <textarea class="b3-text-field" rows="8" placeholder="粘贴文本内容..." bind:value={pasteText}></textarea>
-      <div class="rag-modal-actions">
-        <button class="b3-button b3-button--outline" on:click={() => showPasteModal = false}>取消</button>
-        <button class="b3-button" on:click={confirmPaste} disabled={!pasteText.trim() || uploading}>
-          {uploading ? '索引中...' : '确认'}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
 <style lang="scss">
   .rag-panel { height: 100%; overflow: hidden; }
   .rag-layout { display: flex; height: 100%; }
@@ -482,26 +315,18 @@
     &.rag-model-err { background: var(--b3-card-warning-background); color: var(--b3-card-warning-color); }
   }
 
-  .rag-doc-actions { display: flex; gap: 4px; }
-  .rag-upload-btn { position: relative; cursor: pointer; }
-  .rag-url-row { display: flex; gap: 4px; .b3-text-field { flex: 1; font-size: var(--aio-fs-xs); } }
-
-  .rag-doc-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-  .rag-doc-empty { font-size: var(--aio-fs-xs); opacity: 0.5; text-align: center; padding: 16px 0; }
-  .rag-doc-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 4px 8px; border-radius: 4px; font-size: var(--aio-fs-xs);
-    &:hover { background: var(--b3-theme-surface-light); }
+  /* Source scope selector (Phase 4) */
+  .source-scope {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: var(--aio-fs-sm);
+    border-bottom: 1px solid var(--b3-border-color-light, rgba(0,0,0,.06));
   }
-  .rag-doc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rag-doc-meta { opacity: 0.5; flex-shrink: 0; margin-left: 4px; }
-  .rag-doc-del {
-    border: none; background: none; cursor: pointer; opacity: 0.3; padding: 2px;
-    svg { width: 12px; height: 12px; }
-    &:hover { opacity: 0.7; color: var(--b3-card-error-color); }
-  }
-
-  .rag-stats { font-size: var(--aio-fs-xs); opacity: 0.4; text-align: center; padding: 4px 0; }
+  .source-scope-label { opacity: 0.6; }
+  .source-scope-all { opacity: 0.5; font-style: italic; }
+  .source-scope-count { font-weight: 500; }
 
   /* Right: chat */
   .rag-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -533,14 +358,5 @@
   .rag-input { flex: 1; resize: none; font-size: var(--aio-fs-base); }
   .rag-send-btn { flex-shrink: 0; align-self: flex-end; }
 
-  /* Modal */
-  .rag-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 1000;
-  }
-  .rag-modal {
-    background: var(--b3-theme-background); border-radius: 8px; padding: 20px; width: 500px; max-width: 90vw;
-    display: flex; flex-direction: column; gap: 10px;
-    h4 { margin: 0; }
-  }
-  .rag-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 </style>

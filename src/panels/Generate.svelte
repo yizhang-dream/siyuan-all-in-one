@@ -4,9 +4,7 @@
   import type { GeneratedCard } from '../libs/llm';
   import type { AgentConfig } from '../libs/types';
   import { getT } from '../libs/i18n';
-  import { fetchContext } from '../libs/sources';
-  import type { SourceConfig } from '../libs/sources';
-  import SourcePicker from './SourcePicker.svelte';
+  // SourcePicker removed — using SourceStore via appStore/sourceStore
   import { showMessage } from 'siyuan';
   import { parseSymbolCards, type ParsedSymbolCard } from '../libs/symbol-cards';
   import { addOcclusionRegion, drawOcclusionEditor, fileToDataUrl, fitImageToCanvas, hitTestOcclusion, isNearEdge, loadImage, resizeOcclusionRegion } from '../libs/image-occlusion-render';
@@ -16,6 +14,8 @@
   export let cardStore: any;
   export let config: any;
   export let openConceptsPanel: () => void = () => {};
+  export let sourceStore: any = null;
+  export let appStore: any = null;
 
   const t = getT(plugin);
 
@@ -187,8 +187,8 @@
     manualQ = '';
   }
 
-  // 来源选择
-  let sourceConfig: SourceConfig = { type: 'none' };
+  // 来源选择 — now via SourceStore
+  let selectedSourceIds: string[] = [];
 
   $: {
     if (!manualDeck) manualDeck = config?.defaultDeck || '默认';
@@ -242,17 +242,25 @@
     aiStatusKind = 'info';
 
     try {
-      // 1. 从选定的来源获取上下文
+      // 1. 从 SourceStore 获取上下文
       let context: string | undefined;
-      if (sourceConfig.type !== 'none') {
-        aiStatus = sourceConfig.type === 'notebook' ? '正在搜索知识库...' :
-                   sourceConfig.type === 'siyuan' ? '正在读取文档...' : '正在准备上下文...';
-        context = await fetchContext(sourceConfig, cfg.notebookEndpoint);
-        if (context) {
-          aiStatus = `已获取 ${context.length} 字上下文，AI 生成中...`;
+      if (appStore?.selectedSourceIds?.length && sourceStore) {
+        aiStatus = '正在读取来源...';
+        const parts: string[] = [];
+        for (const id of appStore.selectedSourceIds) {
+          const record = sourceStore.getById(id);
+          if (record?.content) {
+            parts.push(record.content);
+          }
+        }
+        if (parts.length > 0) {
+          context = parts.join('\n\n---\n\n');
+          aiStatus = `已从 ${parts.length} 个来源获取 ${context.length} 字上下文，AI 生成中...`;
           aiStatusKind = 'info';
+          sourceStore.trackUsageForIds?.(appStore.selectedSourceIds, 'generate');
+          appStore.selectedSourceIds = [];
         } else {
-          aiStatus = '未能获取上下文，将无上下文生成...';
+          aiStatus = '未能获取来源内容，将无上下文生成...';
           aiStatusKind = 'warn';
         }
       }
@@ -408,8 +416,10 @@
           </div>
         </div>
 
-        <!-- 来源选择 -->
-        <SourcePicker bind:config={sourceConfig} notebookEndpoint={config?.notebookEndpoint || ''} />
+        <!-- 来源选择 — now via SourceStore -->
+        <button class="b3-button b3-button--small" on:click={() => appStore?.onSwitchTab?.('sources')}>
+          从来源库选取
+        </button>
 
         <button class="b3-button b3-button--outline" on:click={generateAI} disabled={isGenerating || !selectedAgent}>
           {isGenerating ? '生成中...' : 'AI 生成'}

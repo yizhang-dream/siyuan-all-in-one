@@ -6,12 +6,19 @@
   export let conceptStore: any;
   export let sourceStore: any;
   export let config: any;
+  export let appStore: any = null;
 
   let mode: 'graph' | 'mindmap' = 'graph';
+  let selectedSourceIds: string[] = [];
 
   onMount(() => {
     // TODO Phase 4: Load conceptStore data for graph view
     // TODO Phase 4: Load mindmap data for mindmap view
+
+    if (appStore?.selectedSourceIds?.length) {
+      selectedSourceIds = [...appStore.selectedSourceIds];
+      appStore.selectedSourceIds = [];
+    }
   });
 </script>
 
@@ -26,6 +33,9 @@
       </button>
     </div>
     <div class="knowledge-toolbar-spacer"></div>
+    <button class="b3-button b3-button--small" on:click={() => appStore?.onSwitchTab?.('sources')}>
+      从来源库选取
+    </button>
   </div>
 
   {#if mode === 'graph'}
