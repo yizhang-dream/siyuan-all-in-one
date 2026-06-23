@@ -7,7 +7,7 @@ export interface PromptSourceChunk {
     sourceRef: SourceRef;
 }
 
-export function buildExtractConceptsPrompt(chunks: PromptSourceChunk[], language = 'zh-CN'): string {
+export function buildExtractConceptsPrompt(chunks: PromptSourceChunk[], language = 'auto'): string {
     return `你是一个保守的学习材料结构化助手。你的任务是从给定资料中抽取“概念节点候选”。
 
 硬性规则：
@@ -29,7 +29,7 @@ export function buildExtractConceptsPrompt(chunks: PromptSourceChunk[], language
       "tags": ["可选标签"],
       "confidence": 0.0,
       "sourceRefs": [
-        {"type":"siyuan|opennotebook|manual|pdf|url","sourceId":"...","blockId":"...","chunkId":"...","quote":"短证据","page":1,"url":"..."}
+        {"type":"siyuan-doc|manual|source","sourceId":"...","blockId":"...","quote":"短证据","page":1}
       ]
     }
   ],

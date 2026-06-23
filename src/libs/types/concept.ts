@@ -9,13 +9,11 @@
 
 /** 来源引用——每个概念、关系、卡片都可追溯到原始材料 */
 export interface SourceRef {
-    type: 'opennotebook' | 'siyuan' | 'manual' | 'file' | 'pdf' | 'url' | 'rag';
-    sourceId?: string;
-    blockId?: string;
-    chunkId?: string;
-    quote?: string;
-    page?: number;
-    url?: string;
+    type: 'siyuan-doc' | 'manual' | 'source';
+    sourceId?: string;             // SourceStore 中的 SourceRecord.id
+    blockId?: string;              // 思源块 ID（siyuan-doc 类型）
+    quote?: string;                // 摘录文本（最大 500 字符）
+    page?: number;                 // PDF 页码
 }
 
 /** 概念节点——知识图谱的核心实体 */

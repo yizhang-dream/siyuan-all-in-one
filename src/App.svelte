@@ -1,52 +1,28 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  // New panels
+  import SourceLibrary from './panels/SourceLibrary.svelte';
+  import Knowledge from './panels/Knowledge.svelte';
+  import SettingsPanel from './panels/Settings.svelte';
+  // Keep: legacy panels
   import Review from './panels/Review.svelte';
   import Browse from './panels/Browse.svelte';
   import Generate from './panels/Generate.svelte';
-  import Mindmap from './panels/Mindmap.svelte';
-  import Stats from './panels/Stats.svelte';
   import Import from './panels/Import.svelte';
-  import Concepts from './panels/Concepts.svelte';
   import Rag from './panels/Rag.svelte';
-  import { getT } from './libs/i18n';
-  import { activateSourceRef, getSourceAction } from './libs/source-actions';
-  import type { RagConceptRequest } from './libs/rag';
-  import type { SourceRef } from './libs/types/concept';
 
   export let plugin: any;
   export let cardStore: any;
   export let mindmapStore: any;
   export let conceptStore: any;
-  export let vectorStore: any;
+  export let sourceStore: any;
   export let config: any;
 
-  const t = getT(plugin);
+  import { VectorStore } from './libs/rag';
+  let vectorStore = new VectorStore(plugin);
 
-  let activeTab = 'review';
-  let jumpTarget: { mindmapId?: string } = {};
-  let notebookTarget: Partial<SourceRef> | null = null;
-  let conceptSourceTarget: any = null;
-  let conceptSourceTargetSeq = 0;
-  let reviewQueue: { ids: string[]; title: string; key: number } | null = null;
-  let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
-  let ragTarget: RagConceptRequest | null = null;
-
-  /** 跳转到思维导图面板并加载指定导图 */
-  function jumpToMindmap(mindmapId: string) {
-    jumpTarget = { mindmapId };
-    activeTab = 'mindmap';
-  }
-
-  async function openSourceRef(ref: Partial<SourceRef>) {
-    return activateSourceRef(ref, plugin?.app);
-  }
-
-  function openConceptsFromMindmapGaps(gapSourceText: string, label: string) {
-    conceptSourceTargetSeq += 1;
-    mindmapGapTarget = { manualText: gapSourceText, label, key: conceptSourceTargetSeq };
-    conceptSourceTarget = null; // 清掉 notebook target，避免冲突
-    activeTab = 'concepts';
-  }
+  let activeTab = 'sources';
+  let activeSubTab = 'generate';
 
   function openConceptsFromRag(request: RagConceptRequest) {
     ragTarget = request;
@@ -55,75 +31,89 @@
   }
 
   const tabs = [
-    { id: 'review', label: '复习', icon: 'iconAioRiffCard' },
-    { id: 'browse', label: '浏览', icon: 'iconAioList' },
-    { id: 'generate', label: '制卡', icon: 'iconAioSparkles' },
-    { id: 'import', label: '导入', icon: 'iconAioUpload' },
-    { id: 'rag', label: 'RAG', icon: 'iconAioSearch' },
-    { id: 'concepts', label: '图谱生成', icon: 'iconAioGraph' },
-    { id: 'mindmap', label: '导图', icon: 'iconAioListTree' },
-    { id: 'stats', label: '统计', icon: 'iconAioBoard' },
+    { id: 'sources',  label: '来源库',   icon: 'iconAioLibrary' },
+    { id: 'rag',      label: 'RAG 对话',  icon: 'iconAioSearch' },
+    { id: 'make',     label: '制卡',      icon: 'iconAioSparkles' },
+    { id: 'knowledge',label: '导图',      icon: 'iconAioGraph' },
+    { id: 'settings', label: '设置',      icon: 'iconAioSettings' },
   ];
 
+  const makeSubTabs = [
+    { id: 'generate', label: '制卡' },
+    { id: 'review',   label: '复习' },
+    { id: 'browse',   label: '浏览' },
+    { id: 'import',   label: '导入' },
+  ];
+
+  let appStore = {
+    selectedSourceIds: [] as string[],
+    onSwitchTab: (tab: string) => { activeTab = tab; },
+  };
+
+  onMount(async () => {
+    await vectorStore.load();
+  });
+
   function switchTab(id: string) {
-    activeTab = id;
-  }
-
-  function openImportPanel() {
-    activeTab = 'import';
-  }
-
-  function openConceptsPanel() {
-    activeTab = 'concepts';
-  }
-
-  function startFilteredReview(ids: string[], title = '筛选复习') {
-    reviewQueue = { ids: [...ids], title, key: Date.now() };
-    activeTab = 'review';
+    if (id === 'make') {
+      activeTab = id;
+    } else {
+      activeTab = id;
+    }
   }
 </script>
 
 <div class="all-in-one-app">
-  <!-- 左侧导航：纯图标按钮 + 悬停 tooltip（仿 SiYuan 侧栏） -->
+  <!-- 左侧导航 -->
   <nav class="aio-nav">
+    <button
+      class="aio-nav-item aio-nav-logo"
+      title="知识闪卡"
+      on:click={() => switchTab('sources')}
+    >
+      <svg><use xlink:href="#iconList"></use></svg>
+    </button>
+    <div class="aio-nav-divider"></div>
     {#each tabs as tab}
       <button
         class="aio-nav-item"
         class:aio-nav-item--active={activeTab === tab.id}
-        title={t(tab.id + 'Tab') || tab.label}
+        title={tab.label}
         on:click={() => switchTab(tab.id)}
       >
         <svg><use xlink:href="#{tab.icon}"></use></svg>
       </button>
     {/each}
-    <span class="aio-nav-spacer"></span>
-    <button
-      class="aio-nav-item"
-      title={t('settingsTab') || '设置'}
-      on:click={() => plugin.openSetting()}
-    >
-      <svg><use xlink:href="#iconAioSettings"></use></svg>
-    </button>
   </nav>
 
   <!-- 右侧内容区 -->
   <main class="aio-content">
-    {#if activeTab === 'review'}
-      <Review {plugin} {cardStore} queue={reviewQueue} />
-    {:else if activeTab === 'browse'}
-      <Browse {plugin} {cardStore} {mindmapStore} {conceptStore} {jumpToMindmap} {openSourceRef} {startFilteredReview} />
-    {:else if activeTab === 'generate'}
-      <Generate {plugin} {cardStore} {config} {openConceptsPanel} />
-    {:else if activeTab === 'import'}
-      <Import {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
+    {#if activeTab === 'make'}
+      <div class="aio-subtabs">
+        {#each makeSubTabs as sub}
+          <button class="aio-subtab" class:aio-subtab--active={activeSubTab === sub.id} on:click={() => activeSubTab = sub.id}>
+            {sub.label}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if activeTab === 'make' && activeSubTab === 'generate'}
+      <Generate {plugin} {cardStore} {conceptStore} {sourceStore} {config} />
+    {:else if activeTab === 'make' && activeSubTab === 'review'}
+      <Review {plugin} {cardStore} {config} />
+    {:else if activeTab === 'make' && activeSubTab === 'browse'}
+      <Browse {plugin} {cardStore} {conceptStore} {config} />
+    {:else if activeTab === 'make' && activeSubTab === 'import'}
+      <Import {plugin} {cardStore} {conceptStore} {mindmapStore} />
     {:else if activeTab === 'rag'}
-      <Rag {plugin} {vectorStore} {config} sourceTarget={notebookTarget} {openConceptsFromRag} />
-    {:else if activeTab === 'concepts'}
-      <Concepts {plugin} {conceptStore} {cardStore} {mindmapStore} {config} {openSourceRef} {jumpToMindmap} mindmapGapTarget={mindmapGapTarget} {ragTarget} />
-    {:else if activeTab === 'mindmap'}
-      <Mindmap {plugin} {cardStore} {mindmapStore} {conceptStore} {config} {jumpTarget} {startFilteredReview} openConceptsFromMindmapGaps={openConceptsFromMindmapGaps} />
-    {:else if activeTab === 'stats'}
-      <Stats {cardStore} {openImportPanel} />
+      <Rag {plugin} {cardStore} {vectorStore} {sourceStore} {config} bind:appStore />
+    {:else if activeTab === 'sources'}
+      <SourceLibrary {plugin} {sourceStore} {vectorStore} bind:appStore />
+    {:else if activeTab === 'knowledge'}
+      <Knowledge {plugin} {cardStore} {conceptStore} {sourceStore} {config} />
+    {:else if activeTab === 'settings'}
+      <SettingsPanel showAsTab={true} {plugin} {config} />
     {/if}
   </main>
 </div>
@@ -151,7 +141,11 @@
     line-height: 1;
   }
 
-  .aio-nav-spacer { flex: 1; }
+  .aio-nav-divider {
+    width: 24px; height: 1px;
+    background: var(--b3-theme-surface-lighter);
+    margin: 2px 0;
+  }
 
   .aio-nav-item {
     display: flex;
@@ -183,5 +177,27 @@
     flex: 1;
     overflow: hidden;
     min-width: 0;
+  }
+
+  .aio-subtabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--b3-border-color);
+  }
+  .aio-subtab {
+    padding: 6px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: var(--aio-fs-sm);
+    color: var(--b3-theme-on-surface);
+    opacity: 0.7;
+    border-bottom: 2px solid transparent;
+  }
+  .aio-subtab:hover { opacity: 1; }
+  .aio-subtab--active {
+    opacity: 1;
+    color: var(--b3-theme-primary);
+    border-bottom-color: var(--b3-theme-primary);
   }
 </style>

@@ -20,6 +20,8 @@ const required = [
   'README.md',
   'README_zh_CN.md',
   'i18n',
+  'models',
+  'node_modules',
 ];
 
 const files = {};

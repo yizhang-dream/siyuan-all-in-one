@@ -38,7 +38,7 @@ export interface UnstructuredPartitionOptions {
 }
 
 const MAX_CHARS_PER_ELEMENT = 4000;
-const MAX_ELEMENTS = 60;
+export const MAX_ELEMENTS = 60;
 
 /** 将 HTML/Markdown/纯文本分区为 Unstructured 兼容元素列表 */
 export function partitionText(text: string, options: UnstructuredPartitionOptions = {}): UnstructuredElement[] {
@@ -242,7 +242,7 @@ export function unstructuredElementsToPipelineSources(
             currentTitle = el.text;
             sources.push({
                 id: `${sourceId}-title-${chunkIndex}`,
-                type: 'file',
+                type: 'source',
                 sourceId,
                 chunkId: `${sourceId}-title-${chunkIndex}`,
                 quote: el.text.slice(0, 240),
@@ -258,7 +258,7 @@ export function unstructuredElementsToPipelineSources(
         const elementType = el.type === 'CodeBlock' ? 'code' : el.type === 'Table' ? 'table' : el.type === 'ListItem' ? 'list' : 'text';
         sources.push({
             id: `${sourceId}-${chunkIndex}`,
-            type: 'file',
+            type: 'source',
             sourceId,
             chunkId: `${sourceId}-${chunkIndex}`,
             quote: text.slice(0, 240),

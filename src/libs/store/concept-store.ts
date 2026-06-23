@@ -17,7 +17,7 @@ const VALID_RELATION_TYPES: RelationType[] = [
     'related',
 ];
 
-const VALID_SOURCE_TYPES: SourceRef['type'][] = ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url', 'rag'];
+const VALID_SOURCE_TYPES: SourceRef['type'][] = ['siyuan-doc', 'manual', 'source'];
 
 function genId(prefix: string): string {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -49,6 +49,23 @@ export class ConceptStore {
     async save(): Promise<void> {
         await this.plugin.saveData('concepts', this.concepts);
         await this.plugin.saveData('relations', this.relations);
+    }
+
+    async migrateSourceRefs(migrateFn: (ref: any) => any): Promise<void> {
+        let changed = false;
+        for (const node of this.concepts) {
+            if (Array.isArray(node.sourceRefs)) {
+                node.sourceRefs = node.sourceRefs.map(migrateFn);
+                changed = true;
+            }
+        }
+        for (const rel of this.relations) {
+            if (Array.isArray(rel.sourceRefs)) {
+                rel.sourceRefs = rel.sourceRefs.map(migrateFn);
+                changed = true;
+            }
+        }
+        if (changed) await this.save();
     }
 
     // ── 概念 CRUD ──────────────────────────────────────────
@@ -279,9 +296,7 @@ function mergeSourceRefs(existing: SourceRef[], incoming: SourceRef[]): SourceRe
             ref.type,
             ref.sourceId,
             ref.blockId,
-            ref.chunkId,
             ref.page,
-            ref.url,
             ref.quote,
         ].join('|');
         if (seen.has(key)) continue;
@@ -334,14 +349,12 @@ function cleanSourceRefs(value: any): SourceRef[] {
             const ref: SourceRef = { type };
             if (raw?.sourceId !== undefined) ref.sourceId = String(raw.sourceId);
             if (raw?.blockId !== undefined) ref.blockId = String(raw.blockId);
-            if (raw?.chunkId !== undefined) ref.chunkId = String(raw.chunkId);
             if (raw?.quote !== undefined) ref.quote = String(raw.quote);
             const page = Number(raw?.page);
             if (Number.isFinite(page)) ref.page = page;
-            if (raw?.url !== undefined) ref.url = String(raw.url);
             return ref;
         })
-        .filter((ref) => ref.sourceId || ref.blockId || ref.chunkId || ref.quote || ref.url);
+        .filter((ref) => ref.sourceId || ref.blockId || ref.quote);
 }
 
 function normalizeRelationType(value: any): RelationType {

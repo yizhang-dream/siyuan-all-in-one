@@ -39,7 +39,7 @@ export function localTextFilesToPipelineSources(
             const id = `file-${hashText(`${name}:${chunkIndex}:${chunk.slice(0, 120)}`)}`;
             out.push({
                 id,
-                type: 'file',
+                type: 'source',
                 sourceId: name,
                 chunkId: `${name}#${chunkIndex + 1}`,
                 quote: chunk.slice(0, 500),

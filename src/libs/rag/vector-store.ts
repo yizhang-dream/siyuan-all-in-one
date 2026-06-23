@@ -26,18 +26,21 @@ function cleanVectorEntry(raw: any): VectorEntry {
     };
 }
 
+/**
+ * Dot product as cosine similarity shortcut.
+ *
+ * All stored embeddings are L2-normalized unit vectors (the embedder uses
+ * `{ normalize: true }`), so cosine similarity = a · b.  For zero-vector
+ * fallbacks the dot product naturally returns 0, which is correct
+ * (zero similarity to any other vector).
+ */
 function cosineSimilarity(a: number[], b: number[]): number {
     if (a.length !== b.length || a.length === 0) return 0;
     let dot = 0;
-    let normA = 0;
-    let normB = 0;
     for (let i = 0; i < a.length; i++) {
         dot += a[i] * b[i];
-        normA += a[i] * a[i];
-        normB += b[i] * b[i];
     }
-    const denom = Math.sqrt(normA) * Math.sqrt(normB);
-    return denom === 0 ? 0 : dot / denom;
+    return dot;
 }
 
 export class VectorStore {
@@ -98,10 +101,11 @@ export class VectorStore {
         this.entries = [];
     }
 
-    search(queryEmbedding: number[], topK = 5): RagSearchResult[] {
+    search(queryEmbedding: number[], topK = 5, sourceIds?: string[]): RagSearchResult[] {
         const results: RagSearchResult[] = [];
         for (const entry of this.entries) {
             if (!entry.embedding || entry.embedding.length === 0) continue;
+            if (sourceIds && sourceIds.length > 0 && !sourceIds.includes(entry.sourceId)) continue;
             const score = cosineSimilarity(queryEmbedding, entry.embedding);
             const chunk: RagChunk = {
                 id: entry.id,

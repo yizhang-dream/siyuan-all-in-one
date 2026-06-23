@@ -28,13 +28,15 @@ export async function ingestDocument(
     embedder: RagEmbedder,
     options: IngestOptions = {}
 ): Promise<IngestResult> {
-    const sourceId = 'rag-' + hashFileName(metadata.fileName || metadata.title || text.slice(0, 100));
+    // Use explicit sourceId from metadata if provided (e.g. from sourceStore),
+    // otherwise derive from file name / title.
+    const sourceId = metadata.sourceId || 'rag-' + hashFileName(metadata.fileName || metadata.title || text.slice(0, 100));
 
     // Remove old chunks for this source
     store.removeBySourceId(sourceId);
 
-    // Chunk
-    const chunks = chunkText(text, metadata, { chunkSize: options.chunkSize, chunkOverlap: options.chunkOverlap });
+    // Chunk — pass explicit sourceId so all chunks share the same sourceId
+    const chunks = chunkText(text, metadata, { chunkSize: options.chunkSize, chunkOverlap: options.chunkOverlap }, sourceId);
     if (chunks.length === 0) return { sourceId, chunkCount: 0, fileName: metadata.fileName };
 
     // Embed in batches of 10 (transformers.js works better one at a time)

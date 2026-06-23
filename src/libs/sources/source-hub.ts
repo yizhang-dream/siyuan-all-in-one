@@ -38,11 +38,8 @@ export interface SourceHubResult {
 
 export interface SourceHubStats {
     manual: number;
-    file: number;
-    siyuan: number;
-    url: number;
-    pdf: number;
-    rag: number;
+    source: number;
+    siyuanDoc: number;
     totalBeforeDedupe: number;
     total: number;
 }
@@ -122,11 +119,8 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
         sources: deduped,
         stats: {
             manual: deduped.filter((s) => s.type === 'manual').length,
-            file: deduped.filter((s) => s.type === 'file').length,
-            siyuan: deduped.filter((s) => s.type === 'siyuan').length,
-            url: deduped.filter((s) => s.type === 'url').length,
-            pdf: deduped.filter((s) => s.type === 'pdf').length,
-            rag: deduped.filter((s) => s.type === 'rag').length,
+            source: deduped.filter((s) => s.type === 'source').length,
+            siyuanDoc: deduped.filter((s) => s.type === 'siyuan-doc').length,
             totalBeforeDedupe,
             total: deduped.length,
         },

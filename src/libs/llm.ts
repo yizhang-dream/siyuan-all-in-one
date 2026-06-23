@@ -10,6 +10,13 @@
 
 import type { AgentConfig } from './types';
 import type { AppConfig, Provider } from './types';
+import type { ToolDefinition, ToolCall } from './tools';
+
+/** Anthropic API 版本头，用于 Anthropic Claude 请求 */
+const ANTHROPIC_API_VERSION = '2023-06-01';
+
+/** 单次 LLM 调用的输出 token 上限 */
+const MAX_OUTPUT_TOKENS = 8192;
 
 /**
  * URL 解析辅助函数。
@@ -54,7 +61,7 @@ export function buildApiUrl(baseUrl: string, endpoint: string): string {
  * 根据 provider id 返回聊天端点和模型列表端点。
  * 不同 provider 的端点路径不同。
  */
-function getEndpoints(providerId: string): { chat: string; models: string } {
+export function getEndpoints(providerId: string): { chat: string; models: string } {
     switch (providerId) {
         case 'gemini':
             return { chat: '/v1beta/models/{model}:generateContent', models: '/v1beta/models' };
@@ -62,9 +69,24 @@ function getEndpoints(providerId: string): { chat: string; models: string } {
             return { chat: '/api/v3/chat/completions', models: '/api/v3/models' };
         case 'anthropic':
             return { chat: '/v1/messages', models: '/v1/models' };
-        case 'zhipu':
-            // 智谱 BigModel：baseUrl 已含 /api/paas/v4，端点直接拼 /chat/completions
+        case 'glm':
+            // 智谱 BigModel（标准/直充）：baseUrl 已含 /api/paas/v4，端点直接拼 /chat/completions
             return { chat: '/chat/completions', models: '/models' };
+        case 'glm-coding':
+            // 智谱编程套餐：baseUrl 已含 /api/coding/paas/v4，端点路径相同
+            return { chat: '/chat/completions', models: '/models' };
+        // 以下 provider 的 baseUrl 已含 /v1 路径，端点不使用 /v1 前缀
+        case 'moonshot-coding':
+        case 'qwen':
+        case 'hunyuan':
+        case 'stepfun':
+        case 'lingyiwanwu':
+        case 'opencode-zen':
+        case 'opencode-go':
+            return { chat: '/chat/completions', models: '/models' };
+        case 'volcano-coding':
+            // 火山引擎 编程套餐：使用 /api/coding/v3 路径
+            return { chat: '/api/coding/v3/chat/completions', models: '/api/coding/v3/models' };
         default:
             return { chat: '/v1/chat/completions', models: '/v1/models' };
     }
@@ -89,6 +111,7 @@ export function resolveLLMConfig(
         model: model || provider?.models?.[0] || '',
         apiKey: provider?.apiKey || '',
         providerId,
+        disableThinking: provider?.disableThinking,
     };
 }
 
@@ -106,7 +129,7 @@ export async function fetchProviderModels(provider: Provider): Promise<string[]>
         if (provider.apiKey) headers['x-goog-api-key'] = provider.apiKey;
     } else if (provider.id === 'anthropic') {
         if (provider.apiKey) headers['x-api-key'] = provider.apiKey;
-        headers['anthropic-version'] = '2023-06-01';
+        headers['anthropic-version'] = ANTHROPIC_API_VERSION;
     } else {
         if (provider.apiKey) headers['Authorization'] = 'Bearer ' + provider.apiKey;
     }
@@ -154,11 +177,19 @@ export interface LLMConfig {
     maxTokens?: number;
     temperature?: number;
     timeout?: number;
+    /** 是否禁用思考/推理 token（如 DeepSeek） */
+    disableThinking?: boolean;
+    /** 请求失败时的最大重试次数（默认 5） */
+    maxRetries?: number;
+    /** 指数退避的初始延迟（ms）（默认 15000） */
+    retryDelayMs?: number;
 }
 
 export interface ChatMessage {
-    role: 'system' | 'user' | 'assistant';
+    role: 'system' | 'user' | 'assistant' | 'tool';
     content: string;
+    tool_calls?: ToolCall[];
+    tool_call_id?: string;
 }
 
 export type StructuredOutputStrategy = 'openai-compatible' | 'gemini-native' | 'prompt-only';
@@ -200,14 +231,17 @@ export function getProviderCapabilities(providerId = 'openai-compatible'): Provi
 }
 
 const DEFAULT_CONFIG: Required<LLMConfig> = {
-    endpoint: 'http://localhost:15721/v1/chat/completions',
-    model: 'deepseek-chat',
+    endpoint: '',
+    model: '',
     apiKey: '',
-    providerId: 'openai-compatible',
+    providerId: '',
     responseFormat: 'text',
-    maxTokens: 8192,
+    maxTokens: MAX_OUTPUT_TOKENS,
     temperature: 0.7,
     timeout: 300_000,
+    disableThinking: false,
+    maxRetries: 5,
+    retryDelayMs: 15_000,
 };
 
 export class LLMError extends Error {
@@ -260,7 +294,7 @@ export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMCon
 
     if (providerId === 'anthropic') {
         if (config.apiKey) headers['x-api-key'] = config.apiKey;
-        headers['anthropic-version'] = '2023-06-01';
+        headers['anthropic-version'] = ANTHROPIC_API_VERSION;
         const systemText = joinMessages(messages, 'system');
         const body: Record<string, any> = {
             model: config.model,
@@ -287,7 +321,7 @@ export function buildLLMRequest(messages: ChatMessage[], config: Required<LLMCon
     if (config.responseFormat === 'json_object' && capabilities.structuredOutputStrategy === 'openai-compatible') {
         body.response_format = { type: 'json_object' };
     }
-    if ((providerId === 'deepseek' || config.model.startsWith('deepseek-')) && config.model) {
+    if (config.disableThinking || providerId === 'deepseek') {
         body.thinking = { type: 'disabled' };
     }
     return { headers, body };
@@ -328,9 +362,163 @@ export function extractLLMContent(json: any, providerId = 'openai-compatible'): 
     }
 
     if (typeof content !== 'string' || !content) {
-        throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）`, 0);
+        // Defensive: include API error and raw response for debugging
+        let details = '';
+
+        // Check for API-level error field (e.g. { error: { message: '...' } })
+        const apiError = json?.error;
+        if (apiError) {
+            if (typeof apiError === 'string') {
+                details += `API error: ${apiError}. `;
+            } else if (apiError?.message) {
+                details += `API error: ${apiError.message}. `;
+            } else {
+                details += `API error: ${JSON.stringify(apiError).slice(0, 300)}. `;
+            }
+        }
+
+        // Include raw response snippet so the user can see what the model returned
+        try {
+            const rawSnippet = JSON.stringify(json).slice(0, 1000);
+            details += `Raw response: ${rawSnippet}`;
+            console.warn('[llm] Full raw response:', JSON.stringify(json));
+        } catch {
+            details += `Raw response: [unable to stringify]`;
+        }
+
+        throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）: ${details}`, 0);
     }
     return content;
+}
+
+/**
+ * 视觉 API 的图片输入。
+ * base64 为裸 base64 字符串（不含 data: 前缀）。
+ */
+export interface VisionImage {
+    base64: string;
+    mimeType?: string;
+}
+
+/**
+ * 调用 OpenAI 兼容的视觉 API 提取图片中的文字 / LaTeX 公式。
+ * 复用 resolveLLMConfig 查找 endpoint/apiKey，使用与 callLLM 相同的重试逻辑。
+ * 超时设为 60s（视觉调用比纯文本慢）。
+ */
+export async function callVisionLLM(
+    appConfig: AppConfig,
+    providerId: string,
+    model: string,
+    prompt: string,
+    images: VisionImage[],
+    options?: { maxTokens?: number }
+): Promise<string> {
+    const cfg = resolveLLMConfig(appConfig, providerId, model);
+    if (!cfg.endpoint || !cfg.model) {
+        const msg = !cfg.model && cfg.endpoint
+            ? '请先在设置中点击"获取模型"选择模型'
+            : '请先在设置中配置视觉模型 Provider';
+        throw new LLMError(msg, 0);
+    }
+
+    const content: any[] = [{ type: 'text', text: prompt }];
+    for (const img of images) {
+        content.push({
+            type: 'image_url',
+            image_url: {
+                url: `data:${img.mimeType || 'image/png'};base64,${img.base64}`,
+                detail: 'high',
+            },
+        });
+    }
+
+    const messages = [{ role: 'user', content }] as any[];
+
+    // 合并配置（不覆盖 endpoint/model/apiKey，用 resolveLLMConfig 的）
+    const effectiveConfig: Record<string, any> = {};
+    for (const [key, value] of Object.entries({
+        model: cfg.model,
+        endpoint: cfg.endpoint,
+        apiKey: cfg.apiKey,
+        providerId: cfg.providerId,
+        maxTokens: options?.maxTokens ?? 4096,
+        temperature: 0.1,
+        timeout: 60_000,
+        maxRetries: 3,
+        retryDelayMs: 5_000,
+        disableThinking: cfg.disableThinking,
+    })) {
+        if (value !== undefined && value !== null && value !== '') {
+            effectiveConfig[key] = value;
+        }
+    }
+    const mergedCfg = { ...DEFAULT_CONFIG, ...effectiveConfig } as Required<LLMConfig>;
+    mergedCfg.endpoint = cfg.endpoint || '';
+    mergedCfg.model = cfg.model || '';
+
+    const maxRetries = mergedCfg.maxRetries;
+    const baseDelay = mergedCfg.retryDelayMs;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), mergedCfg.timeout);
+
+            // 构造 OpenAI 兼容的请求（不使用 buildLLMRequest，因为需要 image_url 格式）
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (mergedCfg.apiKey) headers['Authorization'] = 'Bearer ' + mergedCfg.apiKey;
+
+            const body: Record<string, any> = {
+                model: mergedCfg.model,
+                messages,
+                max_tokens: mergedCfg.maxTokens,
+                temperature: mergedCfg.temperature,
+            };
+            if (mergedCfg.disableThinking) {
+                body.thinking = { type: 'disabled' };
+            }
+
+            const resp = await fetch(mergedCfg.endpoint, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (resp.ok) {
+                const json = await resp.json();
+                return extractLLMContent(json, mergedCfg.providerId);
+            }
+
+            if (resp.status === 429) {
+                if (attempt < maxRetries) {
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    console.warn(`[vision] 429 限流，${delay}ms 后重试 (${attempt + 1}/${maxRetries})`);
+                    await sleep(delay);
+                    continue;
+                }
+                throw new LLMError('视觉 API 限流，已达最大重试次数', 429);
+            }
+
+            const errBody = await resp.text().catch(() => '');
+            throw new LLMError(`视觉 API 错误 ${resp.status}: ${errBody.slice(0, 200)}`, resp.status);
+        } catch (err: any) {
+            if (err instanceof LLMError) throw err;
+            if (err.name === 'AbortError') {
+                throw new LLMError('视觉 API 请求超时', 0);
+            }
+            if (attempt === maxRetries) {
+                throw new LLMError(`视觉 API 网络错误（重试 ${maxRetries} 次后）: ${err.message}`, 0);
+            }
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.warn(`[vision] 网络错误 (尝试 ${attempt + 1})，${delay}ms 后重试:`, err.message);
+            await sleep(delay);
+        }
+    }
+
+    throw new LLMError('视觉 API 调用失败', 0);
 }
 
 function joinMessages(messages: ChatMessage[], role: ChatMessage['role']): string {
@@ -342,12 +530,29 @@ function joinMessages(messages: ChatMessage[], role: ChatMessage['role']): strin
 
 /**
  * 调用 LLM API，带 429 指数退避。
- * 返回 response content 字符串。
+ * 返回 response content 字符串（无 tools 参数）或完整响应（含 tool_calls）。
+ *
+ * 重载1: 无 tools → 返回 string（向后兼容）
  */
 export async function callLLM(
     messages: ChatMessage[],
     config?: LLMConfig
-): Promise<string> {
+): Promise<string>;
+
+/**
+ * 重载2: 有 tools → 返回包含 content/toolCalls/finishReason 的对象
+ */
+export async function callLLM(
+    messages: ChatMessage[],
+    config: LLMConfig,
+    options: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
+): Promise<{ content: string; toolCalls?: ToolCall[]; finishReason: string }>;
+
+export async function callLLM(
+    messages: ChatMessage[],
+    config?: LLMConfig,
+    options?: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
+): Promise<any> {
     // 安全合并：过滤掉空值，防止用户留空的字段（如 model=''）覆盖默认值
     const effectiveConfig: Record<string, any> = {};
     if (config) {
@@ -358,8 +563,21 @@ export async function callLLM(
         }
     }
     const cfg = { ...DEFAULT_CONFIG, ...effectiveConfig } as Required<LLMConfig>;
-    const maxRetries = 5;
-    const baseDelay = 15_000;
+
+    // 校验必要字段：用户必须在设置中配置 Provider
+    if (!cfg.endpoint || !cfg.model || !cfg.providerId) {
+        const missing = [];
+        if (!cfg.endpoint) missing.push('endpoint');
+        if (!cfg.model) missing.push('model');
+        if (!cfg.providerId) missing.push('providerId');
+        const msg = !cfg.model && cfg.providerId
+            ? '请先在设置中点击"获取模型"选择模型'
+            : `请先在设置中配置 AI Provider（缺少: ${missing.join(', ')}）`;
+        throw new LLMError(msg, 0);
+    }
+
+    const maxRetries = cfg.maxRetries;
+    const baseDelay = cfg.retryDelayMs;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -368,18 +586,25 @@ export async function callLLM(
 
             const request = buildLLMRequest(messages, cfg);
 
+            // Inject tools into the request body if provided
+            const body = { ...request.body };
+            if (options?.tools && options.tools.length > 0) {
+                body.tools = options.tools;
+                body.tool_choice = 'auto';
+            }
+
             const resp = await fetch(cfg.endpoint, {
                 method: 'POST',
                 headers: request.headers,
-                body: JSON.stringify(request.body),
-                signal: controller.signal,
+                body: JSON.stringify(body),
+                signal: options?.abortSignal || controller.signal,
             });
 
             clearTimeout(timeoutId);
 
             if (resp.ok) {
                 const json = await resp.json();
-                return extractLLMContent(json, cfg.providerId);
+                return parseLLMResponse(json, cfg.providerId, options?.tools);
             }
 
             if (resp.status === 429) {
@@ -411,6 +636,70 @@ export async function callLLM(
     throw new LLMError('API 调用失败', 0);
 }
 
+/** Parse LLM response, extracting content and optionally tool_calls. */
+function parseLLMResponse(
+    json: any,
+    providerId: string,
+    tools?: ToolDefinition[]
+): string | { content: string; toolCalls?: ToolCall[]; finishReason: string } {
+    // Helper: extract content string, using '' for null/undefined
+    function safeContent(raw: any): string {
+        if (typeof raw === 'string') return raw;
+        if (raw === null || raw === undefined) return '';
+        return String(raw);
+    }
+
+    if (providerId === 'gemini') {
+        if (tools) {
+            return { content: extractLLMContent(json, providerId), toolCalls: undefined, finishReason: 'stop' };
+        }
+        return extractLLMContent(json, providerId);
+    }
+    if (providerId === 'anthropic') {
+        if (tools) {
+            return { content: extractLLMContent(json, providerId), toolCalls: undefined, finishReason: 'stop' };
+        }
+        return extractLLMContent(json, providerId);
+    }
+
+    const choice = json?.choices?.[0];
+    if (!choice) {
+        throw new LLMError(`API 响应缺少 choices: ${JSON.stringify(json).slice(0, 500)}`, 0);
+    }
+
+    const message = choice.message || {};
+    const content: string = safeContent(message.content);
+    const rawToolCalls = message.tool_calls;
+    const finishReason: string = choice.finish_reason || 'stop';
+
+    if (tools && rawToolCalls && Array.isArray(rawToolCalls) && rawToolCalls.length > 0) {
+        const toolCalls: ToolCall[] = rawToolCalls.map((tc: any) => ({
+            id: tc.id || '',
+            type: 'function' as const,
+            function: {
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+            },
+        }));
+        return { content, toolCalls, finishReason };
+    }
+
+    if (tools && finishReason === 'tool_calls') {
+        return { content, toolCalls: undefined, finishReason };
+    }
+
+    // When tools are provided, always return object format (content is always a string)
+    if (tools) {
+        return { content, toolCalls: undefined, finishReason };
+    }
+
+    // No tools — return content string for backward compatibility
+    if (!content) {
+        throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）: ${JSON.stringify(json).slice(0, 500)}`, 0);
+    }
+    return content;
+}
+
 /** AI 生成的原始卡片数据 */
 export interface GeneratedCard {
     question: string;
@@ -434,7 +723,7 @@ export async function generateFlashcards(
     context?: string
 ): Promise<GeneratedCard[]> {
     // 按 count + agent.tokensPerCard 动态计算 maxTokens
-    const estimatedTokens = Math.min(8192, count * (agent.tokensPerCard || 400) + 500);
+    const estimatedTokens = Math.min(MAX_OUTPUT_TOKENS, count * (agent.tokensPerCard || 400) + 500);
     const effectiveConfig: LLMConfig = {
         ...config,
         maxTokens: Math.max(config?.maxTokens || 0, estimatedTokens),
@@ -444,9 +733,9 @@ export async function generateFlashcards(
     const filledPrompt = (agent.prompt || '')
         .replace(/\{topic\}/g, topic)
         .replace(/\{count\}/g, String(count))
-        .replace(/\{language\}/g, agent.language || 'zh-CN')
-        .replace(/\{style\}/g, agent.style || '简洁')
-        .replace(/\{difficulty\}/g, agent.difficulty || '进阶')
+        .replace(/\{language\}/g, agent.language || 'auto')
+        .replace(/\{style\}/g, agent.style || 'standard')
+        .replace(/\{difficulty\}/g, agent.difficulty || 'intermediate')
         .replace(/\{context\}/g, context || '');
 
     // 固定的输出格式约束（代码追加，用户不用写）

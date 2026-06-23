@@ -7,7 +7,7 @@ export function buildGenerateCardsPrompt(
     relations: RelationCandidate[],
     chunks: PromptSourceChunk[],
     targetCount: number,
-    language = 'zh-CN',
+    language = 'auto',
     cdfMode = false
 ): string {
     const cdfSection = cdfMode ? buildCDFSection(language) : '';
@@ -44,7 +44,7 @@ export function buildGenerateCardsPrompt(
       ${cdfMode ? '"descriptorDimension": "definition|formula|process|compare|apply|cause|effect|limitation",' : ''}
       "confidence": 0.0,
       "sourceRefs": [
-        {"type":"siyuan|opennotebook|manual|pdf|url","sourceId":"...","blockId":"...","chunkId":"...","quote":"短证据","page":1,"url":"..."}
+        {"type":"siyuan-doc|manual|source","sourceId":"...","blockId":"...","quote":"短证据","page":1}
       ]
     }
   ],
@@ -67,7 +67,7 @@ SOURCES:
 ${JSON.stringify(chunks, null, 2)}`;
 }
 
-function buildCDFSection(language = 'zh-CN'): string {
+function buildCDFSection(language = 'auto'): string {
     return `
 
 CDF (Concept Descriptor Framework) 模式：

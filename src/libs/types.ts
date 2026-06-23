@@ -6,6 +6,7 @@
  */
 
 import type { CardType, SourceRef } from './types/concept';
+import type { EmbeddingProviderType } from './rag/embedder-types';
 
 /** 卡片状态 */
 export type CardStatus = 'new' | 'learning' | 'review' | 'buried' | 'drill' | 'relearning';
@@ -116,6 +117,8 @@ export interface Provider {
     models: string[];
     /** 是否内置预设 */
     isBuiltIn: boolean;
+    /** 是否强制禁用思考/推理 token（如 DeepSeek 原生模型） */
+    disableThinking?: boolean;
 }
 
 /** 插件持久化配置 */
@@ -130,6 +133,14 @@ export interface AppConfig {
     mindmapProviderId: string;
     /** 思维导图功能使用的模型名 */
     mindmapModel: string;
+    /** RAG 对话功能使用的 Provider id（可选，默认 fallback 到制卡） */
+    ragProviderId?: string;
+    /** RAG 对话功能使用的模型名（可选，默认 fallback 到制卡） */
+    ragModel?: string;
+    /** 视觉模型 OCR/公式提取功能使用的 Provider id（独立于制卡） */
+    visionProviderId?: string;
+    /** 视觉模型 OCR/公式提取功能使用的模型名 */
+    visionModel?: string;
     /** 每日新卡片上限 */
     cardsPerDay: number;
     /** 复习调度算法：SM-2 兼容默认，FSRS 可选。 */
@@ -138,19 +149,10 @@ export interface AppConfig {
     defaultDeck: string;
     /** 用户自定义 agent 列表 */
     agents: AgentConfig[];
-    // ── Local RAG ──────────────────────────
-    /** 启用本地 RAG 语义搜索 */
-    ragEnabled: boolean;
-    /** RAG 对话使用的 Provider id */
-    ragProviderId: string;
-    /** RAG 对话使用的模型名 */
-    ragModel: string;
-    /** RAG 分块大小（估算 token 数） */
-    ragChunkSize: number;
-    /** RAG 分块重叠比例 (0-1) */
-    ragChunkOverlap: number;
-    /** RAG 检索返回数 */
-    ragTopK: number;
-    /** RAG 嵌入模型名（HuggingFace） */
-    ragEmbeddingModel: string;
+    /** RAG 嵌入向量提供方类型 */
+    ragEmbeddingProvider: EmbeddingProviderType;
+    /** RAG 嵌入向量提供方连接配置 */
+    ragEmbeddingConfig: { endpoint: string; apiKey: string; model: string; };
+    /** 视觉提取引擎类型：关闭 / 云 API */
+    visionProviderType: 'off' | 'cloud';
 }

@@ -68,7 +68,7 @@ function detectDelimiter(line: string): string {
 
 export function parseAnkiTxt(
     text: string,
-    defaultDeck: string = 'Anki 导入',
+    defaultDeck: string = 'Imported from Anki',
     isDuplicate?: (question: string) => boolean
 ): ParsedCard[] {
     if (!text || !text.trim()) throw new AnkiParseError('文件内容为空');
@@ -287,7 +287,7 @@ function mapNoteToCard(
         question: toSiyuanMath(question),
         answer: toSiyuanMath(answer),
         hint: toSiyuanMath(stripHtml(h)),
-        deck: decks[did]?.name || 'Anki 导入',
+        deck: decks[did]?.name || 'Imported from Anki',
         tags: note.tags || [],
         duplicate: isDuplicate ? isDuplicate(question) : false,
     };
@@ -297,7 +297,7 @@ function mapNoteToCard(
 
 export async function parseAnkiFile(
     file: File,
-    defaultDeck: string = 'Anki 导入',
+    defaultDeck: string = 'Imported from Anki',
     isDuplicate?: (question: string) => boolean
 ): Promise<ParsedCard[]> {
     const name = file.name.toLowerCase();

@@ -5,7 +5,7 @@
  * Local RAG barrel export.
  */
 
-export { chunkText } from './chunker';
+export { chunkText, splitIntoSentences } from './chunker';
 export type { ChunkerOptions } from './chunker';
 
 export { RagEmbedder, getRagEmbedder, resetRagEmbedder } from './embedder';
@@ -16,7 +16,7 @@ export { ingestDocument, ingestFile } from './ingest';
 export type { IngestOptions, IngestResult } from './ingest';
 
 export { ragQuery, ragContext, formatRagContext } from './query';
-export type { QueryOptions } from './query';
+export type { QueryOptions, QueryEmbedder } from './query';
 
 export { buildRagConceptRequest } from './rag-bridge';
 export type { RagConceptRequest, RagConceptRequestInput } from './rag-bridge';
@@ -29,3 +29,9 @@ export type {
     RagConfig,
     IngestedDocRecord,
 } from './types';
+
+export type { EmbeddingProviderType, EmbeddingConfig, EmbeddingProvider } from './embedder-types';
+export { DEFAULT_EMBEDDING_DIM } from './embedder-types';
+export { BuiltinEmbedder } from './embedder-builtin';
+export { RemoteEmbedderBase, OllamaEmbedder, OpenAIEmbedder, CustomEmbedder } from './embedder-remote';
+export { getRagEmbedderProvider, resetEmbeddingProvider } from './embedder';

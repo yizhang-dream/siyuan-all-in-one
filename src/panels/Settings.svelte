@@ -4,15 +4,29 @@
   import type { AppConfig, AgentConfig, Provider } from '../libs/types';
   import { genAgentId, genId } from '../libs/config';
   import { fetchProviderModels, getProviderCapabilities } from '../libs/llm';
+  import type { EmbeddingProviderType } from '../libs/rag/embedder-types';
 
   export let plugin: any;
   export let config: AppConfig;
+  export let showAsTab = false;
 
   let providers: Provider[] = [];
   let flashcardProviderId = '';
   let flashcardModel = '';
   let mindmapProviderId = '';
   let mindmapModel = '';
+  let ragProviderId = '';
+  let ragModel = '';
+  let visionProviderId = 'glm';
+  let visionModel = '';
+  let visionProviderType: 'off' | 'cloud' = 'off';
+  // ── 嵌入模型 ──
+  let embeddingProvider: EmbeddingProviderType = 'builtin';
+  let embeddingEndpoint = '';
+  let embeddingApiKey = '';
+  let embeddingModel = '';
+  let embeddingModelList: string[] = [];
+  let embeddingLoading = false;
   let cardsPerDay = 30;
   let scheduler: 'sm2' | 'fsrs' = 'sm2';
   let defaultDeck = '';
@@ -39,6 +53,15 @@
     flashcardModel = config.flashcardModel || '';
     mindmapProviderId = config.mindmapProviderId || '';
     mindmapModel = config.mindmapModel || '';
+    ragProviderId = config.ragProviderId || flashcardProviderId;
+    ragModel = config.ragModel || flashcardModel;
+    visionProviderId = config.visionProviderId || 'glm';
+    visionModel = config.visionModel || '';
+    visionProviderType = config.visionProviderType || 'off';
+    embeddingProvider = config.ragEmbeddingProvider || 'builtin';
+    embeddingEndpoint = config.ragEmbeddingConfig?.endpoint || '';
+    embeddingApiKey = config.ragEmbeddingConfig?.apiKey || '';
+    embeddingModel = config.ragEmbeddingConfig?.model || '';
     cardsPerDay = config.cardsPerDay ?? 30;
     scheduler = config.scheduler === 'fsrs' ? 'fsrs' : 'sm2';
     defaultDeck = config.defaultDeck || '';
@@ -59,17 +82,21 @@
       flashcardModel,
       mindmapProviderId,
       mindmapModel,
+      ragProviderId,
+      ragModel,
+      visionProviderId,
+      visionModel,
+      visionProviderType,
       cardsPerDay: Number(cardsPerDay),
       scheduler,
       defaultDeck,
       agents,
-      ragEnabled,
-      ragChunkSize: Number(ragChunkSize),
-      ragChunkOverlap: Number(ragChunkOverlap),
-      ragTopK: Number(ragTopK),
-      ragEmbeddingModel,
-      ragProviderId,
-      ragModel,
+      ragEmbeddingProvider: embeddingProvider,
+      ragEmbeddingConfig: {
+        endpoint: embeddingEndpoint,
+        apiKey: embeddingApiKey,
+        model: embeddingModel,
+      },
     });
     showMessage('设置已保存');
   }
@@ -93,6 +120,113 @@
     mindmapProviderId = e.target.value;
     const models = getProviderModels(mindmapProviderId);
     mindmapModel = models[0] || '';
+  }
+  function onVisionProviderTypeChange(e: any) {
+    visionProviderType = e.target.value;
+  }
+  function onVisionProviderChange(e: any) {
+    visionProviderId = e.target.value;
+    const models = getProviderModels(visionProviderId);
+    visionModel = models[0] || '';
+  }
+
+  // ── 嵌入模型 ──────────────────────────────
+
+  function onEmbeddingProviderChange() {
+    embeddingModelList = [];
+    if (embeddingProvider === 'builtin') {
+      embeddingModel = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+    } else if (embeddingProvider === 'ollama') {
+      embeddingEndpoint = embeddingEndpoint || 'http://localhost:11434';
+      embeddingModel = embeddingModel || '';
+    } else if (embeddingProvider === 'siliconflow') {
+      embeddingEndpoint = 'https://api.siliconflow.cn/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'qwen') {
+      embeddingEndpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'zhipu') {
+      embeddingEndpoint = 'https://open.bigmodel.cn/api/paas/v4';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'hunyuan') {
+      embeddingEndpoint = 'https://api.hunyuan.cloud.tencent.com/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'baidu') {
+      embeddingEndpoint = 'https://qianfan.baidubce.com/v2/embeddings';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'cohere') {
+      embeddingEndpoint = 'https://api.cohere.ai/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'jina') {
+      embeddingEndpoint = 'https://api.jina.ai/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'mistral') {
+      embeddingEndpoint = 'https://api.mistral.ai/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'voyage') {
+      embeddingEndpoint = 'https://api.voyageai.com/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'gemini-embed') {
+      embeddingEndpoint = 'https://generativelanguage.googleapis.com/v1beta/openai';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'together') {
+      embeddingEndpoint = 'https://api.together.xyz/v1';
+      embeddingModel = '';
+    } else if (embeddingProvider === 'nomic') {
+      embeddingEndpoint = 'https://api-atlas.nomic.ai/v1';
+      embeddingModel = '';
+    }
+  }
+
+  async function fetchEmbeddingModels() {
+    embeddingLoading = true;
+    embeddingModelList = [];
+    try {
+      if (embeddingProvider === 'ollama') {
+        const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/api/tags`);
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`Ollama API error ${resp.status}: ${text}`);
+        }
+        const json = await resp.json();
+        embeddingModelList = (json.models || []).map((m: any) => m.name);
+      } else if (embeddingProvider === 'openai') {
+        const resp = await fetch('https://api.openai.com/v1/models', {
+          headers: { 'Authorization': `Bearer ${embeddingApiKey}` },
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`OpenAI API error ${resp.status}: ${text}`);
+        }
+        const json = await resp.json();
+        embeddingModelList = (json.data || [])
+          .filter((m: any) => m.id.startsWith('text-embedding-'))
+          .map((m: any) => m.id);
+      } else if (embeddingProvider === 'siliconflow' || embeddingProvider === 'qwen' || embeddingProvider === 'zhipu' || embeddingProvider === 'hunyuan' || embeddingProvider === 'baidu' || embeddingProvider === 'cohere' || embeddingProvider === 'jina' || embeddingProvider === 'mistral' || embeddingProvider === 'voyage' || embeddingProvider === 'gemini-embed' || embeddingProvider === 'together' || embeddingProvider === 'nomic') {
+        const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
+          headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`Embedding API error ${resp.status}: ${text}`);
+        }
+        const json = await resp.json();
+        embeddingModelList = (json.data || []).map((m: any) => m.id);
+      } else if (embeddingProvider === 'custom') {
+        const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
+          headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`Custom embedding API error ${resp.status}: ${text}`);
+        }
+        const json = await resp.json();
+        embeddingModelList = (json.data || []).map((m: any) => m.id);
+      }
+    } catch (err: any) {
+      // silently fail, user can still type model name manually
+    }
+    embeddingLoading = false;
   }
 
   // ── Provider 管理 ──────────────────────────────
@@ -136,6 +270,7 @@
       // 如果删除的是当前选中的 provider，重置指针
       if (flashcardProviderId === p.id) { flashcardProviderId = providers[0]?.id || ''; flashcardModel = getProviderModels(flashcardProviderId)[0] || ''; }
       if (mindmapProviderId === p.id) { mindmapProviderId = providers[0]?.id || ''; mindmapModel = getProviderModels(mindmapProviderId)[0] || ''; }
+      if (visionProviderId === p.id) { visionProviderId = providers[0]?.id || ''; visionModel = getProviderModels(visionProviderId)[0] || ''; }
       save();
     });
   }
@@ -145,8 +280,51 @@
     isNewProvider = false;
   }
 
+  async function testProviderConnection(provider: any) {
+    if (!provider?.baseUrl) {
+      showMessage('请先配置 Provider 的端点地址');
+      return;
+    }
+    if (!provider?.apiKey) {
+      showMessage('请先填写 API Key');
+      return;
+    }
+    try {
+      const { getEndpoints } = await import('../libs/llm');
+      const endpoints = getEndpoints(provider.id);
+      const base = provider.baseUrl.replace(/\/+$/, '');
+      // Build the models endpoint URL
+      let modelUrl: string;
+      if (provider.id === 'gemini') {
+        modelUrl = `${base}${endpoints.models}?key=${encodeURIComponent(provider.apiKey)}`;
+      } else {
+        modelUrl = endpoints.models.startsWith('http') ? endpoints.models : `${base}${endpoints.models}`;
+      }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (provider.id === 'gemini') {
+        // API key is in query param for Gemini
+      } else {
+        headers['Authorization'] = `Bearer ${provider.apiKey}`;
+      }
+      const resp = await fetch(modelUrl, { method: 'GET', headers });
+      if (resp.ok) {
+        showMessage(`✅ ${provider.name || provider.id} 连接成功`);
+      } else {
+        const text = await resp.text().catch(() => '');
+        showMessage(`❌ 连接失败 (${resp.status}): ${text.slice(0, 200)}`);
+      }
+    } catch (e: any) {
+      showMessage(`❌ 连接失败: ${e?.message || '网络无法访问，请检查端点地址和网络连接'}`);
+    }
+  }
+
   function handleProviderOverlayKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') cancelProviderEdit();
+  }
+
+  function editProviderById(providerId: string) {
+    const p = providers.find((x) => x.id === providerId);
+    if (p) editProvider(p);
   }
 
   // Provider 编辑器中的模型列表管理
@@ -257,332 +435,784 @@
   }
 </script>
 
-<div class="settings-panel">
-  <!-- AI Provider 管理 -->
-  <div class="settings-group">
-    <div class="section-header">
-      <h3>AI Provider 管理</h3>
-      <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newProvider}>
-        <svg><use xlink:href="#iconAdd"></use></svg>
-        <span>新增</span>
-      </button>
-    </div>
-    <p class="settings-hint">配置一个或多个 AI 服务（OpenAI 兼容端点）。每个功能可独立选择不同的 Provider + 模型。</p>
+{#if showAsTab}
+  <div class="settings-tab-content">
+    <div class="settings-panel">
+      <!-- AI Provider 管理 -->
+      <div class="settings-group">
+        <div class="section-header">
+          <h3>AI Provider 管理</h3>
+          <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newProvider}>
+            <svg width="18" height="18"><use xlink:href="#iconAioAdd"></use></svg>
+            <span>新增</span>
+          </button>
+        </div>
+        <p class="settings-hint">配置一个或多个 AI 服务（OpenAI 兼容端点）。每个功能可独立选择不同的 Provider + 模型。</p>
 
-    <div class="provider-list">
-      {#each providers as p (p.id)}
-        <div class="provider-item">
-          <div class="provider-info">
-            <span class="provider-name">
-              {p.name}
-              {#if p.isBuiltIn}<span class="provider-badge">内置</span>{/if}
-              {#if p.apiKey}<span class="provider-badge provider-badge--ok">✓ 密钥</span>{/if}
-            </span>
-            <span class="provider-meta">
-              {p.models.length > 0 ? `${p.models.length} 个模型` : '未配置模型'}
-              · {getProviderJsonLabel(p.id)}
-              {#if !p.apiKey} · <span class="warn-text">需密钥</span>{/if}
-            </span>
+        <div class="provider-list">
+          {#each providers as p (p.id)}
+            <div class="provider-item">
+              <div class="provider-info">
+                <span class="provider-name">
+                  {p.name}
+                  {#if p.isBuiltIn}<span class="provider-badge">内置</span>{/if}
+                  {#if p.apiKey}<span class="provider-badge provider-badge--ok">✓ 密钥</span>{/if}
+                </span>
+                <span class="provider-meta">
+                  {p.models.length > 0 ? `${p.models.length} 个模型` : '未配置模型'}
+                  · {getProviderJsonLabel(p.id)}
+                  {#if !p.apiKey} · <span class="warn-text">需密钥</span>{/if}
+                </span>
+              </div>
+              <div class="provider-actions">
+                <button class="b3-button b3-button--small" on:click={() => editProvider(p)}>编辑</button>
+                <button class="b3-button b3-button--small" on:click={() => testProviderConnection(p)} title="测试连接">测试</button>
+                {#if !p.isBuiltIn}
+                  <button class="b3-button b3-button--small provider-del" on:click={() => deleteProvider(p)}>删除</button>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- 功能模型分配 -->
+      <div class="settings-group">
+        <h3>功能模型分配</h3>
+        <p class="settings-hint">为每个 AI 功能选择对应的 Provider 和模型。</p>
+
+        <div class="feature-assign">
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioList"></use></svg>
+              <span>制卡</span>
+            </div>
+            <div class="feature-row">
+              <select class="b3-select" value={flashcardProviderId} on:change={onFlashcardProviderChange} aria-label="制卡 Provider">
+                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+              <select class="b3-select" bind:value={flashcardModel} aria-label="制卡模型">
+                {#if getProviderModels(flashcardProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
+                {/if}
+              </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">获取模型</button>
+            </div>
           </div>
-          <div class="provider-actions">
-            <button class="b3-button b3-button--small" on:click={() => editProvider(p)}>编辑</button>
-            {#if !p.isBuiltIn}
-              <button class="b3-button b3-button--small provider-del" on:click={() => deleteProvider(p)}>删除</button>
-            {/if}
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
+              <span>思维导图</span>
+            </div>
+            <div class="feature-row">
+              <select class="b3-select" value={mindmapProviderId} on:change={onMindmapProviderChange} aria-label="思维导图 Provider">
+                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+              <select class="b3-select" bind:value={mindmapModel} aria-label="思维导图模型">
+                {#if getProviderModels(mindmapProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
+                {/if}
+              </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(mindmapProviderId)} title="从 API 获取模型列表">获取模型</button>
+            </div>
+          </div>
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioSearch"></use></svg>
+              <span>RAG 对话</span>
+            </div>
+            <div class="feature-row">
+              <select class="b3-select" bind:value={ragProviderId} aria-label="RAG 对话 Provider">
+                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+              <select class="b3-select" bind:value={ragModel} aria-label="RAG 对话模型">
+                {#if getProviderModels(ragProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
+                {/if}
+              </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(ragProviderId)} title="从 API 获取模型列表">获取模型</button>
+            </div>
+          </div>
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
+              <span>视觉提取</span>
+            </div>
+            <div class="vision-provider-row">
+              <select class="b3-select" value={visionProviderType} on:change={onVisionProviderTypeChange} aria-label="视觉提取引擎">
+                <option value="off">关闭</option>
+                <option value="cloud">云 API (视觉大模型)</option>
+              </select>
+              {#if visionProviderType === 'cloud'}
+                <div class="feature-row">
+                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉 Provider">
+                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+                  </select>
+                  <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
+                    {#if getProviderModels(visionProviderId).length === 0}
+                      <option value="" disabled>请先点击"获取模型"</option>
+                    {:else}
+                      {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
+                    {/if}
+                  </select>
+                  <button class="b3-button b3-button--small" on:click={() => editProviderById(visionProviderId)} title="从 API 获取模型列表">获取模型</button>
+                </div>
+              {/if}
+            </div>
           </div>
         </div>
-      {/each}
-    </div>
-  </div>
-
-  <!-- 功能模型分配 -->
-  <div class="settings-group">
-    <h3>功能模型分配</h3>
-    <p class="settings-hint">为每个 AI 功能选择对应的 Provider 和模型。</p>
-
-    <div class="feature-assign">
-      <div class="feature-block">
-        <div class="feature-label">
-          <svg><use xlink:href="#iconList"></use></svg>
-          <span>制卡</span>
-        </div>
-        <div class="feature-row">
-          <select class="b3-select" value={flashcardProviderId} on:change={onFlashcardProviderChange} aria-label="制卡 Provider">
-            {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
-          </select>
-          <select class="b3-select" bind:value={flashcardModel} aria-label="制卡模型">
-            {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
-            {#if !getProviderModels(flashcardProviderId).includes(flashcardModel) && flashcardModel}
-              <option value={flashcardModel}>{flashcardModel}</option>
-            {/if}
-          </select>
-        </div>
       </div>
 
-      <div class="feature-block">
-        <div class="feature-label">
-          <svg><use xlink:href="#iconGraph"></use></svg>
-          <span>思维导图</span>
-        </div>
-        <div class="feature-row">
-          <select class="b3-select" value={mindmapProviderId} on:change={onMindmapProviderChange} aria-label="思维导图 Provider">
-            {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
-          </select>
-          <select class="b3-select" bind:value={mindmapModel} aria-label="思维导图模型">
-            {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
-            {#if !getProviderModels(mindmapProviderId).includes(mindmapModel) && mindmapModel}
-              <option value={mindmapModel}>{mindmapModel}</option>
-            {/if}
-          </select>
-        </div>
-      </div>
+      <!-- 嵌入模型设置 -->
+      <div class="settings-group">
+        <h3>嵌入模型设置</h3>
+        <p class="settings-hint">选择用于生成文档向量的嵌入模型。内置为纯本地，其他选项需联网。</p>
 
-      <div class="feature-block">
-        <div class="feature-label">
-          <svg><use xlink:href="#iconSearch"></use></svg>
-          <span>RAG 对话</span>
-        </div>
-        <div class="feature-row">
-          <select class="b3-select" value={ragProviderId} on:change={(e) => { ragProviderId = e.target.value; ragModel = getProviderModels(ragProviderId)[0] || ''; }} aria-label="RAG Provider">
-            <option value="">跟随制卡</option>
-            {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+        <label class="b3-label">
+          <span class="b3-label__text">嵌入模型</span>
+          <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
+            <option value="builtin">内置 (paraphrase-multilingual-MiniLM-L12-v2, 384维)</option>
+            <option value="ollama">Ollama 本地</option>
+            <option value="siliconflow">硅基流动 (SiliconFlow)</option>
+            <option value="qwen">通义千问 (Qwen)</option>
+            <option value="zhipu">智谱 AI (GLM)</option>
+            <option value="hunyuan">腾讯混元</option>
+            <option value="baidu">百度千帆</option>
+            <option value="cohere">Cohere</option>
+            <option value="jina">Jina AI</option>
+            <option value="mistral">Mistral AI</option>
+            <option value="voyage">Voyage AI</option>
+            <option value="gemini-embed">Google Gemini</option>
+            <option value="together">Together AI</option>
+            <option value="nomic">Nomic AI</option>
+            <option value="openai">OpenAI</option>
+            <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
-          <select class="b3-select" bind:value={ragModel} aria-label="RAG 模型">
-            <option value="">跟随制卡</option>
-            {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
-            {#if ragModel && !getProviderModels(ragProviderId).includes(ragModel)}
-              <option value={ragModel}>{ragModel}</option>
-            {/if}
-          </select>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 复习设置 -->
-  <div class="settings-group">
-    <h3>复习设置</h3>
-    <div class="feature-row">
-      <div>
-        <label for="settings-scheduler">复习算法</label>
-        <select id="settings-scheduler" class="b3-select" bind:value={scheduler}>
-          <option value="sm2">SM-2（兼容）</option>
-          <option value="fsrs">FSRS（实验）</option>
-        </select>
-      </div>
-      <div>
-        <label for="settings-cards-per-day">每日新卡片上限</label>
-        <input id="settings-cards-per-day" class="b3-text-field" type="number" bind:value={cardsPerDay} min="1" max="999" />
-      </div>
-      <div>
-        <label for="settings-default-deck">默认牌组</label>
-        <input id="settings-default-deck" class="b3-text-field" type="text" bind:value={defaultDeck} placeholder="默认" />
-      </div>
-    </div>
-  </div>
-
-  <!-- Local RAG 设置 -->
-  <div class="settings-group">
-    <h3>本地 RAG 设置</h3>
-    <p class="settings-hint">启用后可使用本地语义搜索，上传文档即可检索问答，无需 Open Notebook。</p>
-    <div class="feature-row">
-      <div>
-        <label>
-          <input type="checkbox" bind:checked={ragEnabled} />
-          启用本地 RAG
         </label>
+
+        {#if embeddingProvider !== 'builtin'}
+          <label class="b3-label">
+            <span class="b3-label__text">
+              {embeddingProvider === 'ollama' ? '地址' : 'API 终端'}
+            </span>
+            <input class="b3-text-field" type="text" bind:value={embeddingEndpoint}
+              placeholder={embeddingProvider === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'} />
+          </label>
+
+          {#if embeddingProvider !== 'ollama'}
+            <label class="b3-label">
+              <span class="b3-label__text">API Key</span>
+              <input class="b3-text-field" type="password" bind:value={embeddingApiKey}
+                placeholder={embeddingProvider === 'openai' ? 'sk-...' : 'your-key'} />
+            </label>
+          {/if}
+
+          <label class="b3-label">
+            <span class="b3-label__text">模型</span>
+            <div class="embedding-model-row">
+              {#if embeddingModelList.length > 0}
+                <select class="b3-select" bind:value={embeddingModel}>
+                  {#each embeddingModelList as m}
+                    <option value={m}>{m}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input class="b3-text-field" type="text" bind:value={embeddingModel}
+                  placeholder={embeddingProvider === 'ollama' ? 'ollama 模型名' : 'text-embedding-3-small'} />
+              {/if}
+              <button class="b3-button b3-button--small" on:click={fetchEmbeddingModels} disabled={embeddingLoading}>
+                {embeddingLoading ? '获取中...' : '获取模型'}
+              </button>
+            </div>
+          </label>
+        {/if}
       </div>
+
+      <!-- 复习设置 -->
+      <div class="settings-group">
+        <h3>复习设置</h3>
+        <div class="feature-row">
+          <div>
+            <label for="settings-scheduler">复习算法</label>
+            <select id="settings-scheduler" class="b3-select" bind:value={scheduler}>
+              <option value="sm2">SM-2（兼容）</option>
+              <option value="fsrs">FSRS（实验）</option>
+            </select>
+          </div>
+          <div>
+            <label for="settings-cards-per-day">每日新卡片上限</label>
+            <input id="settings-cards-per-day" class="b3-text-field" type="number" bind:value={cardsPerDay} min="1" max="999" />
+          </div>
+          <div>
+            <label for="settings-default-deck">默认牌组</label>
+            <input id="settings-default-deck" class="b3-text-field" type="text" bind:value={defaultDeck} placeholder="默认" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent 管理 -->
+      <div class="settings-group">
+        <div class="section-header">
+          <h3>Agent 管理（制卡提示词）</h3>
+          <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newAgent}>
+            <svg width="18" height="18"><use xlink:href="#iconAioAdd"></use></svg>
+            <span>新增</span>
+          </button>
+        </div>
+        <p class="settings-hint">Agent 决定 AI 如何生成卡片（提示词、语言、风格、难度）。</p>
+
+        {#if agents.length === 0}
+          <p class="empty-hint">还没有 Agent，点击「新增」创建</p>
+        {:else}
+          <div class="provider-list">
+            {#each agents as agent (agent.id)}
+              <div class="provider-item">
+                <div class="provider-info">
+                  <span class="provider-name">{agent.name}</span>
+                  <span class="provider-meta">{agent.suggestedCount}张 · {agent.language} · {agent.style} · {agent.difficulty}</span>
+                </div>
+                <div class="provider-actions">
+                  <button class="b3-button b3-button--small" on:click={() => editAgent(agent)}>编辑</button>
+                  <button class="b3-button b3-button--small provider-del" on:click={() => deleteAgent(agent)}>删除</button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <button class="b3-button b3-button--outline save-btn" on:click={save}>保存设置</button>
     </div>
-    {#if ragEnabled}
-      <div class="feature-row">
-        <div>
-          <label for="settings-rag-chunk-size">分块大小（token）</label>
-          <input id="settings-rag-chunk-size" class="b3-text-field" type="number" bind:value={ragChunkSize} min="100" max="2000" step="50" />
-        </div>
-        <div>
-          <label for="settings-rag-chunk-overlap">分块重叠比例</label>
-          <input id="settings-rag-chunk-overlap" class="b3-text-field" type="number" bind:value={ragChunkOverlap} min="0" max="0.5" step="0.05" />
-        </div>
-        <div>
-          <label for="settings-rag-top-k">检索数量（Top-K）</label>
-          <input id="settings-rag-top-k" class="b3-text-field" type="number" bind:value={ragTopK} min="1" max="20" step="1" />
-        </div>
-      </div>
-      <div class="feature-row">
-        <div>
-          <label for="settings-rag-embedding-model">嵌入模型</label>
-          <input id="settings-rag-embedding-model" class="b3-text-field" type="text" bind:value={ragEmbeddingModel} placeholder="Xenova/all-MiniLM-L6-v2" />
-        </div>
-      </div>
-    {/if}
   </div>
 
-  <!-- Agent 管理 -->
-  <div class="settings-group">
-    <div class="section-header">
-      <h3>Agent 管理（制卡提示词）</h3>
-      <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newAgent}>
-        <svg><use xlink:href="#iconAdd"></use></svg>
-        <span>新增</span>
-      </button>
-    </div>
-    <p class="settings-hint">Agent 决定 AI 如何生成卡片（提示词、语言、风格、难度）。</p>
+  <!-- Provider 编辑弹窗 -->
+  {#if editingProvider}
+  <div class="overlay" on:click|self={cancelProviderEdit} on:keydown={handleProviderOverlayKeydown} role="button" tabindex="0" aria-label="关闭 Provider 编辑弹窗">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title">
+      <h3 id="provider-dialog-title">{isNewProvider ? '新增 Provider' : '编辑 Provider'}</h3>
 
-    {#if agents.length === 0}
-      <p class="empty-hint">还没有 Agent，点击「新增」创建</p>
-    {:else}
+      <label for="provider-name">名称 *</label>
+      <input id="provider-name" class="b3-text-field" type="text" bind:value={editingProvider.name} placeholder="如：DeepSeek、Ollama 本地" />
+
+      <label for="provider-base-url">API 端点 *</label>
+      <input id="provider-base-url" class="b3-text-field" type="text" bind:value={editingProvider.baseUrl} placeholder="https://api.deepseek.com/v1/chat/completions" />
+
+      <label for="provider-api-key">API 密钥</label>
+      <input id="provider-api-key" class="b3-text-field" type="text" bind:value={editingProvider.apiKey} placeholder="sk-...（本地模型可不填）" />
+
+      <div class="dialog-label">模型列表</div>
+      <div class="model-list-editor">
+        <!-- 已有模型 -->
+        {#each editingProvider.models as m, idx}
+          <div class="model-row">
+            <span class="model-name">{m}</span>
+            <button class="b3-button b3-button--small b3-button--text settings-icon-button" on:click={() => removeModel(idx)} aria-label="移除模型" title="移除模型">
+              <svg width="18" height="18"><use xlink:href="#iconAioClose"></use></svg>
+            </button>
+          </div>
+        {/each}
+
+        <!-- 获取模型列表按钮 -->
+        <div class="model-fetch-area">
+          <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={fetchModels} disabled={isFetchingModels}>
+            <svg width="18" height="18" class:is-spinning={isFetchingModels}><use xlink:href="#iconAioRefresh"></use></svg>
+            <span>{isFetchingModels ? '获取中...' : '从 API 获取模型列表'}</span>
+          </button>
+          {#if fetchedModels.length > 0}
+            <button class="b3-button b3-button--small b3-button--text" on:click={addAllFetched}>全部添加</button>
+          {/if}
+        </div>
+
+        <!-- 获取到的模型（待选择添加） -->
+        {#if fetchedModels.length > 0}
+          <div class="fetched-models">
+            {#each fetchedModels as m}
+              <button type="button" class="fetched-model-row" on:click={() => addFetchedModel(m)} on:keydown={(e) => handleFetchedModelKeydown(e, m)}>
+                <span>{m}</span>
+                <span class="add-icon">+ 添加</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- 手动添加 -->
+        <div class="model-add-row">
+          <input class="b3-text-field" type="text" bind:value={newModelName} placeholder="手动输入模型名（如 deepseek-chat）" on:keydown={(e) => { if (e.key === 'Enter') addModel(); }} />
+          <button class="b3-button b3-button--small b3-button--outline" on:click={addModel}>手动添加</button>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="b3-button b3-button--outline" on:click={cancelProviderEdit}>取消</button>
+        <button class="b3-button b3-button--text" on:click={saveProvider}>保存</button>
+      </div>
+    </div>
+  </div>
+  {/if}
+
+  <!-- Agent 编辑弹窗 -->
+  {#if editingAgent}
+  <div class="overlay" on:click|self={cancelAgentEdit} on:keydown={handleAgentOverlayKeydown} role="button" tabindex="0" aria-label="关闭 Agent 编辑弹窗">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agent-dialog-title">
+      <h3 id="agent-dialog-title">{isNewAgent ? '新增 Agent' : '编辑 Agent'}</h3>
+
+      <label for="agent-name">名称 *</label>
+      <input id="agent-name" class="b3-text-field" type="text" bind:value={editingAgent.name} placeholder="如：物理概念卡、医学记忆卡" />
+
+      <label for="agent-prompt">提示词（System Prompt）*</label>
+      <textarea id="agent-prompt" class="b3-text-field prompt-area" bind:value={editingAgent.prompt} rows="8"
+        placeholder={"你是一个专业的知识卡片生成助手。请围绕主题 {topic} 生成 {count} 张卡片。\n\n要求：\n- 语言：{language}\n- 风格：{style}\n- 难度：{difficulty}\n- 问题清晰，答案准确\n- 如有上下文，参考：{context}"}></textarea>
+      <p class="prompt-hint">
+        支持占位符：<code>{'{topic}'}</code> <code>{'{count}'}</code> <code>{'{language}'}</code> <code>{'{style}'}</code> <code>{'{difficulty}'}</code> <code>{'{context}'}</code>
+      </p>
+
+      <div class="dialog-row">
+        <div>
+          <label for="agent-suggested-count">建议数量</label>
+          <input id="agent-suggested-count" class="b3-text-field" type="number" bind:value={editingAgent.suggestedCount} min="1" max="30" />
+        </div>
+        <div>
+          <label for="agent-language">语言</label>
+          <select id="agent-language" class="b3-select" bind:value={editingAgent.language}>
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="auto">自动</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="dialog-row">
+        <div>
+          <label for="agent-style">风格</label>
+          <select id="agent-style" class="b3-select" bind:value={editingAgent.style}>
+            <option value="简洁">简洁</option>
+            <option value="详细">详细</option>
+            <option value="口语化">口语化</option>
+            <option value="学术">学术</option>
+          </select>
+        </div>
+        <div>
+          <label for="agent-difficulty">难度</label>
+          <select id="agent-difficulty" class="b3-select" bind:value={editingAgent.difficulty}>
+            <option value="基础">基础</option>
+            <option value="进阶">进阶</option>
+            <option value="挑战">挑战</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="agent-tokens-per-card">每张卡 Token 预算</label>
+      <input id="agent-tokens-per-card" class="b3-text-field" type="number" bind:value={editingAgent.tokensPerCard} min="100" max="5000" />
+      <p class="settings-hint">概念类约 300，计算/推导类约 600-1200，真题类约 1800</p>
+
+      <div class="dialog-actions">
+        <button class="b3-button b3-button--outline" on:click={cancelAgentEdit}>取消</button>
+        <button class="b3-button b3-button--text" on:click={saveAgent}>保存</button>
+      </div>
+    </div>
+  </div>
+  {/if}
+{:else}
+  <div class="settings-panel">
+    <!-- AI Provider 管理 -->
+    <div class="settings-group">
+      <div class="section-header">
+        <h3>AI Provider 管理</h3>
+        <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newProvider}>
+          <svg width="18" height="18"><use xlink:href="#iconAioAdd"></use></svg>
+          <span>新增</span>
+        </button>
+      </div>
+      <p class="settings-hint">配置一个或多个 AI 服务（OpenAI 兼容端点）。每个功能可独立选择不同的 Provider + 模型。</p>
+
       <div class="provider-list">
-        {#each agents as agent (agent.id)}
+        {#each providers as p (p.id)}
           <div class="provider-item">
             <div class="provider-info">
-              <span class="provider-name">{agent.name}</span>
-              <span class="provider-meta">{agent.suggestedCount}张 · {agent.language} · {agent.style} · {agent.difficulty}</span>
+              <span class="provider-name">
+                {p.name}
+                {#if p.isBuiltIn}<span class="provider-badge">内置</span>{/if}
+                {#if p.apiKey}<span class="provider-badge provider-badge--ok">✓ 密钥</span>{/if}
+              </span>
+              <span class="provider-meta">
+                {p.models.length > 0 ? `${p.models.length} 个模型` : '未配置模型'}
+                · {getProviderJsonLabel(p.id)}
+                {#if !p.apiKey} · <span class="warn-text">需密钥</span>{/if}
+              </span>
             </div>
             <div class="provider-actions">
-              <button class="b3-button b3-button--small" on:click={() => editAgent(agent)}>编辑</button>
-              <button class="b3-button b3-button--small provider-del" on:click={() => deleteAgent(agent)}>删除</button>
+              <button class="b3-button b3-button--small" on:click={() => editProvider(p)}>编辑</button>
+              <button class="b3-button b3-button--small" on:click={() => testProviderConnection(p)} title="测试连接">测试</button>
+              {#if !p.isBuiltIn}
+                <button class="b3-button b3-button--small provider-del" on:click={() => deleteProvider(p)}>删除</button>
+              {/if}
             </div>
           </div>
         {/each}
       </div>
-    {/if}
-  </div>
+    </div>
 
-  <button class="b3-button b3-button--outline save-btn" on:click={save}>保存设置</button>
-</div>
+    <!-- 功能模型分配 -->
+    <div class="settings-group">
+      <h3>功能模型分配</h3>
+      <p class="settings-hint">为每个 AI 功能选择对应的 Provider 和模型。</p>
 
-<!-- Provider 编辑弹窗 -->
-{#if editingProvider}
-<div class="overlay" on:click|self={cancelProviderEdit} on:keydown={handleProviderOverlayKeydown} role="button" tabindex="0" aria-label="关闭 Provider 编辑弹窗">
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title">
-    <h3 id="provider-dialog-title">{isNewProvider ? '新增 Provider' : '编辑 Provider'}</h3>
-
-    <label for="provider-name">名称 *</label>
-    <input id="provider-name" class="b3-text-field" type="text" bind:value={editingProvider.name} placeholder="如：DeepSeek、Ollama 本地" />
-
-    <label for="provider-base-url">API 端点 *</label>
-    <input id="provider-base-url" class="b3-text-field" type="text" bind:value={editingProvider.baseUrl} placeholder="https://api.deepseek.com/v1/chat/completions" />
-
-    <label for="provider-api-key">API 密钥</label>
-    <input id="provider-api-key" class="b3-text-field" type="text" bind:value={editingProvider.apiKey} placeholder="sk-...（本地模型可不填）" />
-
-    <div class="dialog-label">模型列表</div>
-    <div class="model-list-editor">
-      <!-- 已有模型 -->
-      {#each editingProvider.models as m, idx}
-        <div class="model-row">
-          <span class="model-name">{m}</span>
-          <button class="b3-button b3-button--small b3-button--text settings-icon-button" on:click={() => removeModel(idx)} aria-label="移除模型" title="移除模型">
-            <svg><use xlink:href="#iconClose"></use></svg>
-          </button>
+      <div class="feature-assign">
+        <div class="feature-block">
+          <div class="feature-label">
+            <svg width="18" height="18"><use xlink:href="#iconAioList"></use></svg>
+            <span>制卡</span>
+          </div>
+          <div class="feature-row">
+            <select class="b3-select" value={flashcardProviderId} on:change={onFlashcardProviderChange} aria-label="制卡 Provider">
+              {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+            </select>
+            <select class="b3-select" bind:value={flashcardModel} aria-label="制卡模型">
+              {#if getProviderModels(flashcardProviderId).length === 0}
+                <option value="" disabled>请先点击"获取模型"</option>
+              {:else}
+                {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
+              {/if}
+            </select>
+            <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">获取模型</button>
+          </div>
         </div>
-      {/each}
 
-      <!-- 获取模型列表按钮 -->
-      <div class="model-fetch-area">
-        <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={fetchModels} disabled={isFetchingModels}>
-          <svg class:is-spinning={isFetchingModels}><use xlink:href="#iconRefresh"></use></svg>
-          <span>{isFetchingModels ? '获取中...' : '从 API 获取模型列表'}</span>
-        </button>
-        {#if fetchedModels.length > 0}
-          <button class="b3-button b3-button--small b3-button--text" on:click={addAllFetched}>全部添加</button>
+        <div class="feature-block">
+          <div class="feature-label">
+            <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
+            <span>思维导图</span>
+          </div>
+          <div class="feature-row">
+            <select class="b3-select" value={mindmapProviderId} on:change={onMindmapProviderChange} aria-label="思维导图 Provider">
+              {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+            </select>
+            <select class="b3-select" bind:value={mindmapModel} aria-label="思维导图模型">
+              {#if getProviderModels(mindmapProviderId).length === 0}
+                <option value="" disabled>请先点击"获取模型"</option>
+              {:else}
+                {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
+              {/if}
+            </select>
+            <button class="b3-button b3-button--small" on:click={() => editProviderById(mindmapProviderId)} title="从 API 获取模型列表">获取模型</button>
+            </div>
+          </div>
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioSearch"></use></svg>
+              <span>RAG 对话</span>
+            </div>
+            <div class="feature-row">
+              <select class="b3-select" bind:value={ragProviderId} aria-label="RAG 对话 Provider">
+                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+              <select class="b3-select" bind:value={ragModel} aria-label="RAG 对话模型">
+                {#if getProviderModels(ragProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
+                {/if}
+              </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(ragProviderId)} title="从 API 获取模型列表">获取模型</button>
+            </div>
+          </div>
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
+              <span>视觉提取</span>
+            </div>
+            <div class="vision-provider-row">
+              <select class="b3-select" value={visionProviderType} on:change={onVisionProviderTypeChange} aria-label="视觉提取引擎">
+                <option value="off">关闭</option>
+                <option value="cloud">云 API (视觉大模型)</option>
+              </select>
+              {#if visionProviderType === 'cloud'}
+                <div class="feature-row">
+                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉 Provider">
+                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+                  </select>
+                  <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
+                    {#if getProviderModels(visionProviderId).length === 0}
+                      <option value="" disabled>请先点击"获取模型"</option>
+                    {:else}
+                      {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
+                    {/if}
+                  </select>
+                  <button class="b3-button b3-button--small" on:click={() => editProviderById(visionProviderId)} title="从 API 获取模型列表">获取模型</button>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 嵌入模型设置 -->
+      <div class="settings-group">
+        <h3>嵌入模型设置</h3>
+        <p class="settings-hint">选择用于生成文档向量的嵌入模型。内置为纯本地，其他选项需联网。</p>
+
+        <label class="b3-label">
+          <span class="b3-label__text">嵌入模型</span>
+          <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
+            <option value="builtin">内置 (paraphrase-multilingual-MiniLM-L12-v2, 384维)</option>
+            <option value="ollama">Ollama 本地</option>
+            <option value="siliconflow">硅基流动 (SiliconFlow)</option>
+            <option value="qwen">通义千问 (Qwen)</option>
+            <option value="zhipu">智谱 AI (GLM)</option>
+            <option value="hunyuan">腾讯混元</option>
+            <option value="baidu">百度千帆</option>
+            <option value="cohere">Cohere</option>
+            <option value="jina">Jina AI</option>
+            <option value="mistral">Mistral AI</option>
+            <option value="voyage">Voyage AI</option>
+            <option value="gemini-embed">Google Gemini</option>
+            <option value="together">Together AI</option>
+            <option value="nomic">Nomic AI</option>
+            <option value="openai">OpenAI</option>
+            <option value="custom">自定义 (OpenAI 兼容)</option>
+          </select>
+        </label>
+
+        {#if embeddingProvider !== 'builtin'}
+          <label class="b3-label">
+            <span class="b3-label__text">
+              {embeddingProvider === 'ollama' ? '地址' : 'API 终端'}
+            </span>
+            <input class="b3-text-field" type="text" bind:value={embeddingEndpoint}
+              placeholder={embeddingProvider === 'ollama' ? 'http://localhost:11434' : 'https://api.openai.com/v1'} />
+          </label>
+
+          {#if embeddingProvider !== 'ollama'}
+            <label class="b3-label">
+              <span class="b3-label__text">API Key</span>
+              <input class="b3-text-field" type="password" bind:value={embeddingApiKey}
+                placeholder={embeddingProvider === 'openai' ? 'sk-...' : 'your-key'} />
+            </label>
+          {/if}
+
+          <label class="b3-label">
+            <span class="b3-label__text">模型</span>
+            <div class="embedding-model-row">
+              {#if embeddingModelList.length > 0}
+                <select class="b3-select" bind:value={embeddingModel}>
+                  {#each embeddingModelList as m}
+                    <option value={m}>{m}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input class="b3-text-field" type="text" bind:value={embeddingModel}
+                  placeholder={embeddingProvider === 'ollama' ? 'ollama 模型名' : 'text-embedding-3-small'} />
+              {/if}
+              <button class="b3-button b3-button--small" on:click={fetchEmbeddingModels} disabled={embeddingLoading}>
+                {embeddingLoading ? '获取中...' : '获取模型'}
+              </button>
+            </div>
+          </label>
         {/if}
       </div>
 
-      <!-- 获取到的模型（待选择添加） -->
-      {#if fetchedModels.length > 0}
-        <div class="fetched-models">
-          {#each fetchedModels as m}
-            <button type="button" class="fetched-model-row" on:click={() => addFetchedModel(m)} on:keydown={(e) => handleFetchedModelKeydown(e, m)}>
-              <span>{m}</span>
-              <span class="add-icon">+ 添加</span>
-            </button>
+      <!-- 复习设置 -->
+      <div class="settings-group">
+        <h3>复习设置</h3>
+        <div class="feature-row">
+          <div>
+            <label for="settings-scheduler">复习算法</label>
+            <select id="settings-scheduler" class="b3-select" bind:value={scheduler}>
+              <option value="sm2">SM-2（兼容）</option>
+              <option value="fsrs">FSRS（实验）</option>
+            </select>
+          </div>
+          <div>
+            <label for="settings-cards-per-day">每日新卡片上限</label>
+            <input id="settings-cards-per-day" class="b3-text-field" type="number" bind:value={cardsPerDay} min="1" max="999" />
+          </div>
+          <div>
+            <label for="settings-default-deck">默认牌组</label>
+            <input id="settings-default-deck" class="b3-text-field" type="text" bind:value={defaultDeck} placeholder="默认" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent 管理 -->
+      <div class="settings-group">
+      <div class="section-header">
+        <h3>Agent 管理（制卡提示词）</h3>
+        <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={newAgent}>
+          <svg width="18" height="18"><use xlink:href="#iconAioAdd"></use></svg>
+          <span>新增</span>
+        </button>
+      </div>
+      <p class="settings-hint">Agent 决定 AI 如何生成卡片（提示词、语言、风格、难度）。</p>
+
+      {#if agents.length === 0}
+        <p class="empty-hint">还没有 Agent，点击「新增」创建</p>
+      {:else}
+        <div class="provider-list">
+          {#each agents as agent (agent.id)}
+            <div class="provider-item">
+              <div class="provider-info">
+                <span class="provider-name">{agent.name}</span>
+                <span class="provider-meta">{agent.suggestedCount}张 · {agent.language} · {agent.style} · {agent.difficulty}</span>
+              </div>
+              <div class="provider-actions">
+                <button class="b3-button b3-button--small" on:click={() => editAgent(agent)}>编辑</button>
+                <button class="b3-button b3-button--small provider-del" on:click={() => deleteAgent(agent)}>删除</button>
+              </div>
+            </div>
           {/each}
         </div>
       {/if}
-
-      <!-- 手动添加 -->
-      <div class="model-add-row">
-        <input class="b3-text-field" type="text" bind:value={newModelName} placeholder="手动输入模型名（如 deepseek-chat）" on:keydown={(e) => { if (e.key === 'Enter') addModel(); }} />
-        <button class="b3-button b3-button--small b3-button--outline" on:click={addModel}>手动添加</button>
-      </div>
     </div>
 
-    <div class="dialog-actions">
-      <button class="b3-button b3-button--outline" on:click={cancelProviderEdit}>取消</button>
-      <button class="b3-button b3-button--text" on:click={saveProvider}>保存</button>
+    <button class="b3-button b3-button--outline save-btn" on:click={save}>保存设置</button>
+  </div>
+
+  <!-- Provider 编辑弹窗 -->
+  {#if editingProvider}
+  <div class="overlay" on:click|self={cancelProviderEdit} on:keydown={handleProviderOverlayKeydown} role="button" tabindex="0" aria-label="关闭 Provider 编辑弹窗">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title">
+      <h3 id="provider-dialog-title">{isNewProvider ? '新增 Provider' : '编辑 Provider'}</h3>
+
+      <label for="provider-name">名称 *</label>
+      <input id="provider-name" class="b3-text-field" type="text" bind:value={editingProvider.name} placeholder="如：DeepSeek、Ollama 本地" />
+
+      <label for="provider-base-url">API 端点 *</label>
+      <input id="provider-base-url" class="b3-text-field" type="text" bind:value={editingProvider.baseUrl} placeholder="https://api.deepseek.com/v1/chat/completions" />
+
+      <label for="provider-api-key">API 密钥</label>
+      <input id="provider-api-key" class="b3-text-field" type="text" bind:value={editingProvider.apiKey} placeholder="sk-...（本地模型可不填）" />
+
+      <div class="dialog-label">模型列表</div>
+      <div class="model-list-editor">
+        <!-- 已有模型 -->
+        {#each editingProvider.models as m, idx}
+          <div class="model-row">
+            <span class="model-name">{m}</span>
+            <button class="b3-button b3-button--small b3-button--text settings-icon-button" on:click={() => removeModel(idx)} aria-label="移除模型" title="移除模型">
+              <svg width="18" height="18"><use xlink:href="#iconAioClose"></use></svg>
+            </button>
+          </div>
+        {/each}
+
+        <!-- 获取模型列表按钮 -->
+        <div class="model-fetch-area">
+          <button class="b3-button b3-button--small b3-button--outline settings-icon-button" on:click={fetchModels} disabled={isFetchingModels}>
+            <svg width="18" height="18" class:is-spinning={isFetchingModels}><use xlink:href="#iconAioRefresh"></use></svg>
+            <span>{isFetchingModels ? '获取中...' : '从 API 获取模型列表'}</span>
+          </button>
+          {#if fetchedModels.length > 0}
+            <button class="b3-button b3-button--small b3-button--text" on:click={addAllFetched}>全部添加</button>
+          {/if}
+        </div>
+
+        <!-- 获取到的模型（待选择添加） -->
+        {#if fetchedModels.length > 0}
+          <div class="fetched-models">
+            {#each fetchedModels as m}
+              <button type="button" class="fetched-model-row" on:click={() => addFetchedModel(m)} on:keydown={(e) => handleFetchedModelKeydown(e, m)}>
+                <span>{m}</span>
+                <span class="add-icon">+ 添加</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- 手动添加 -->
+        <div class="model-add-row">
+          <input class="b3-text-field" type="text" bind:value={newModelName} placeholder="手动输入模型名（如 deepseek-chat）" on:keydown={(e) => { if (e.key === 'Enter') addModel(); }} />
+          <button class="b3-button b3-button--small b3-button--outline" on:click={addModel}>手动添加</button>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="b3-button b3-button--outline" on:click={cancelProviderEdit}>取消</button>
+        <button class="b3-button b3-button--text" on:click={saveProvider}>保存</button>
+      </div>
     </div>
   </div>
-</div>
-{/if}
+  {/if}
 
-<!-- Agent 编辑弹窗 -->
-{#if editingAgent}
-<div class="overlay" on:click|self={cancelAgentEdit} on:keydown={handleAgentOverlayKeydown} role="button" tabindex="0" aria-label="关闭 Agent 编辑弹窗">
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agent-dialog-title">
-    <h3 id="agent-dialog-title">{isNewAgent ? '新增 Agent' : '编辑 Agent'}</h3>
+  <!-- Agent 编辑弹窗 -->
+  {#if editingAgent}
+  <div class="overlay" on:click|self={cancelAgentEdit} on:keydown={handleAgentOverlayKeydown} role="button" tabindex="0" aria-label="关闭 Agent 编辑弹窗">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="agent-dialog-title">
+      <h3 id="agent-dialog-title">{isNewAgent ? '新增 Agent' : '编辑 Agent'}</h3>
 
-    <label for="agent-name">名称 *</label>
-    <input id="agent-name" class="b3-text-field" type="text" bind:value={editingAgent.name} placeholder="如：物理概念卡、医学记忆卡" />
+      <label for="agent-name">名称 *</label>
+      <input id="agent-name" class="b3-text-field" type="text" bind:value={editingAgent.name} placeholder="如：物理概念卡、医学记忆卡" />
 
-    <label for="agent-prompt">提示词（System Prompt）*</label>
-    <textarea id="agent-prompt" class="b3-text-field prompt-area" bind:value={editingAgent.prompt} rows="8"
-      placeholder={"你是一个专业的知识卡片生成助手。请围绕主题 {topic} 生成 {count} 张卡片。\n\n要求：\n- 语言：{language}\n- 风格：{style}\n- 难度：{difficulty}\n- 问题清晰，答案准确\n- 如有上下文，参考：{context}"}></textarea>
-    <p class="prompt-hint">
-      支持占位符：<code>{'{topic}'}</code> <code>{'{count}'}</code> <code>{'{language}'}</code> <code>{'{style}'}</code> <code>{'{difficulty}'}</code> <code>{'{context}'}</code>
-    </p>
+      <label for="agent-prompt">提示词（System Prompt）*</label>
+      <textarea id="agent-prompt" class="b3-text-field prompt-area" bind:value={editingAgent.prompt} rows="8"
+        placeholder={"你是一个专业的知识卡片生成助手。请围绕主题 {topic} 生成 {count} 张卡片。\n\n要求：\n- 语言：{language}\n- 风格：{style}\n- 难度：{difficulty}\n- 问题清晰，答案准确\n- 如有上下文，参考：{context}"}></textarea>
+      <p class="prompt-hint">
+        支持占位符：<code>{'{topic}'}</code> <code>{'{count}'}</code> <code>{'{language}'}</code> <code>{'{style}'}</code> <code>{'{difficulty}'}</code> <code>{'{context}'}</code>
+      </p>
 
-    <div class="dialog-row">
-      <div>
-        <label for="agent-suggested-count">建议数量</label>
-        <input id="agent-suggested-count" class="b3-text-field" type="number" bind:value={editingAgent.suggestedCount} min="1" max="30" />
+      <div class="dialog-row">
+        <div>
+          <label for="agent-suggested-count">建议数量</label>
+          <input id="agent-suggested-count" class="b3-text-field" type="number" bind:value={editingAgent.suggestedCount} min="1" max="30" />
+        </div>
+        <div>
+          <label for="agent-language">语言</label>
+          <select id="agent-language" class="b3-select" bind:value={editingAgent.language}>
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="auto">自动</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label for="agent-language">语言</label>
-        <select id="agent-language" class="b3-select" bind:value={editingAgent.language}>
-          <option value="zh-CN">中文</option>
-          <option value="en">English</option>
-          <option value="ja">日本語</option>
-          <option value="ko">한국어</option>
-          <option value="auto">自动</option>
-        </select>
-      </div>
-    </div>
 
-    <div class="dialog-row">
-      <div>
-        <label for="agent-style">风格</label>
-        <select id="agent-style" class="b3-select" bind:value={editingAgent.style}>
-          <option value="简洁">简洁</option>
-          <option value="详细">详细</option>
-          <option value="口语化">口语化</option>
-          <option value="学术">学术</option>
-        </select>
+      <div class="dialog-row">
+        <div>
+          <label for="agent-style">风格</label>
+          <select id="agent-style" class="b3-select" bind:value={editingAgent.style}>
+            <option value="简洁">简洁</option>
+            <option value="详细">详细</option>
+            <option value="口语化">口语化</option>
+            <option value="学术">学术</option>
+          </select>
+        </div>
+        <div>
+          <label for="agent-difficulty">难度</label>
+          <select id="agent-difficulty" class="b3-select" bind:value={editingAgent.difficulty}>
+            <option value="基础">基础</option>
+            <option value="进阶">进阶</option>
+            <option value="挑战">挑战</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label for="agent-difficulty">难度</label>
-        <select id="agent-difficulty" class="b3-select" bind:value={editingAgent.difficulty}>
-          <option value="基础">基础</option>
-          <option value="进阶">进阶</option>
-          <option value="挑战">挑战</option>
-        </select>
+
+      <label for="agent-tokens-per-card">每张卡 Token 预算</label>
+      <input id="agent-tokens-per-card" class="b3-text-field" type="number" bind:value={editingAgent.tokensPerCard} min="100" max="5000" />
+      <p class="settings-hint">概念类约 300，计算/推导类约 600-1200，真题类约 1800</p>
+
+      <div class="dialog-actions">
+        <button class="b3-button b3-button--outline" on:click={cancelAgentEdit}>取消</button>
+        <button class="b3-button b3-button--text" on:click={saveAgent}>保存</button>
       </div>
-    </div>
-
-    <label for="agent-tokens-per-card">每张卡 Token 预算</label>
-    <input id="agent-tokens-per-card" class="b3-text-field" type="number" bind:value={editingAgent.tokensPerCard} min="100" max="5000" />
-    <p class="settings-hint">概念类约 300，计算/推导类约 600-1200，真题类约 1800</p>
-
-    <div class="dialog-actions">
-      <button class="b3-button b3-button--outline" on:click={cancelAgentEdit}>取消</button>
-      <button class="b3-button b3-button--text" on:click={saveAgent}>保存</button>
     </div>
   </div>
-</div>
+  {/if}
 {/if}
 
 <style lang="scss">
-  .settings-panel { padding: 24px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box; }
+  .settings-panel { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
   .settings-group {
     display: flex; flex-direction: column; gap: 6px;
     h3 { font-size: var(--aio-fs-base); margin: 0; color: var(--b3-theme-primary); }
@@ -638,6 +1268,9 @@
     .b3-select { flex: 1; }
     > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   }
+  .vision-provider-row { display: flex; flex-direction: column; gap: 6px;
+    .b3-select { width: 100%; }
+  }
 
   .save-btn { margin-top: 8px; align-self: flex-start; }
 
@@ -668,7 +1301,29 @@
   .dialog-row { display: flex; gap: 8px; > div { flex: 1; display: flex; flex-direction: column; gap: 4px; } }
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
+  .settings-tab-content {
+    padding: 16px;
+    overflow-y: auto;
+    height: 100%;
+
+    svg {
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+    }
+  }
+
   @keyframes aio-settings-spin {
     to { transform: rotate(360deg); }
+  }
+
+  .embedding-model-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .embedding-model-row .b3-select,
+  .embedding-model-row .b3-text-field {
+    flex: 1;
   }
 </style>

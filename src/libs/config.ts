@@ -13,11 +13,22 @@ export const BUILTIN_PROVIDERS: Provider[] = [
         apiKey: '',
         models: [],
         isBuiltIn: true,
+        disableThinking: true,
     },
     {
-        id: 'zhipu',
-        name: '智谱 GLM (BigModel)',
+        id: 'glm',
+        name: '智谱 GLM (标准/直充)',
         baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+        disableThinking: true,
+    },
+    // 编程套餐：订阅制，不可用 Flash 系列免费模型（会扣余额），配额用尽静默暂停
+    {
+        id: 'glm-coding',
+        name: '智谱 GLM (编程套餐)',
+        baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
         apiKey: '',
         models: [],
         isBuiltIn: true,
@@ -39,6 +50,14 @@ export const BUILTIN_PROVIDERS: Provider[] = [
         isBuiltIn: true,
     },
     {
+        id: 'moonshot-coding',
+        name: 'Kimi 编程套餐 (Moonshot)',
+        baseUrl: 'https://api.moonshot.cn/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+    },
+    {
         id: 'siliconflow',
         name: 'SiliconFlow 硅基流动',
         baseUrl: 'https://api.siliconflow.cn',
@@ -55,12 +74,70 @@ export const BUILTIN_PROVIDERS: Provider[] = [
         isBuiltIn: true,
     },
     {
+        id: 'volcano-coding',
+        name: '火山引擎 编程套餐 (Doubao)',
+        baseUrl: 'https://ark.cn-beijing.volces.com',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+    },
+    {
         id: 'minimax',
         name: 'MiniMax',
         baseUrl: 'https://api.minimaxi.com',
         apiKey: '',
         models: [],
         isBuiltIn: true,
+    },
+    {
+        id: 'qwen',
+        name: '通义千问 Qwen / DashScope',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+    },
+    {
+        id: 'hunyuan',
+        name: '腾讯混元 Tencent Hunyuan',
+        baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+    },
+    {
+        id: 'stepfun',
+        name: '阶跃星辰 StepFun',
+        baseUrl: 'https://api.stepfun.com/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+    },
+    {
+        id: 'lingyiwanwu',
+        name: '零一万物 01.AI / Yi',
+        baseUrl: 'https://api.lingyiwanwu.com/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+    },
+    {
+        id: 'opencode-zen',
+        name: 'OpenCode Zen',
+        baseUrl: 'https://opencode.ai/zen/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+        disableThinking: false,
+    },
+    {
+        id: 'opencode-go',
+        name: 'OpenCode Go (套餐)',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
+        disableThinking: false,
     },
     {
         id: 'gemini',
@@ -86,17 +163,17 @@ export const DEFAULT_CONFIG: AppConfig = {
     flashcardModel: '',
     mindmapProviderId: 'deepseek',
     mindmapModel: '',
+    ragProviderId: 'deepseek',
+    ragModel: '',
+    visionProviderId: 'glm',
+    visionModel: '',
     cardsPerDay: 30,
     scheduler: 'sm2',
-    defaultDeck: '默认',
+    defaultDeck: 'Default',
     agents: [],
-    ragEnabled: false,
-    ragProviderId: '',
-    ragModel: '',
-    ragChunkSize: 500,
-    ragChunkOverlap: 0.1,
-    ragTopK: 5,
-    ragEmbeddingModel: 'Xenova/all-MiniLM-L6-v2',
+    ragEmbeddingProvider: 'builtin',
+    ragEmbeddingConfig: { endpoint: '', apiKey: '', model: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2' },
+    visionProviderType: 'off',
 };
 
 /** 生成唯一 id（用于自定义 Provider） */
@@ -122,9 +199,9 @@ export function cleanAgent(raw: any): AgentConfig {
         name: String(raw?.name ?? '未命名 Agent'),
         prompt: String(raw?.prompt ?? ''),
         suggestedCount: Number(raw?.suggestedCount) || 10,
-        language: String(raw?.language || 'zh-CN'),
-        style: String(raw?.style || '简洁'),
-        difficulty: String(raw?.difficulty || '进阶'),
+        language: String(raw?.language || 'auto'),
+        style: String(raw?.style || 'standard'),
+        difficulty: String(raw?.difficulty || 'intermediate'),
         tokensPerCard: Number(raw?.tokensPerCard) || 400,
     };
 }
@@ -178,6 +255,21 @@ export function cleanConfig(cfg: any): AppConfig {
         mindmapProviderId = String(cfg?.mindmapProviderId || providers[0]?.id || d.mindmapProviderId);
     }
 
+    // 旧配置里的 'zhipu' 已合并为 'glm'
+    if (flashcardProviderId === 'zhipu') flashcardProviderId = 'glm';
+    let vpId = cfg?.visionProviderId || 'glm';
+    if (vpId === 'zhipu') vpId = 'glm';
+
+    // Merge: ensure all built-in providers exist in the saved config.
+    // New built-ins (qwen, hunyuan, stepfun, lingyiwanwu, moonshot-coding, volcano-coding)
+    // are appended so users see them in the dropdown without losing their customizations.
+    const savedIds = new Set(providers.map(p => p.id));
+    for (const builtin of BUILTIN_PROVIDERS) {
+        if (!savedIds.has(builtin.id)) {
+            providers.push({ ...builtin });
+        }
+    }
+
     const rawAgents = Array.isArray(cfg?.agents) ? cfg.agents : [];
     return {
         providers,
@@ -185,16 +277,20 @@ export function cleanConfig(cfg: any): AppConfig {
         flashcardModel: String(cfg?.flashcardModel ?? (hasOldLlmConfig ? cfg.llmModel : d.flashcardModel)),
         mindmapProviderId,
         mindmapModel: String(cfg?.mindmapModel ?? (hasOldLlmConfig ? cfg.llmModel : d.mindmapModel)),
+        ragProviderId: String(cfg?.ragProviderId || d.ragProviderId),
+        ragModel: String(cfg?.ragModel ?? d.ragModel),
+        visionProviderId: vpId,
+        visionModel: String(cfg?.visionModel ?? d.visionModel),
         cardsPerDay: cfg?.cardsPerDay ?? d.cardsPerDay,
         scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',
         defaultDeck: cfg?.defaultDeck ?? d.defaultDeck,
         agents: rawAgents.map(cleanAgent),
-        ragEnabled: Boolean(cfg?.ragEnabled ?? d.ragEnabled),
-        ragProviderId: String(cfg?.ragProviderId || d.ragProviderId),
-        ragModel: String(cfg?.ragModel || d.ragModel),
-        ragChunkSize: Number(cfg?.ragChunkSize) || d.ragChunkSize,
-        ragChunkOverlap: Number(cfg?.ragChunkOverlap) ?? d.ragChunkOverlap,
-        ragTopK: Number(cfg?.ragTopK) || d.ragTopK,
-        ragEmbeddingModel: String(cfg?.ragEmbeddingModel || d.ragEmbeddingModel),
+        ragEmbeddingProvider: ['ollama', 'siliconflow', 'qwen', 'zhipu', 'hunyuan', 'baidu', 'cohere', 'jina', 'mistral', 'voyage', 'gemini-embed', 'together', 'nomic', 'openai', 'custom'].includes(cfg?.ragEmbeddingProvider) ? cfg.ragEmbeddingProvider : 'builtin',
+        ragEmbeddingConfig: {
+            endpoint: String(cfg?.ragEmbeddingConfig?.endpoint ?? ''),
+            apiKey: String(cfg?.ragEmbeddingConfig?.apiKey ?? ''),
+            model: String(cfg?.ragEmbeddingConfig?.model ?? ''),
+        },
+        visionProviderType: cfg?.visionProviderType || 'off',
     };
 }
