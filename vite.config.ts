@@ -55,6 +55,11 @@ export default defineConfig({
                 // Copy the ONNX model binary (preserves onnx/ structure)
                 { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/model_quantized.onnx", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/" },
                 // pdfjs-dist runs on main thread via disableWorker: true — no worker needed
+                // Bundle paddleocr-js for offline OCR at runtime (eval('require') resolves from dist/node_modules/)
+                // Only copy dist/ and package.json — not the 131MB nested node_modules/ (onnxruntime-web is webpack-bundled into dist/)
+                { src: "node_modules/paddleocr-js/dist/**/*", dest: "./node_modules/paddleocr-js/dist" },
+                { src: "node_modules/paddleocr-js/package.json", dest: "./node_modules/paddleocr-js" },
+                { src: "node_modules/paddleocr-js/LICENSE", dest: "./node_modules/paddleocr-js" },
             ],
         }),
     ],

@@ -447,7 +447,7 @@
                 <option value="cloud">云 API</option>
               </select>
               {#if visionProviderType === 'paddleocr'}
-                <p class="settings-hint" style="margin:0;">内置离线 OCR，无需配置 API。首次使用需下载模型（约 100MB）。</p>
+                <p class="settings-hint" style="margin:0;">内置离线 OCR，首次使用需初始化（约 244MB）</p>
               {:else if visionProviderType === 'cloud'}
                 <div class="feature-row">
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
@@ -822,7 +822,7 @@
                 <option value="cloud">云 API</option>
               </select>
               {#if visionProviderType === 'paddleocr'}
-                <p class="settings-hint" style="margin:0;">内置离线 OCR，无需配置 API。首次使用需下载模型（约 100MB）。</p>
+                <p class="settings-hint" style="margin:0;">内置离线 OCR，首次使用需初始化（约 244MB）</p>
               {:else if visionProviderType === 'cloud'}
                 <div class="feature-row">
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">

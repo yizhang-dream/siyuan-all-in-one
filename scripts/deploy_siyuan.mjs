@@ -9,7 +9,7 @@ const apply = process.argv.includes('--apply');
 const distDir = path.join(root, 'dist');
 const backupRoot = path.join(root, '.deploy-backups', timestamp());
 const requiredFiles = ['index.js', 'index.css', 'plugin.json', 'icon.png', 'README.md', 'README_zh_CN.md'];
-const optionalDirs = ['i18n'];
+const optionalDirs = ['i18n', 'models', 'node_modules'];
 
 async function main() {
   assertDir(distDir, 'dist directory is missing. Run npm run build first.');
