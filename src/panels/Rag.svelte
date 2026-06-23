@@ -195,18 +195,17 @@
       if (lastMsg?.role === 'user') sending = true;
     }
 
-    // Auto-initialize embedder on page load (silent)
-    try {
-      resetEmbeddingProvider();
-      embedder = await getRagEmbedderProvider(plugin);
-    } catch {
-      // silent
-    }
+    // Start embedder init in background — do NOT await (ONNX model blocks Event Loop)
+    getRagEmbedderProvider(plugin).then(em => {
+      embedder = em;
+    }).catch(() => {});
 
     msgListEl?.addEventListener('scroll', handleMsgScroll);
   });
 
   async function initEmbedder() {
+    // If background init already completed, skip re-initialization
+    if (embedder?.isReady()) return;
     try {
       resetEmbeddingProvider();
       embedder = await getRagEmbedderProvider(plugin);
