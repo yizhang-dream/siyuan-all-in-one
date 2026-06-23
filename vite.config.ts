@@ -26,6 +26,10 @@ export default defineConfig({
             // sharp — native C++ image processing addon. Stubbed because it cannot
             // load in Electron's sandboxed renderer and is never called by our plugin.
             "sharp": resolve(__dirname, "src/stubs/sharp.js"),
+            // canvas — native C++ node-canvas addon. Stubbed because it cannot load
+            // in Electron's sandboxed renderer. PaddleOCR depends on it but running
+            // in Electron (browser context) means the native Canvas API is available.
+            "canvas": resolve(__dirname, "src/stubs/canvas.js"),
             "@huggingface/transformers": resolve(__dirname, "node_modules/@huggingface/transformers/dist/transformers.node.cjs"),
 
             // transformers.js uses onnxruntime-node by default; alias to the
@@ -60,6 +64,9 @@ export default defineConfig({
                 { src: "node_modules/paddleocr-js/dist/**/*", dest: "./node_modules/paddleocr-js/dist" },
                 { src: "node_modules/paddleocr-js/package.json", dest: "./node_modules/paddleocr-js" },
                 { src: "node_modules/paddleocr-js/LICENSE", dest: "./node_modules/paddleocr-js" },
+                // canvas — stub native addon so paddleocr-js require('canvas') doesn't fail
+                { src: "src/stubs/canvas-package/index.js", dest: "./node_modules/canvas" },
+                { src: "src/stubs/canvas-package/package.json", dest: "./node_modules/canvas" },
             ],
         }),
     ],
