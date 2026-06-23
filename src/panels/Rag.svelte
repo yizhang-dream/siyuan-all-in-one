@@ -195,10 +195,14 @@
       if (lastMsg?.role === 'user') sending = true;
     }
 
-    // Start embedder init in background — do NOT await (ONNX model blocks Event Loop)
-    getRagEmbedderProvider(plugin).then(em => {
-      embedder = em;
-    }).catch(() => {});
+    // Only auto-init builtin embedder (ONNX model blocks Event Loop).
+    // Cloud providers (ollama, openai, etc.) have negligible init cost — deferred to first send().
+    const embCfg = plugin.getConfig();
+    if (embCfg?.ragEmbeddingProvider === 'builtin') {
+      getRagEmbedderProvider(plugin).then(em => {
+        embedder = em;
+      }).catch(() => {});
+    }
 
     msgListEl?.addEventListener('scroll', handleMsgScroll);
   });
