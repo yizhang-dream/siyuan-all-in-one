@@ -686,7 +686,7 @@ ${ctx}`
 
 <style lang="scss">
   .rag-chat-layout {
-    display: flex; height: 100%; overflow: hidden;
+    display: flex; position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden;
   }
   .rag-sidebar {
     width: 240px; flex-shrink: 0;
@@ -761,8 +761,7 @@ ${ctx}`
   .agent-toggle input { margin: 0; cursor: pointer; }
 
   .chat-messages {
-    flex: 1; overflow-y: auto; padding: 16px; min-height: 0;
-    display: flex; flex-direction: column; gap: 10px;
+    flex: 1; overflow-y: scroll; padding: 16px; min-height: 0;
   }
   .rag-msg-empty { display: flex; align-items: center; justify-content: center; flex: 1; opacity: 0.4; font-size: var(--aio-fs-sm); }
   .chat-messages::-webkit-scrollbar { width: 8px; }
@@ -770,7 +769,8 @@ ${ctx}`
   .chat-messages::-webkit-scrollbar-thumb { background: var(--b3-scroll-color, var(--b3-theme-on-surface-light, #888)); border-radius: 4px; }
   .chat-messages::-webkit-scrollbar-thumb:hover { background: var(--b3-theme-on-surface, #666); }
 
-  .chat-msg { padding: 8px 12px; border-radius: 6px; overflow: hidden; }
+  .chat-msg { padding: 8px 12px; border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+  .chat-msg:last-child { margin-bottom: 0; }
   .chat-msg.user { align-self: flex-end; background: var(--b3-theme-primary-lightest); max-width: 80%; }
   .chat-msg.assistant { align-self: flex-start; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); max-width: 92%; }
   .msg-role { font-size: var(--aio-fs-xs); font-weight: 600; margin-bottom: 4px; opacity: 0.6; }
