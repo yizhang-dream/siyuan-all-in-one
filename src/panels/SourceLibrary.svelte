@@ -294,7 +294,7 @@
         // Cloud vision API
         const visionImages = images.map(b64 => ({ base64: b64, mimeType: 'image/png' as const }));
         text = await callVisionLLM(
-          cfg, cfg.flashcardProviderId, cfg.visionModel || 'glm-ocr',
+          cfg, cfg.visionProviderId || 'glm', cfg.visionModel || 'glm-ocr',
           VISION_PROMPT,
           visionImages,
           { maxTokens: 4096 }

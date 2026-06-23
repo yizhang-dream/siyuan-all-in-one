@@ -17,6 +17,7 @@
   let mindmapModel = '';
   let ragProviderId = '';
   let ragModel = '';
+  let visionProviderId = 'glm';
   let visionModel = '';
   let visionProviderType: 'off' | 'cloud' = 'off';
   // ── 嵌入模型 ──
@@ -47,6 +48,7 @@
     mindmapModel = config.mindmapModel || '';
     ragProviderId = config.ragProviderId || flashcardProviderId;
     ragModel = config.ragModel || flashcardModel;
+    visionProviderId = config.visionProviderId || 'glm';
     visionModel = config.visionModel || '';
     visionProviderType = config.visionProviderType || 'off';
     embeddingProvider = config.ragEmbeddingProvider || 'builtin';
@@ -68,6 +70,7 @@
       mindmapModel,
       ragProviderId,
       ragModel,
+      visionProviderId,
       visionModel,
       visionProviderType,
       cardsPerDay: Number(cardsPerDay),
@@ -106,6 +109,11 @@
   }
   function onVisionProviderTypeChange(e: any) {
     visionProviderType = e.target.value;
+  }
+  function onVisionProviderChange(e: any) {
+    visionProviderId = e.target.value;
+    const models = getProviderModels(visionProviderId);
+    visionModel = models[0] || '';
   }
 
   // ── 嵌入模型 ──────────────────────────────
@@ -202,7 +210,7 @@
       // 如果删除的是当前选中的 provider，重置指针
       if (flashcardProviderId === p.id) { flashcardProviderId = providers[0]?.id || ''; flashcardModel = getProviderModels(flashcardProviderId)[0] || ''; }
       if (mindmapProviderId === p.id) { mindmapProviderId = providers[0]?.id || ''; mindmapModel = getProviderModels(mindmapProviderId)[0] || ''; }
-      if (flashcardProviderId === p.id) { visionModel = getProviderModels(flashcardProviderId)[0] || ''; }
+      if (visionProviderId === p.id) { visionProviderId = providers[0]?.id || ''; visionModel = getProviderModels(visionProviderId)[0] || ''; }
       save();
     });
   }
@@ -447,16 +455,18 @@
               </select>
               {#if visionProviderType === 'cloud'}
                 <div class="feature-row">
+                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉 Provider">
+                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+                  </select>
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                    {#if getProviderModels(flashcardProviderId).length === 0}
+                    {#if getProviderModels(visionProviderId).length === 0}
                       <option value="" disabled>请先点击"获取模型"</option>
                     {:else}
-                      {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
+                      {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
                     {/if}
                   </select>
-                  <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">管理模型</button>
+                  <button class="b3-button b3-button--small" on:click={() => editProviderById(visionProviderId)} title="从 API 获取模型列表">获取模型</button>
                 </div>
-                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。</p>
               {/if}
             </div>
           </div>
@@ -819,16 +829,18 @@
               </select>
               {#if visionProviderType === 'cloud'}
                 <div class="feature-row">
+                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉 Provider">
+                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+                  </select>
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                    {#if getProviderModels(flashcardProviderId).length === 0}
+                    {#if getProviderModels(visionProviderId).length === 0}
                       <option value="" disabled>请先点击"获取模型"</option>
                     {:else}
-                      {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
+                      {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
                     {/if}
                   </select>
-                  <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">管理模型</button>
+                  <button class="b3-button b3-button--small" on:click={() => editProviderById(visionProviderId)} title="从 API 获取模型列表">获取模型</button>
                 </div>
-                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。</p>
               {/if}
             </div>
           </div>

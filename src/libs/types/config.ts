@@ -36,6 +36,7 @@ export interface AppConfig {
     mindmapModel: string;
     ragProviderId?: string;
     ragModel?: string;
+    visionProviderId?: string;
     visionModel?: string;
     cardsPerDay: number;
     scheduler: 'sm2' | 'fsrs';
