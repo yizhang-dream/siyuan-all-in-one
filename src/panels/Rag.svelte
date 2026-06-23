@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy, tick, afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
   // Use SiYuan's built-in Lute renderer (window.Lute) — no npm dependency needed
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
@@ -56,6 +56,7 @@
   let activeMessages: ChatMessage[] = [];
   let inputText = '';
   let sending = false;
+  let activeRequestId = 0;
   let pollTimer: any = null;
   let renamingId: string | null = null;
   let renameInput = '';
@@ -79,6 +80,8 @@
 
   // Agent mode toggle
   let agentMode = false;
+
+  $: currentModel = plugin?.getConfig()?.ragModel || plugin?.getConfig()?.flashcardModel || '未配置模型';
 
   // Poll store while sending to detect background completion (survives tab switch)
   $: if (sending && activeSessionId) {
@@ -258,6 +261,8 @@
       return;
     }
 
+    const requestId = ++activeRequestId;
+
     const userMsg: ChatMessage = { id: 'u' + Date.now(), role: 'user', content: text };
     await conversationStore.addMessage(activeSessionId, userMsg);
     activeSession = conversationStore.getById(activeSessionId);
@@ -273,8 +278,10 @@
 
     try {
       const messages = activeMessages;
+      if (requestId !== activeRequestId) return;
 
       if (!embedder?.isReady()) await initEmbedder();
+      if (requestId !== activeRequestId) return;
 
       // RAG retrieval — pass sourceIds filter so only selected sources are searched
       const sourceIds = activeSession?.sourceIds || [];
@@ -282,6 +289,7 @@
         topK: config?.ragTopK || 5,
         sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
       });
+      if (requestId !== activeRequestId) return;
       const ctx = formatRagContext(results);
 
       // LLM call
@@ -388,6 +396,7 @@ ${ctx}`
         const aiContent = await callLLM(llmMessages, llmConfig);
         finalContent = aiContent;
       }
+      if (requestId !== activeRequestId) return;
 
       // Auto-title: if this is the first message, generate title
       if (messages.length === 1) {
@@ -401,6 +410,7 @@ ${ctx}`
         chunkText: r.chunk.text.substring(0, 80),
         score: r.score,
       }));
+      if (requestId !== activeRequestId) return;
 
       await conversationStore.addMessage(activeSessionId, {
         id: 'a' + Date.now(),
@@ -419,6 +429,7 @@ ${ctx}`
 
       sessions = conversationStore.getAll();
     } catch (e: any) {
+      if (requestId !== activeRequestId) return;
       await conversationStore.addMessage(activeSessionId, {
         id: 'e' + Date.now(),
         role: 'assistant',
@@ -480,6 +491,58 @@ ${ctx}`
       send();
     }
   }
+
+  function abortSend() {
+    activeRequestId++;
+    sending = false;
+    showMessage('已停止生成');
+  }
+
+  function handleSendClick() {
+    if (sending) abortSend();
+    else send();
+  }
+
+  function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function enhanceCodeBlocks(root: HTMLElement) {
+    root.querySelectorAll('pre').forEach((pre) => {
+      if (pre.querySelector('.code-block-toolbar')) return;
+      const code = pre.querySelector('code');
+      let lang = 'code';
+      if (code) {
+        const clsMatch = (code.className || '').match(/language-(\S+)/);
+        if (clsMatch) {
+          lang = clsMatch[1];
+        } else {
+          const dataLang = (code as HTMLElement).getAttribute('data-language');
+          if (dataLang) lang = dataLang;
+        }
+      }
+      const toolbar = document.createElement('div');
+      toolbar.className = 'code-block-toolbar';
+      toolbar.innerHTML = `<span class="code-lang-label">${escapeHtml(lang)}</span><button class="code-copy-btn" title="复制">📋</button>`;
+      const copyBtn = toolbar.querySelector('.code-copy-btn') as HTMLButtonElement;
+      copyBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = code ? (code.textContent || '') : (pre.textContent || '');
+        try {
+          await navigator.clipboard.writeText(text);
+          showMessage('已复制到剪贴板');
+        } catch {
+          showMessage('复制失败');
+        }
+      });
+      pre.prepend(toolbar);
+    });
+  }
+
+  afterUpdate(() => {
+    if (msgListEl) enhanceCodeBlocks(msgListEl);
+  });
 
 </script>
 
@@ -570,7 +633,14 @@ ${ctx}`
         {:else}
           {#each activeMessages as msg (msg.id)}
             <div class="chat-msg {msg.role}">
-              <div class="msg-role">{msg.role === 'user' ? '你' : 'AI'}</div>
+              {#if msg.role === 'assistant'}
+                <div class="msg-header">
+                  <span class="msg-role">AI</span>
+                  <span class="msg-model-badge" title="模型">{currentModel}</span>
+                </div>
+              {:else}
+                <div class="msg-role">你</div>
+              {/if}
               <div class="msg-content">{@html mdToHtml(msg.content)}</div>
               {#if msg.contextDocuments?.length}
                 <div class="msg-context">
@@ -597,12 +667,19 @@ ${ctx}`
     </div>
 
     <!-- Input Bar -->
-    <div class="chat-input-bar">
-      <textarea bind:value={inputText} placeholder="输入问题... (Ctrl+Enter 发送)"
-                on:keydown={handleKeydown} rows="2"></textarea>
-      <button class="b3-button" on:click={send} disabled={sending || !inputText.trim()}>
-        发送
-      </button>
+    <div class="chat-input-area">
+      <div class="chat-input-wrap">
+        <textarea bind:value={inputText} placeholder="输入问题... (Ctrl+Enter 发送)"
+                  on:keydown={handleKeydown} rows="1"></textarea>
+        <button class="chat-send-btn" class:aborting={sending} on:click={handleSendClick}
+                disabled={!sending && !inputText.trim()} aria-label={sending ? '停止生成' : '发送'}>
+          {#if sending}
+            <span class="send-icon abort-icon">■</span>
+          {:else}
+            <span class="send-icon">➤</span>
+          {/if}
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -697,6 +774,16 @@ ${ctx}`
   .chat-msg.user { align-self: flex-end; background: var(--b3-theme-primary-lightest); max-width: 80%; }
   .chat-msg.assistant { align-self: flex-start; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); max-width: 92%; }
   .msg-role { font-size: var(--aio-fs-xs); font-weight: 600; margin-bottom: 4px; opacity: 0.6; }
+  .msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .msg-header .msg-role { margin-bottom: 0; }
+  .msg-model-badge {
+    font-size: var(--aio-fs-xs);
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--b3-theme-surface-lighter);
+    color: var(--b3-theme-on-surface-light);
+    border: 1px solid var(--b3-border-color);
+  }
   .msg-content { font-size: var(--aio-fs-base); line-height: 1.6; word-break: break-word; overflow: hidden; }
   .msg-content :global(p) { margin: 0.4em 0; }
   .msg-content :global(ol), .msg-content :global(ul) { margin: 0.4em 0; padding-left: 1.8em; }
@@ -742,7 +829,24 @@ ${ctx}`
     border-radius: 3px;
     font-size: 0.9em;
   }
+  .msg-content :global(.code-block-toolbar) {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 10px;
+    background: var(--b3-theme-surface-lighter);
+    border-bottom: 1px solid var(--b3-border-color);
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface-light);
+    user-select: none;
+    animation: fadeIn 0.15s ease-out;
+  }
+  .msg-content :global(.code-lang-label) { text-transform: lowercase; font-weight: 500; }
+  .msg-content :global(.code-copy-btn) {
+    background: transparent; border: none; cursor: pointer; padding: 2px 6px;
+    border-radius: 4px; transition: background 0.2s; font-size: var(--aio-fs-sm);
+  }
+  .msg-content :global(.code-copy-btn:hover) { background: var(--b3-theme-surface); }
   @keyframes aio-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
   .msg-content.thinking {
     display: flex; align-items: center; gap: 8px; opacity: 0.5;
   }
@@ -766,6 +870,7 @@ ${ctx}`
     font-size: var(--aio-fs-xs);
     overflow: hidden;
     max-width: 100%;
+    animation: fadeIn 0.15s ease-out;
   }
   .context-label {
     font-weight: 600;
@@ -792,23 +897,43 @@ ${ctx}`
     text-overflow: ellipsis;
   }
 
-  .chat-input-bar {
-    display: flex; gap: 8px; padding: 12px 16px;
+  .chat-input-area {
+    padding: 12px 16px;
     border-top: 1px solid var(--b3-border-color);
     background: var(--b3-theme-background);
     flex-shrink: 0;
   }
-  .chat-input-bar textarea {
-    flex: 1; resize: none; min-height: 40px;
-    border: 1px solid var(--b3-border-color); border-radius: 6px;
-    padding: 8px 12px; font-size: var(--aio-fs-base);
-    background: var(--b3-theme-surface); color: var(--b3-theme-on-surface);
+  .chat-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
   }
-  .chat-input-bar button {
-    flex-shrink: 0;
-    align-self: flex-end;
-    transition: all 0.2s ease;
-    &:hover:not(:disabled) { transform: scale(1.05); }
-    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  .chat-input-wrap textarea {
+    width: 100%; resize: none; min-height: 48px; max-height: 200px;
+    border: 1px solid var(--b3-border-color); border-radius: 12px;
+    padding: 10px 46px 10px 12px; font-size: var(--aio-fs-base); line-height: 1.5;
+    background: var(--b3-theme-surface); color: var(--b3-theme-on-surface);
+    font-family: inherit;
+  }
+  .chat-input-wrap textarea:focus {
+    outline: none;
+    border-color: var(--b3-theme-primary);
+  }
+  .chat-send-btn {
+    position: absolute; right: 6px; bottom: 6px; width: 36px; height: 36px;
+    border-radius: 50%; border: none;
+    background: var(--b3-theme-primary); color: var(--b3-theme-on-primary);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s ease;
+  }
+  .chat-send-btn:hover:not(:disabled) { transform: scale(1.05); }
+  .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .chat-send-btn.aborting { background: #ef4444; color: #fff; }
+  .chat-send-btn.aborting:hover:not(:disabled) { background: #dc2626; transform: scale(1.05); }
+  .send-icon { font-size: 14px; line-height: 1; }
+  .abort-icon { font-size: 12px; }
+
+  @media (max-width: 640px) {
+    .chat-messages { padding: 10px; }
   }
 </style>
