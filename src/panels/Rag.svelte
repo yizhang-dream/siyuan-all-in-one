@@ -587,7 +587,7 @@ ${ctx}`
   .session-empty { padding: 16px; text-align: center; opacity: 0.5; font-size: var(--aio-fs-sm); }
 
   .rag-chat-main {
-    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
   }
   .chat-toolbar {
     display: flex; align-items: center; justify-content: space-between;
@@ -623,7 +623,7 @@ ${ctx}`
   .agent-toggle input { margin: 0; cursor: pointer; }
 
   .chat-messages {
-    flex: 1; overflow-y: auto; padding: 16px;
+    flex: 1; overflow-y: auto; padding: 16px; min-height: 0;
     display: flex; flex-direction: column; gap: 10px;
   }
   .rag-msg-empty { display: flex; align-items: center; justify-content: center; flex: 1; opacity: 0.4; font-size: var(--aio-fs-sm); }
