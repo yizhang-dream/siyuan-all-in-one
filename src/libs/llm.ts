@@ -359,7 +359,31 @@ export function extractLLMContent(json: any, providerId = 'openai-compatible'): 
     }
 
     if (typeof content !== 'string' || !content) {
-        throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）`, 0);
+        // Defensive: include API error and raw response for debugging
+        let details = '';
+
+        // Check for API-level error field (e.g. { error: { message: '...' } })
+        const apiError = json?.error;
+        if (apiError) {
+            if (typeof apiError === 'string') {
+                details += `API error: ${apiError}. `;
+            } else if (apiError?.message) {
+                details += `API error: ${apiError.message}. `;
+            } else {
+                details += `API error: ${JSON.stringify(apiError).slice(0, 300)}. `;
+            }
+        }
+
+        // Include raw response snippet so the user can see what the model returned
+        try {
+            const rawSnippet = JSON.stringify(json).slice(0, 1000);
+            details += `Raw response: ${rawSnippet}`;
+            console.warn('[llm] Full raw response:', JSON.stringify(json));
+        } catch {
+            details += `Raw response: [unable to stringify]`;
+        }
+
+        throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）: ${details}`, 0);
     }
     return content;
 }
