@@ -342,7 +342,7 @@ ${ctx}`
       const contextDocuments = results.map(r => ({
         sourceId: r.chunk.sourceId,
         title: r.chunk.metadata?.fileName || r.chunk.metadata?.title || '来源',
-        chunkText: r.chunk.text.substring(0, 200),
+        chunkText: r.chunk.text.substring(0, 80),
         score: r.score,
       }));
 
@@ -509,15 +509,6 @@ ${ctx}`
             <div class="chat-msg {msg.role}">
               <div class="msg-role">{msg.role === 'user' ? '你' : 'AI'}</div>
               <div class="msg-content">{@html mdToHtml(msg.content)}</div>
-              {#if msg.sources?.length}
-                <div class="msg-sources">
-                  {#each msg.sources.slice(0, 3) as src}
-                    <span class="source-chip" title={src.chunk.text.substring(0, 200)}>
-                      {src.chunk.metadata?.fileName || src.chunk.metadata?.title || '来源'} ({src.score.toFixed(2)})
-                    </span>
-                  {/each}
-                </div>
-              {/if}
               {#if msg.contextDocuments?.length}
                 <div class="msg-context">
                   <div class="context-label">📚 参考来源：</div>
@@ -651,6 +642,8 @@ ${ctx}`
     background: var(--b3-theme-surface-light);
     border-radius: 6px;
     font-size: var(--aio-fs-xs);
+    overflow: hidden;
+    max-width: 100%;
   }
   .context-label {
     font-weight: 600;
