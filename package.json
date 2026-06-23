@@ -2,7 +2,7 @@
   "name": "siyuan-all-in-one",
   "version": "1.0.0",
   "type": "module",
-  "description": "Concept-centered SM-2 flashcards with AI generation, OpenNotebook integration, and bidirectional concept mindmaps for SiYuan",
+  "description": "Concept-centered SM-2/FSRS flashcards with AI generation, local RAG search, vision formula extraction, and bidirectional concept mindmaps for SiYuan",
   "author": "zyz",
   "license": "MIT",
   "homepage": "https://github.com/yizhang-dream/siyuan-all-in-one#readme",

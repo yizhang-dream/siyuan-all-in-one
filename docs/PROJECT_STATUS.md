@@ -31,7 +31,7 @@ App.svelte 导航栏 (iconAio* 自嵌 SVG 图标，兼容任意图标包)
 └── ⚙️ 设置 (Settings.svelte)            — 全 Tab 模式（非 Dialog）
 ```
 
-**已删除**：Stats.svelte、SourcePicker.svelte、Notebook.svelte、Diagnostics.svelte、Models.svelte。OpenNotebook 所有引用已清除。
+**已删除**：Stats.svelte、SourcePicker.svelte、Notebook.svelte、Diagnostics.svelte、Models.svelte。OpenNotebook 已从核心代码中移除，`source-refs.ts` 中 `OpenNotebookLocator` 接口已删除，历史数据通过 `index.ts` 的 `migrateRef()` 向后兼容。
 
 ---
 
@@ -225,13 +225,15 @@ while (shouldContinue):
 
 | 优先级 | 问题 | 说明 |
 |--------|------|------|
-| 🔴 | RAG fallback 零向量 | 嵌入失败时返回零向量导致检索退化，应加 BM25/关键词兜底 |
-| 🔴 | MathJax 与 Lute 冲突 | `renderMath()` 仍加载 CDN MathJax，与 SiYuan 数学增强插件冲突 |
-| 🟡 | 解析路径不统一 | RAG 摄入和 SourceHub 摄入是两套独立路径 |
-| 🟡 | Agent 无流式 | `callLLM` 等待完整响应，Agent 循环期间用户看不到进度 |
-| 🟡 | Knowledge.svelte 骨架 | 概念图谱+导图功能未合并实现 |
-| 🟢 | 文档过时 | README/ARCHITECTURE 仍在描述已删除的 OpenNotebook/Diagnostics 面板 |
-| 🟢 | test:sources 失败 | 旧 fixture 使用 opennotebook 类型 |
+| 🔴→✅ | RAG fallback 零向量 | ✅ 已修复：VectorStore.keywordSearch() BM25 兜底 (10864f5) |
+| 🔴→✅ | MathJax 与 Lute 冲突 | ✅ 已修复：renderMath() 优先 SiYuan native (db2c073) |
+| 🟡→✅ | 解析路径不统一 | ✅ 已修复：source-hub.ts 从 SourceStore 读取 (4fca41d) |
+| 🟡→✅ | Agent 无流式 | ✅ 已修复：callLLM SSE 流式 + onChunk 回调 (cb1f5d7) |
+| 🟡→✅ | Knowledge.svelte 骨架 | ✅ 已修复：适配器渲染 Concepts/Mindmap (e3af9a9) |
+| 🟢→✅ | 文档过时 | ✅ 已修复：README/ARCHITECTURE/TESTING/INSTALL/BACKEND_STRATEGY 重写 |
+| 🟢→✅ | test:sources 失败 | ✅ 已修复：5 个测试 fixture 更新 (0a47042) |
+| 🟢 | test:source-refs 失败 | 测试仍使用旧 SourceRef 类型 (url/rag/siyuan)，需与 test_source_refs.mjs 同步新合同 (siyuan-doc/manual/source) |
+| 🟢 | 残留 OpenNotebook 引用 | package.json/INSTALL.md/TESTING.md/BACKEND_STRATEGY.md/source-refs.ts 已清理，index.ts 保留迁移代码（正确） |
 
 ---
 

@@ -47,10 +47,10 @@ npm run test:card-id
 
 - `test:json`：验证 `parseLLMJSON` 对不稳定模型输出的修复能力。
 - `test:prompt-contracts`：验证提示词包含结构化输出和质量契约。
-- `test:notebook-client`：验证 OpenNotebook API 路径、chat context、notes detail。
-- `test:sources`：验证 OpenNotebook 搜索结果、选中 note detail、思源文档 Markdown 转成 `PipelineSource`。
-- `test:notebook-bridge`：验证 Notebook 面板到 Concepts 面板的 query/sourceIds/noteIds。
-- `test:ui-contracts`：静态检查关键 UI wiring，防止重构时断掉 Notebook 到图谱生成、快速制卡到图谱生成、统计到导入导出、候选区响应式布局、图标化控件、诊断和 provider 能力展示。
+- `test:notebook-client`：验证思源 API 路径、chat context、notes detail。
+- `test:sources`：验证来源搜索结果、选中 note detail、思源文档 Markdown 转成 `PipelineSource`。
+- `test:notebook-bridge`：验证来源面板到 Concepts 面板的 query/sourceIds。
+- `test:ui-contracts`：静态检查关键 UI wiring，防止重构时断掉来源到图谱生成、快速制卡到图谱生成、统计到导入导出、候选区响应式布局、图标化控件。
 - `test:render`：验证 Markdown/HTML fallback、LaTeX delimiter 保留、Lute 优先、导图节点公式 inline-safe。
 - `test:providers`：验证主流 provider 的 endpoint 解析、鉴权头、请求体、provider capability、结构化输出适配、响应文本抽取和本地无 key 兼容服务。
 - `test:srs`：验证默认 SM-2、可选 FSRS、配置清洗、FSRS 状态持久化和旧字段兼容。

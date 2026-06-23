@@ -16,34 +16,27 @@ await writeFile(entry, `
 import assert from 'node:assert/strict';
 import { formatSourceLabel, formatSourceText, getSourceAction, sourceLocatorText } from '../src/libs/source-refs';
 
-const urlRef = { type: 'url' as const, url: 'https://example.test/page', quote: '网页证据' };
-assert.equal(formatSourceLabel(urlRef), 'URL · https://example.test/page');
-assert.equal(formatSourceText(urlRef), '网页证据');
-assert.equal(getSourceAction(urlRef).kind, 'open-url');
-assert.equal(getSourceAction(urlRef).target, 'https://example.test/page');
-
-const siyuanRef = { type: 'siyuan' as const, blockId: '20260620123456-abcdefg', quote: '思源块内容' };
+// SourceRef types after migration: siyuan-doc | manual | source
+const siyuanRef = { type: 'siyuan-doc' as const, blockId: '20260620123456-abcdefg', quote: '思源块内容' };
 assert.equal(getSourceAction(siyuanRef).kind, 'open-siyuan-block');
 assert.equal(getSourceAction(siyuanRef).target, '20260620123456-abcdefg');
 
-const ragRef = {
-  type: 'rag' as const,
-  sourceId: 'rag-1',
-  chunkId: 'chunk-2',
-  page: 8,
-  quote: 'RAG 搜索片段',
+const sourceRef = {
+  type: 'source' as const,
+  sourceId: 'src-1',
+  quote: '来源搜索片段',
 };
-const action = getSourceAction(ragRef);
-assert.equal(action.kind, 'open-rag');
-assert.match(action.copyText || '', /sourceId=rag-1/);
-assert.match(action.copyText || '', /chunkId=chunk-2/);
-assert.match(sourceLocatorText(ragRef), /quote=RAG 搜索片段/);
+assert.equal(formatSourceLabel(sourceRef), '来源库 · src-1');
+assert.equal(formatSourceText(sourceRef), '来源搜索片段');
+
+const manualRef = { type: 'manual' as const, quote: '手动输入文本' };
+assert.equal(formatSourceLabel(manualRef), '手动');
+assert.equal(formatSourceText(manualRef), '手动输入文本');
 
 console.log(JSON.stringify({
-  urlAction: getSourceAction(urlRef).kind,
   siyuanAction: getSourceAction(siyuanRef).kind,
-  openNotebookAction: action.kind,
-  openNotebookLocator: 'rag-source',
+  sourceLabel: formatSourceLabel(sourceRef),
+  manualLabel: formatSourceLabel(manualRef),
 }, null, 2));
 `, 'utf8');
 

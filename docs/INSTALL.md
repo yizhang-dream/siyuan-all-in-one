@@ -9,17 +9,7 @@
 3. 选择导入插件 zip。
 4. 启用插件并重载 SiYuan。
 
-## 2. OpenNotebook 后端
-
-插件把资源解析和 RAG 交给 OpenNotebook 后端。启动 OpenNotebook 后，在插件设置中填写：
-
-```text
-http://localhost:5055
-```
-
-如果 OpenNotebook 不在本机，填写对应的局域网或服务器地址。
-
-## 3. 模型配置
+## 2. 模型配置
 
 插件使用 Provider Adapter 层统一不同模型服务。设置页可以分别选择“闪卡模型”和“导图模型”，也可以添加自定义 provider。
 

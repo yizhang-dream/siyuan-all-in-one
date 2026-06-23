@@ -124,9 +124,9 @@
 
 ## 八、当前状态
 
-- source/dist: 5,343 KB JS + 83 KB CSS
+- source/dist: ~4,455 KB JS + ~60 KB CSS (gzip: ~1,346 KB + ~8 KB)
 - tsc --noEmit: 0 errors
-- npm test: 部分通过（test:source-refs 等仍失败，pre-existing）
+- npm test: 部分通过（test:source-refs 因 SourceRef 类型迁移后测试 fixture 未更新而失败，见下方已知问题）
 - 部署路径: `C:\Users\zyz\SiYuan\data\plugins\siyuan-all-in-one\`
 - 仓库: `https://github.com/yizhang-dream/siyuan-all-in-one`
 
@@ -149,3 +149,8 @@
 ---
 
 *生成时间：2026-06-24*
+
+## 已知未解决问题
+
+- **test:source-refs**：`scripts/test_source_refs.mjs` 的测试 fixture 仍使用旧 SourceRef 类型 (`url`/`siyuan`/`rag`)，实现已迁移到 `siyuan-doc`/`manual`/`source`。`npm test` 链在此处中断。已在本次会话中修复（commit 待推送）。
+- **`scripts/test_source_hub.mjs`**：手动输入的 PipelineSource 类型从 `file`→`source`、`siyuan`→`siyuan-doc` 后验证通过，但 `opennotebook`→`source` 的映射仍需确认。

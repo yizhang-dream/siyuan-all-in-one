@@ -2,16 +2,19 @@
 
 目标：判断 OpenNotebook 作为外置后端是否过重、是否应该改用 Unstructured 或其他可内置解析方案，并明确插件长期架构边界。
 
-## 当前结论
+## 当前结论 (v2.0 更新)
 
-短期不应把 OpenNotebook 删除。它仍然适合作为可选的外置 NotebookLM 后端，负责复杂资料库、聊天、全文/向量搜索和已有 notebook/source/note 资产复用。
+OpenNotebook 依赖已在 v2.0 中移除。插件现在使用内置的 SourceStore + VectorStore + RAG 管线：
 
-但 OpenNotebook 不应该成为插件的唯一资源入口。真实运行已经暴露两个问题：
+- **来源导入**：统一的来源库面板，支持 txt/md/html/csv/docx/pptx/xlsx/epub/pdf + URL + 粘贴 + 思源文档
+- **RAG 检索**：内置 ONNX 嵌入模型（paraphrase-multilingual-MiniLM-L12-v2）或 15 种云端嵌入 Provider
+- **向量存储**：SiYuan saveData 持久化
+- **视觉公式提取**：云端视觉 API（GLM-4.6v-flash 免费）将公式 PDF 渲染成图片提取 LaTeX
 
-- `/api/sources?limit=200&notebook_id=...` 会因 OpenNotebook 当前 schema 限制直接 422，说明插件必须适配后端版本契约。
-- `/api/search` 的 `vector` 检索在本机实例返回 500，而 `text` 检索正常，说明向量索引、embedding 配置或后端数据状态会直接影响插件生成体验。
-
-因此当前最佳路线是“双轨资源层”：
+历史背景：v1.x 曾依赖 OpenNotebook 作为外置 RAG 后端。由于以下原因已删除：
+- `/api/sources` 的 schema 限制导致 422 错误
+- `/api/search` 向量检索在本机返回 500
+- 对 Python/Docker 的依赖阻碍了纯本地部署
 
 1. 轻量内置解析层：优先服务 SiYuan 文档、Markdown、纯文本、HTML、常见 office/PDF 的本地抽取，保证插件开箱可用。
 2. OpenNotebook 连接器：作为高级外部来源，保留已有 notebook、搜索、聊天和多模态资料库。

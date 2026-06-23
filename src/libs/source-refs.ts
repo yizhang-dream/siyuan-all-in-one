@@ -9,16 +9,6 @@ export interface SourceActionDescriptor {
     copyText?: string;
 }
 
-export interface OpenNotebookLocator {
-    key: string;
-    label: string;
-    locatorText: string;
-    prompt: string;
-    sourceId?: string;
-    page?: number;
-    quote?: string;
-}
-
 const TYPE_LABELS: Record<string, string> = {
     'siyuan-doc': '思源文档',
     manual: '手动',
