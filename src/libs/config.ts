@@ -285,7 +285,7 @@ export function cleanConfig(cfg: any): AppConfig {
         scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',
         defaultDeck: cfg?.defaultDeck ?? d.defaultDeck,
         agents: rawAgents.map(cleanAgent),
-        ragEmbeddingProvider: ['ollama', 'siliconflow', 'qwen', 'zhipu', 'hunyuan', 'openai', 'custom'].includes(cfg?.ragEmbeddingProvider) ? cfg.ragEmbeddingProvider : 'builtin',
+        ragEmbeddingProvider: ['ollama', 'siliconflow', 'qwen', 'zhipu', 'hunyuan', 'baidu', 'cohere', 'jina', 'mistral', 'openai', 'custom'].includes(cfg?.ragEmbeddingProvider) ? cfg.ragEmbeddingProvider : 'builtin',
         ragEmbeddingConfig: {
             endpoint: String(cfg?.ragEmbeddingConfig?.endpoint ?? ''),
             apiKey: String(cfg?.ragEmbeddingConfig?.apiKey ?? ''),

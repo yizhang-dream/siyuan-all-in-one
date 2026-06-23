@@ -197,3 +197,13 @@ export class CustomEmbedder extends RemoteEmbedderBase {
         });
     }
 }
+
+/**
+ * Baidu Qianfan embedder — uses /v2/embeddings endpoint.
+ * The endpoint field should include the full path (e.g. https://qianfan.baidubce.com/v2/embeddings).
+ */
+export class BaiduEmbedder extends CustomEmbedder {
+    getEndpoint(): string {
+        return this.config.endpoint.replace(/\/+$/, '');
+    }
+}

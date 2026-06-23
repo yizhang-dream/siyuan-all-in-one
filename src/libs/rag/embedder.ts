@@ -290,9 +290,17 @@ export async function getRagEmbedderProvider(plugin?: any): Promise<EmbeddingPro
         case 'qwen':
         case 'zhipu':
         case 'hunyuan':
+        case 'cohere':
+        case 'jina':
+        case 'mistral':
         case 'custom': {
             const { CustomEmbedder } = await import('./embedder-remote');
             _provider = new CustomEmbedder(cfg.ragEmbeddingConfig);
+            break;
+        }
+        case 'baidu': {
+            const { BaiduEmbedder } = await import('./embedder-remote');
+            _provider = new BaiduEmbedder(cfg.ragEmbeddingConfig);
             break;
         }
         default: {

@@ -137,6 +137,18 @@
     } else if (embeddingProvider === 'hunyuan') {
       embeddingEndpoint = 'https://api.hunyuan.cloud.tencent.com/v1';
       embeddingModel = 'hunyuan-embedding';
+    } else if (embeddingProvider === 'baidu') {
+      embeddingEndpoint = 'https://qianfan.baidubce.com/v2/embeddings';
+      embeddingModel = 'embedding-v1';
+    } else if (embeddingProvider === 'cohere') {
+      embeddingEndpoint = 'https://api.cohere.ai/v1';
+      embeddingModel = 'embed-multilingual-v3.0';
+    } else if (embeddingProvider === 'jina') {
+      embeddingEndpoint = 'https://api.jina.ai/v1';
+      embeddingModel = 'jina-embeddings-v3';
+    } else if (embeddingProvider === 'mistral') {
+      embeddingEndpoint = 'https://api.mistral.ai/v1';
+      embeddingModel = 'mistral-embed';
     }
   }
 
@@ -164,7 +176,7 @@
         embeddingModelList = (json.data || [])
           .filter((m: any) => m.id.startsWith('text-embedding-'))
           .map((m: any) => m.id);
-      } else if (embeddingProvider === 'siliconflow' || embeddingProvider === 'qwen' || embeddingProvider === 'zhipu' || embeddingProvider === 'hunyuan') {
+      } else if (embeddingProvider === 'siliconflow' || embeddingProvider === 'qwen' || embeddingProvider === 'zhipu' || embeddingProvider === 'hunyuan' || embeddingProvider === 'baidu' || embeddingProvider === 'cohere' || embeddingProvider === 'jina' || embeddingProvider === 'mistral') {
         const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
           headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
         });
@@ -509,6 +521,10 @@
             <option value="qwen">通义千问 (Qwen)</option>
             <option value="zhipu">智谱 AI (GLM)</option>
             <option value="hunyuan">腾讯混元</option>
+            <option value="baidu">百度千帆</option>
+            <option value="cohere">Cohere</option>
+            <option value="jina">Jina AI</option>
+            <option value="mistral">Mistral AI</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
@@ -887,6 +903,10 @@
             <option value="qwen">通义千问 (Qwen)</option>
             <option value="zhipu">智谱 AI (GLM)</option>
             <option value="hunyuan">腾讯混元</option>
+            <option value="baidu">百度千帆</option>
+            <option value="cohere">Cohere</option>
+            <option value="jina">Jina AI</option>
+            <option value="mistral">Mistral AI</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
