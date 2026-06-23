@@ -16,21 +16,22 @@ export const BUILTIN_PROVIDERS: Provider[] = [
         disableThinking: true,
     },
     {
-        id: 'zhipu',
-        name: '智谱 GLM (BigModel)',
-        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-        apiKey: '',
-        models: [],
-        isBuiltIn: true,
-    },
-    {
         id: 'glm',
-        name: '智谱 GLM (BigModel)',
+        name: '智谱 GLM (标准/直充)',
         baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
         apiKey: '',
         models: [],
         isBuiltIn: true,
         disableThinking: true,
+    },
+    // 编程套餐：订阅制，不可用 Flash 系列免费模型（会扣余额），配额用尽静默暂停
+    {
+        id: 'glm-coding',
+        name: '智谱 GLM (编程套餐)',
+        baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+        apiKey: '',
+        models: [],
+        isBuiltIn: true,
     },
     {
         id: 'openai',
@@ -188,6 +189,11 @@ export function cleanConfig(cfg: any): AppConfig {
         mindmapProviderId = String(cfg?.mindmapProviderId || providers[0]?.id || d.mindmapProviderId);
     }
 
+    // 旧配置里的 'zhipu' 已合并为 'glm'
+    if (flashcardProviderId === 'zhipu') flashcardProviderId = 'glm';
+    let vpId = cfg?.visionProviderId || 'glm';
+    if (vpId === 'zhipu') vpId = 'glm';
+
     const rawAgents = Array.isArray(cfg?.agents) ? cfg.agents : [];
     return {
         providers,
@@ -197,7 +203,7 @@ export function cleanConfig(cfg: any): AppConfig {
         mindmapModel: String(cfg?.mindmapModel ?? (hasOldLlmConfig ? cfg.llmModel : d.mindmapModel)),
         ragProviderId: String(cfg?.ragProviderId || d.ragProviderId),
         ragModel: String(cfg?.ragModel ?? d.ragModel),
-        visionProviderId: cfg.visionProviderId || 'glm',
+        visionProviderId: vpId,
         visionModel: String(cfg?.visionModel ?? d.visionModel),
         cardsPerDay: cfg?.cardsPerDay ?? d.cardsPerDay,
         scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',

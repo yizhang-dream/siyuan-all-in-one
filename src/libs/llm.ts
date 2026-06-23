@@ -68,11 +68,11 @@ function getEndpoints(providerId: string): { chat: string; models: string } {
             return { chat: '/api/v3/chat/completions', models: '/api/v3/models' };
         case 'anthropic':
             return { chat: '/v1/messages', models: '/v1/models' };
-        case 'zhipu':
-            // 智谱 BigModel：baseUrl 已含 /api/paas/v4，端点直接拼 /chat/completions
-            return { chat: '/chat/completions', models: '/models' };
         case 'glm':
-            // GLM 视觉：同智谱 BigModel 格式
+            // 智谱 BigModel（标准/直充）：baseUrl 已含 /api/paas/v4，端点直接拼 /chat/completions
+            return { chat: '/chat/completions', models: '/models' };
+        case 'glm-coding':
+            // 智谱编程套餐：baseUrl 已含 /api/coding/paas/v4，端点路径相同
             return { chat: '/chat/completions', models: '/models' };
         default:
             return { chat: '/v1/chat/completions', models: '/v1/models' };
