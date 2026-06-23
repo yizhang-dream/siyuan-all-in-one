@@ -286,6 +286,10 @@ export async function getRagEmbedderProvider(plugin?: any): Promise<EmbeddingPro
             _provider = new OpenAIEmbedder(cfg.ragEmbeddingConfig);
             break;
         }
+        case 'siliconflow':
+        case 'qwen':
+        case 'zhipu':
+        case 'hunyuan':
         case 'custom': {
             const { CustomEmbedder } = await import('./embedder-remote');
             _provider = new CustomEmbedder(cfg.ragEmbeddingConfig);

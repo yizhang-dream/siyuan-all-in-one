@@ -125,6 +125,18 @@
     } else if (embeddingProvider === 'ollama') {
       embeddingEndpoint = embeddingEndpoint || 'http://localhost:11434';
       embeddingModel = embeddingModel || '';
+    } else if (embeddingProvider === 'siliconflow') {
+      embeddingEndpoint = 'https://api.siliconflow.cn/v1';
+      embeddingModel = 'BAAI/bge-large-zh-v1.5';
+    } else if (embeddingProvider === 'qwen') {
+      embeddingEndpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+      embeddingModel = 'text-embedding-v3';
+    } else if (embeddingProvider === 'zhipu') {
+      embeddingEndpoint = 'https://open.bigmodel.cn/api/paas/v4';
+      embeddingModel = 'embedding-2';
+    } else if (embeddingProvider === 'hunyuan') {
+      embeddingEndpoint = 'https://api.hunyuan.cloud.tencent.com/v1';
+      embeddingModel = 'hunyuan-embedding';
     }
   }
 
@@ -152,6 +164,16 @@
         embeddingModelList = (json.data || [])
           .filter((m: any) => m.id.startsWith('text-embedding-'))
           .map((m: any) => m.id);
+      } else if (embeddingProvider === 'siliconflow' || embeddingProvider === 'qwen' || embeddingProvider === 'zhipu' || embeddingProvider === 'hunyuan') {
+        const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
+          headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`Embedding API error ${resp.status}: ${text}`);
+        }
+        const json = await resp.json();
+        embeddingModelList = (json.data || []).map((m: any) => m.id);
       } else if (embeddingProvider === 'custom') {
         const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
           headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
@@ -483,6 +505,10 @@
           <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
             <option value="builtin">内置 (paraphrase-multilingual-MiniLM-L12-v2, 384维)</option>
             <option value="ollama">Ollama 本地</option>
+            <option value="siliconflow">硅基流动 (SiliconFlow)</option>
+            <option value="qwen">通义千问 (Qwen)</option>
+            <option value="zhipu">智谱 AI (GLM)</option>
+            <option value="hunyuan">腾讯混元</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
@@ -857,6 +883,10 @@
           <select class="b3-select" bind:value={embeddingProvider} on:change={onEmbeddingProviderChange}>
             <option value="builtin">内置 (paraphrase-multilingual-MiniLM-L12-v2, 384维)</option>
             <option value="ollama">Ollama 本地</option>
+            <option value="siliconflow">硅基流动 (SiliconFlow)</option>
+            <option value="qwen">通义千问 (Qwen)</option>
+            <option value="zhipu">智谱 AI (GLM)</option>
+            <option value="hunyuan">腾讯混元</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
