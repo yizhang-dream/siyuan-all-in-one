@@ -80,6 +80,8 @@ function getEndpoints(providerId: string): { chat: string; models: string } {
         case 'hunyuan':
         case 'stepfun':
         case 'lingyiwanwu':
+        case 'opencode-zen':
+        case 'opencode-go':
             return { chat: '/chat/completions', models: '/models' };
         case 'volcano-coding':
             // 火山引擎 编程套餐：使用 /api/coding/v3 路径
