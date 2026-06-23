@@ -59,14 +59,14 @@ const mixedSources = [
   },
   {
     id: 'on-note-1',
-    type: 'opennotebook',
+    type: 'source',
     sourceId: 'source:mechanics',
     chunkId: 'chunk:impulse',
     text: 'The impulse-momentum theorem states that impulse equals change in momentum.',
   },
   {
     id: 'siyuan-block-1',
-    type: 'siyuan',
+    type: 'siyuan-doc',
     sourceId: 'doc:physics',
     blockId: 'block:momentum',
     text: 'Momentum is mass times velocity, p = mv.',
@@ -136,8 +136,8 @@ assert.equal(generated.concepts.length, 2);
 assert.equal(generated.relations.length, 1);
 assert.equal(generated.cards.length, 2);
 assert.equal(generated.concepts.some((concept) => concept.sourceRefs[0].type === 'manual'), true);
-assert.equal(generated.concepts.some((concept) => concept.sourceRefs[0].type === 'siyuan'), true);
-assert.equal(generated.relations[0].sourceRefs[0].type, 'opennotebook');
+assert.equal(generated.concepts.some((concept) => concept.sourceRefs[0].type === 'siyuan-doc'), true);
+assert.equal(generated.relations[0].sourceRefs[0].type, 'source');
 
 generated.concepts[0].title = 'Edited impulse';
 generated.concepts[1].title = 'Edited momentum';

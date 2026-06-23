@@ -60,7 +60,10 @@
     "test:exporters": "node --no-warnings ./scripts/test_exporters.mjs",
     "test:importers": "node --no-warnings ./scripts/test_importers.mjs",
     "test:mindmap-cards": "node --no-warnings ./scripts/test_mindmap_cards.mjs",
-    "test:paradigm": "node --no-warnings ./scripts/test_concept_card_mindmap_paradigm.mjs"
+    "test:paradigm": "node --no-warnings ./scripts/test_concept_card_mindmap_paradigm.mjs",
+    "test:sources": "node --no-warnings ./scripts/test_source_hub.mjs",
+    "test:notebook-client": "node --no-warnings -e \"console.log('test:notebook-client SKIPPED (notebook feature removed)'); process.exit(0);\"",
+    "test:notebook-bridge": "node --no-warnings -e \"console.log('test:notebook-bridge SKIPPED (notebook feature removed)'); process.exit(0);\""
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.1.0",

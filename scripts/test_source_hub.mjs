@@ -58,10 +58,10 @@ const mixed = await collectPipelineSources({
 });
 
 assert.equal(mixed.stats.manual, 1);
-assert.equal(mixed.stats.siyuan, 1);
-assert.equal(mixed.stats.file, 1);
+assert.equal(mixed.stats.siyuanDoc, 1);
+assert.equal(mixed.stats.source, 1);
 assert.equal(mixed.stats.total, 3);
-assert.ok(mixed.sources.some((source) => source.type === 'file' && source.sourceId === 'local.html'));
+assert.ok(mixed.sources.some((source) => source.type === 'source' && source.sourceId === 'local.html'));
 
 const manualOnlyIgnoresSiyuan = await collectPipelineSources({
   mode: 'manual',
@@ -69,7 +69,7 @@ const manualOnlyIgnoresSiyuan = await collectPipelineSources({
   siyuanDocs: [{ id: 'doc-1', title: 'SiYuan Doc' }],
 });
 assert.equal(manualOnlyIgnoresSiyuan.sources.length, 1);
-assert.equal(manualOnlyIgnoresSiyuan.stats.siyuan, 0);
+assert.equal(manualOnlyIgnoresSiyuan.stats.siyuanDoc, 0);
 
 console.log(JSON.stringify({
   manual: true,
@@ -85,7 +85,7 @@ await esbuild.build({
   platform: 'node',
   format: 'esm',
   outfile,
-  external: ['onnxruntime-node', 'onnxruntime-web', '@xenova/transformers'],
+  external: ['onnxruntime-node', 'onnxruntime-web', '@xenova/transformers', 'canvas'],
   plugins: [{
     name: 'stub-siyuan',
     setup(build) {

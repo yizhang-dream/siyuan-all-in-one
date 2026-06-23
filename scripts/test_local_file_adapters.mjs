@@ -45,7 +45,7 @@ const sources = localTextFilesToPipelineSources([
 ], { maxCharsPerChunk: 1000 });
 
 assert.equal(sources.length, 2);
-assert.equal(sources[0].type, 'file');
+assert.equal(sources[0].type, 'source');
 assert.equal(sources[0].sourceId, 'bad_name_.md');
 assert.equal(sources[0].chunkId, 'bad_name_.md#1');
 assert.match(sources[0].text, /# bad_name_\\.md/);

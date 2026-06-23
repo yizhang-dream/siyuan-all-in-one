@@ -256,7 +256,7 @@ const wrappedTextOutput = await runPromptPipeline(
     {
       id: 'wrapped-source',
       text: 'Retrieval augmented generation grounds answers in retrieved source chunks.',
-      type: 'opennotebook',
+      type: 'source',
       sourceId: 'wrapped-source',
       chunkId: 'chunk-1',
     },

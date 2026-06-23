@@ -40,7 +40,7 @@ const plugin = new MemoryPlugin({
       cardIds: ['card-a', 99],
       sourceRefs: [
         'source-a',
-        { type: 'opennotebook', sourceId: 123, chunkId: 'chunk-1', page: '4', quote: 'quoted evidence' },
+        { type: 'source', sourceId: 123, chunkId: 'chunk-1', page: '4', quote: 'quoted evidence' },
         { type: 'weird', unused: true },
       ],
       tags: ['ai', 2026],
@@ -87,7 +87,7 @@ assert.equal(concepts[0].confidence, 0.77);
 assert.equal(concepts[0].sourceRefs.length, 2);
 assert.equal(concepts[0].sourceRefs[0].type, 'manual');
 assert.equal(concepts[0].sourceRefs[0].sourceId, 'source-a');
-assert.equal(concepts[0].sourceRefs[1].type, 'opennotebook');
+assert.equal(concepts[0].sourceRefs[1].type, 'source');
 assert.equal(concepts[0].sourceRefs[1].sourceId, '123');
 assert.equal(concepts[0].sourceRefs[1].page, 4);
 assert.equal(concepts[1].title, 'Untitled concept');
