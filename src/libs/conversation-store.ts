@@ -5,11 +5,19 @@
  *   - 消息负载：SiYuan file API 读写 /data/storage/petal/siyuan-all-in-one/sessions/{id}.json
  */
 
+export interface ContextDocument {
+  sourceId: string;
+  title: string;
+  chunkText: string;  // first 200 chars of the chunk text
+  score: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   sources?: { chunk: { id: string; sourceId: string; text: string; metadata: any }; score: number }[];
+  contextDocuments?: ContextDocument[];  // source context for this message
 }
 
 export interface SessionIndex {

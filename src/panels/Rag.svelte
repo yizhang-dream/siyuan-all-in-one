@@ -282,11 +282,19 @@ ${ctx}`
         renameSession(activeSessionId, title);
       }
 
+      const contextDocuments = results.map(r => ({
+        sourceId: r.chunk.sourceId,
+        title: r.chunk.metadata?.fileName || r.chunk.metadata?.title || '来源',
+        chunkText: r.chunk.text.substring(0, 200),
+        score: r.score,
+      }));
+
       await conversationStore.addMessage(activeSessionId, {
         id: 'a' + Date.now(),
         role: 'assistant',
         content: aiContent,
         sources: results,
+        contextDocuments,
       });
       activeSession = conversationStore.getById(activeSessionId);
       activeMessages = await conversationStore.getMessages(activeSessionId);
@@ -449,6 +457,18 @@ ${ctx}`
                   {/each}
                 </div>
               {/if}
+              {#if msg.contextDocuments?.length}
+                <div class="msg-context">
+                  <div class="context-label">📚 参考来源：</div>
+                  {#each msg.contextDocuments as doc}
+                    <div class="context-item">
+                      <span class="context-title">{doc.title}</span>
+                      <span class="context-score">({doc.score.toFixed(2)})</span>
+                      <div class="context-preview">{doc.chunkText}...</div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/each}
         {/if}
@@ -552,6 +572,38 @@ ${ctx}`
 
   .msg-sources { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--b3-theme-surface-lighter); font-size: var(--aio-fs-xs); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .source-chip { padding: 1px 6px; border-radius: 3px; background: var(--b3-theme-surface-lighter); cursor: default; }
+
+  .msg-context {
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--b3-theme-surface-light);
+    border-radius: 6px;
+    font-size: var(--aio-fs-xs);
+  }
+  .context-label {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--b3-theme-on-surface-light);
+  }
+  .context-item {
+    padding: 4px 0;
+    border-top: 1px solid var(--b3-border-color);
+  }
+  .context-item:first-child { border-top: none; }
+  .context-title {
+    font-weight: 500;
+  }
+  .context-score {
+    color: var(--b3-theme-on-surface-light);
+    margin-left: 6px;
+  }
+  .context-preview {
+    color: var(--b3-theme-on-surface-light);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   .chat-input-bar {
     display: flex; gap: 8px; padding: 12px 16px;
