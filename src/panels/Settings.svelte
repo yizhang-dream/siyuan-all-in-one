@@ -216,6 +216,11 @@
     if (e.key === 'Escape') cancelProviderEdit();
   }
 
+  function editProviderById(providerId: string) {
+    const p = providers.find((x) => x.id === providerId);
+    if (p) editProvider(p);
+  }
+
   // Provider 编辑器中的模型列表管理
   let newModelName = '';
   let isFetchingModels = false;
@@ -380,11 +385,13 @@
                 {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
               </select>
               <select class="b3-select" bind:value={flashcardModel} aria-label="制卡模型">
-                {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
-                {#if !getProviderModels(flashcardProviderId).includes(flashcardModel) && flashcardModel}
-                  <option value={flashcardModel}>{flashcardModel}</option>
+                {#if getProviderModels(flashcardProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
                 {/if}
               </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">获取模型</button>
             </div>
           </div>
 
@@ -398,11 +405,13 @@
                 {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
               </select>
               <select class="b3-select" bind:value={mindmapModel} aria-label="思维导图模型">
-                {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
-                {#if !getProviderModels(mindmapProviderId).includes(mindmapModel) && mindmapModel}
-                  <option value={mindmapModel}>{mindmapModel}</option>
+                {#if getProviderModels(mindmapProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
                 {/if}
               </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(mindmapProviderId)} title="从 API 获取模型列表">获取模型</button>
             </div>
           </div>
 
@@ -416,11 +425,13 @@
                 {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
               </select>
               <select class="b3-select" bind:value={ragModel} aria-label="RAG 对话模型">
-                {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
-                {#if !getProviderModels(ragProviderId).includes(ragModel) && ragModel}
-                  <option value={ragModel}>{ragModel}</option>
+                {#if getProviderModels(ragProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
                 {/if}
               </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(ragProviderId)} title="从 API 获取模型列表">获取模型</button>
             </div>
           </div>
 
@@ -440,14 +451,15 @@
               {:else if visionProviderType === 'cloud'}
                 <div class="feature-row">
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                    {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
-                    {#if !getProviderModels(flashcardProviderId).includes(visionModel) && visionModel}
-                      <option value={visionModel}>{visionModel}</option>
+                    {#if getProviderModels(flashcardProviderId).length === 0}
+                      <option value="" disabled>请先点击"获取模型"</option>
+                    {:else}
+                      {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
                     {/if}
                   </select>
-                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === flashcardProviderId); if (p) editProvider(p); }}>管理模型</button>
+                  <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">管理模型</button>
                 </div>
-                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。推荐 GLM glm-ocr 或 glm-4.6v-flash。</p>
+                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。</p>
               {/if}
             </div>
           </div>
@@ -748,11 +760,13 @@
               {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
             </select>
             <select class="b3-select" bind:value={flashcardModel} aria-label="制卡模型">
-              {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
-              {#if !getProviderModels(flashcardProviderId).includes(flashcardModel) && flashcardModel}
-                <option value={flashcardModel}>{flashcardModel}</option>
+              {#if getProviderModels(flashcardProviderId).length === 0}
+                <option value="" disabled>请先点击"获取模型"</option>
+              {:else}
+                {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
               {/if}
             </select>
+            <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">获取模型</button>
           </div>
         </div>
 
@@ -766,11 +780,13 @@
               {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
             </select>
             <select class="b3-select" bind:value={mindmapModel} aria-label="思维导图模型">
-              {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
-              {#if !getProviderModels(mindmapProviderId).includes(mindmapModel) && mindmapModel}
-                <option value={mindmapModel}>{mindmapModel}</option>
+              {#if getProviderModels(mindmapProviderId).length === 0}
+                <option value="" disabled>请先点击"获取模型"</option>
+              {:else}
+                {#each getProviderModels(mindmapProviderId) as m}<option value={m}>{m}</option>{/each}
               {/if}
             </select>
+            <button class="b3-button b3-button--small" on:click={() => editProviderById(mindmapProviderId)} title="从 API 获取模型列表">获取模型</button>
             </div>
           </div>
 
@@ -784,11 +800,13 @@
                 {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
               </select>
               <select class="b3-select" bind:value={ragModel} aria-label="RAG 对话模型">
-                {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
-                {#if !getProviderModels(ragProviderId).includes(ragModel) && ragModel}
-                  <option value={ragModel}>{ragModel}</option>
+                {#if getProviderModels(ragProviderId).length === 0}
+                  <option value="" disabled>请先点击"获取模型"</option>
+                {:else}
+                  {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
                 {/if}
               </select>
+              <button class="b3-button b3-button--small" on:click={() => editProviderById(ragProviderId)} title="从 API 获取模型列表">获取模型</button>
             </div>
           </div>
 
@@ -808,14 +826,15 @@
               {:else if visionProviderType === 'cloud'}
                 <div class="feature-row">
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                    {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
-                    {#if !getProviderModels(flashcardProviderId).includes(visionModel) && visionModel}
-                      <option value={visionModel}>{visionModel}</option>
+                    {#if getProviderModels(flashcardProviderId).length === 0}
+                      <option value="" disabled>请先点击"获取模型"</option>
+                    {:else}
+                      {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
                     {/if}
                   </select>
-                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === flashcardProviderId); if (p) editProvider(p); }}>管理模型</button>
+                  <button class="b3-button b3-button--small" on:click={() => editProviderById(flashcardProviderId)} title="从 API 获取模型列表">管理模型</button>
                 </div>
-                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。推荐 GLM glm-ocr 或 glm-4.6v-flash。</p>
+                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。</p>
               {/if}
             </div>
           </div>

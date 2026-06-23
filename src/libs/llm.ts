@@ -376,7 +376,10 @@ export async function callVisionLLM(
 ): Promise<string> {
     const cfg = resolveLLMConfig(appConfig, providerId, model);
     if (!cfg.endpoint || !cfg.model) {
-        throw new LLMError('请先在设置中配置视觉模型 Provider', 0);
+        const msg = !cfg.model && cfg.endpoint
+            ? '请先在设置中点击"获取模型"选择模型'
+            : '请先在设置中配置视觉模型 Provider';
+        throw new LLMError(msg, 0);
     }
 
     const content: any[] = [{ type: 'text', text: prompt }];
@@ -511,10 +514,10 @@ export async function callLLM(
         if (!cfg.endpoint) missing.push('endpoint');
         if (!cfg.model) missing.push('model');
         if (!cfg.providerId) missing.push('providerId');
-        throw new LLMError(
-            `请先在设置中配置 AI Provider（缺少: ${missing.join(', ')}）`,
-            0
-        );
+        const msg = !cfg.model && cfg.providerId
+            ? '请先在设置中点击"获取模型"选择模型'
+            : `请先在设置中配置 AI Provider（缺少: ${missing.join(', ')}）`;
+        throw new LLMError(msg, 0);
     }
 
     const maxRetries = cfg.maxRetries;
