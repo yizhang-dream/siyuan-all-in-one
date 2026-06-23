@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
+  import { marked } from 'marked';
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
   import type { RagSearchResult, EmbeddingProvider } from '../libs/rag';
   import type { RagConceptRequest } from '../libs/rag';
@@ -17,6 +18,15 @@
   export let openConceptsFromRag: (request: RagConceptRequest) => void = () => {};
 
   export let appStore: any = null;
+
+  function mdToHtml(text: string): string {
+    if (!text) return '';
+    try {
+      return marked.parse(text, { breaks: true }) as string;
+    } catch {
+      return text; // fallback to raw text on parse error
+    }
+  }
 
   const t = getT(plugin);
 
@@ -216,8 +226,29 @@
       const llmConfig = resolveLLMConfig(cfg, providerId, model);
 
       const systemPrompt = ctx
-        ? `你是一个知识助手。以下是用户导入的文档中检索到的相关内容，你已经拥有这些信息，可以直接引用其中的数据、公式和结论来回答问题。\n\n当用户问"你能看见文件吗"或类似问题时，请明确告知：你已经获得了文档的内容（见下方），可以基于这些内容回答。\n\n如果下方内容不足以回答问题，请如实说明缺失了哪些信息。\n\n以下是检索到的文档内容：\n${ctx}`
-        : '你是一个知识助手。用户尚未导入任何文档。如果需要基于具体文档回答，请提示用户先在"来源库"导入文件。';
+        ? `你是一个知识助手。请始终使用 Markdown 格式回复，包括但不限于：
+- 使用 **加粗** 突出重点
+- 使用 \`代码块\` 展示代码
+- 使用 - 或 1. 创建列表
+- 使用 ### 标题组织内容
+- 使用 > 引用原文
+
+以下是用户导入的文档中检索到的相关内容，你已经拥有这些信息，可以直接引用其中的数据、公式和结论来回答问题。
+
+当用户问"你能看见文件吗"或类似问题时，请明确告知：你已经获得了文档的内容（见下方），可以基于这些内容回答。
+
+如果下方内容不足以回答问题，请如实说明缺失了哪些信息。
+
+以下是检索到的文档内容：
+${ctx}`
+        : `你是一个知识助手。请始终使用 Markdown 格式回复，包括但不限于：
+- 使用 **加粗** 突出重点
+- 使用 \`代码块\` 展示代码
+- 使用 - 或 1. 创建列表
+- 使用 ### 标题组织内容
+- 使用 > 引用原文
+
+用户尚未导入任何文档。如果需要基于具体文档回答，请提示用户先在"来源库"导入文件。`;
 
       // Build full conversation history for LLM (multi-turn)
       const llmMessages = messages.map(m => ({
@@ -389,7 +420,7 @@
           {#each activeSession.messages as msg (msg.id)}
             <div class="chat-msg {msg.role}">
               <div class="msg-role">{msg.role === 'user' ? '你' : 'AI'}</div>
-              <div class="msg-content">{@html msg.content}</div>
+              <div class="msg-content">{@html mdToHtml(msg.content)}</div>
               {#if msg.sources?.length}
                 <div class="msg-sources">
                   {#each msg.sources.slice(0, 3) as src}
