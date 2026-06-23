@@ -119,4 +119,81 @@ export class VectorStore {
         results.sort((a, b) => b.score - a.score);
         return results.slice(0, topK);
     }
+
+    /**
+     * BM25-like keyword search fallback when the embedding model is unavailable.
+     *
+     * Tokenizes the query (Chinese: bigram split; English/numbers: space-split,
+     * lowercased), scores each entry by term-frequency of query tokens in its
+     * text, and returns the top K results normalised to 0‑1.
+     */
+    keywordSearch(query: string, topK = 5, sourceIds?: string[]): RagSearchResult[] {
+        const queryTokens = this.tokenize(query);
+        if (queryTokens.length === 0) return [];
+
+        const results: RagSearchResult[] = [];
+        let maxScore = 0;
+
+        for (const entry of this.entries) {
+            if (!entry.text) continue;
+            if (sourceIds && sourceIds.length > 0 && !sourceIds.includes(entry.sourceId)) continue;
+
+            const entryTokens = this.tokenize(entry.text);
+            let score = 0;
+            for (const qt of queryTokens) {
+                for (const et of entryTokens) {
+                    if (et === qt) score++;
+                }
+            }
+
+            if (score > 0) {
+                const chunk: RagChunk = {
+                    id: entry.id,
+                    sourceId: entry.sourceId,
+                    chunkIndex: entry.chunkIndex,
+                    text: entry.text,
+                    metadata: entry.metadata,
+                };
+                results.push({ chunk, score });
+                if (score > maxScore) maxScore = score;
+            }
+        }
+
+        // Normalize scores to 0-1 range (max score → 1.0)
+        if (maxScore > 0) {
+            for (const r of results) {
+                r.score = r.score / maxScore;
+            }
+        }
+
+        results.sort((a, b) => b.score - a.score);
+        return results.slice(0, topK);
+    }
+
+    /**
+     * Simple tokenizer: English/numbers → individual lowercased words;
+     * Chinese characters → bigram tokens.
+     */
+    private tokenize(text: string): string[] {
+        const tokens: string[] = [];
+        // Match sequences of ASCII alphanumeric, or individual CJK characters
+        const parts = text.match(/[a-zA-Z0-9]+|[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g);
+        if (!parts) return tokens;
+
+        for (const part of parts) {
+            if (/[a-zA-Z0-9]/.test(part)) {
+                tokens.push(part.toLowerCase());
+            } else {
+                // Chinese: character bigrams
+                if (part.length >= 2) {
+                    for (let i = 0; i < part.length - 1; i++) {
+                        tokens.push(part.substring(i, i + 2));
+                    }
+                }
+                // Always include unigram for single chars / edge coverage
+                tokens.push(part);
+            }
+        }
+        return tokens;
+    }
 }

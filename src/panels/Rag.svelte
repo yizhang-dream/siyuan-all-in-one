@@ -55,6 +55,18 @@
   let embedder: EmbeddingProvider;
   let conversationStore: ConversationStore;
 
+  // Embedder readiness status for UI display
+  let embedderStatusText = '';
+  $: {
+    if (!embedder) {
+      embedderStatusText = '加载中…';
+    } else if (embedder.isReady()) {
+      embedderStatusText = '向量就绪';
+    } else {
+      embedderStatusText = '不可用（回退关键词匹配）';
+    }
+  }
+
   let sessions: SessionIndex[] = [];
   let activeSessionId: string | null = null;
   let activeMessages: ChatMessage[] = [];
@@ -836,6 +848,9 @@ ${ctx}`
           <svg><use xlink:href="#iconSettings"></use></svg>
           {plugin.getConfig().ragModel || plugin.getConfig().flashcardModel || '未配置模型'}
         </span>
+        <span class="chat-embedder-badge" title="嵌入模型状态" class:ready={embedder?.isReady()}>
+          {embedderStatusText}
+        </span>
       </div>
       <div class="chat-toolbar-right">
         <div class="chat-source-scope">
@@ -1118,6 +1133,19 @@ ${ctx}`
   .chat-model-badge {
     font-size: var(--aio-fs-xs); opacity: 0.5; display: flex; align-items: center; gap: 3px;
     svg { width: 10px; height: 10px; }
+  }
+  .chat-embedder-badge {
+    font-size: var(--aio-fs-xs); display: flex; align-items: center; gap: 3px;
+    padding: 1px 6px; border-radius: 10px;
+    background: var(--b3-card-warning-background, #fff3cd);
+    color: var(--b3-card-warning-color, #856404);
+    border: 1px solid var(--b3-card-warning-border, #ffc107);
+    white-space: nowrap;
+  }
+  .chat-embedder-badge.ready {
+    background: var(--b3-card-success-background, #d4edda);
+    color: var(--b3-card-success-color, #155724);
+    border-color: var(--b3-card-success-border, #c3e6cb);
   }
   .chat-source-scope {
     display: flex; align-items: center; gap: 8px;

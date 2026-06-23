@@ -8,9 +8,10 @@
 import type { VectorStore } from './vector-store';
 import type { RagSearchResult } from './types';
 
-/** Minimal embedder interface for query — only needs embed() */
+/** Minimal embedder interface for query — only needs embed() and isReady() */
 export interface QueryEmbedder {
     embed(texts: string[]): Promise<number[][]>;
+    isReady(): boolean;
 }
 
 export interface QueryOptions {
@@ -29,8 +30,14 @@ export async function ragQuery(
     const topK = options.topK || 5;
     const minScore = options.minScore ?? 0;
 
-    const [qEmbedding] = await embedder.embed([question]);
-    const results = store.search(qEmbedding, topK, options.sourceIds);
+    let results: RagSearchResult[];
+    if (embedder.isReady()) {
+        const [qEmbedding] = await embedder.embed([question]);
+        results = store.search(qEmbedding, topK, options.sourceIds);
+    } else {
+        // Embedder unavailable — fall back to BM25 keyword search
+        results = store.keywordSearch(question, topK, options.sourceIds);
+    }
     return results.filter((r) => r.score >= minScore);
 }
 
