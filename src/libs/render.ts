@@ -9,16 +9,17 @@
  * remain readable instead of becoming unsafe HTML.
  */
 
-let mathJaxLoaded = false;
+// MathJax CDN loader — only used when explicitly opted in via { useMathJax: true }.
+let _mathJaxLoaded = false;
 
-async function ensureMathJax(): Promise<void> {
+async function _ensureMathJax(): Promise<void> {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
     if ((window as any).MathJax?.typesetPromise) {
-        mathJaxLoaded = true;
+        _mathJaxLoaded = true;
         return;
     }
-    if (mathJaxLoaded) return;
+    if (_mathJaxLoaded) return;
 
     return new Promise((resolve) => {
         (window as any).MathJax = {
@@ -39,7 +40,7 @@ async function ensureMathJax(): Promise<void> {
                     const MJ = (window as any).MathJax;
                     MJ.startup.defaultReady();
                     MJ.startup.promise.then(() => {
-                        mathJaxLoaded = true;
+                        _mathJaxLoaded = true;
                         resolve();
                     });
                 },
@@ -179,25 +180,43 @@ function renderInlineMarkdown(text: string): string {
     return html;
 }
 
-export async function renderMath(element: HTMLElement): Promise<void> {
+export interface RenderMathOptions {
+    /** When true, fall back to MathJax CDN (conflicts with SiYuan's built-in renderer). */
+    useMathJax?: boolean;
+}
+
+export async function renderMath(element: HTMLElement, options?: RenderMathOptions): Promise<void> {
     if (!element) return;
     if (typeof window === 'undefined') return;
 
-    const siyuan = (window as any).siyuan;
-    if (typeof siyuan?.mathRender === 'function') {
-        try {
+    // ── Primary: SiYuan's native math renderer (ProtyleMethod.mathRender) ──
+    try {
+        const pm = (window as any).ProtyleMethod;
+        if (typeof pm?.mathRender === 'function') {
+            pm.mathRender(element);
+            return;
+        }
+    } catch {}
+
+    // ── Fallback: legacy window.siyuan.mathRender ──
+    try {
+        const siyuan = (window as any).siyuan;
+        if (typeof siyuan?.mathRender === 'function') {
             siyuan.mathRender(element);
             return;
-        } catch {}
-    }
+        }
+    } catch {}
 
-    await ensureMathJax();
-    const MJ = (window as any).MathJax;
-    if (MJ?.typesetPromise) {
-        try {
-            await MJ.typesetPromise([element]);
-        } catch (error) {
-            console.warn('[render] MathJax render failed', error);
+    // ── Last resort: MathJax CDN (only when explicitly opted in) ──
+    if (options?.useMathJax) {
+        await _ensureMathJax();
+        const MJ = (window as any).MathJax;
+        if (MJ?.typesetPromise) {
+            try {
+                await MJ.typesetPromise([element]);
+            } catch (error) {
+                console.warn('[render] MathJax render failed', error);
+            }
         }
     }
 }
