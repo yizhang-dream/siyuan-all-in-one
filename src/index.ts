@@ -20,7 +20,6 @@ import { VectorStore } from './libs/rag';
 import type { AppConfig } from './libs/types';
 import { DEFAULT_CONFIG, cleanConfig } from './libs/config';
 import { setAppConfig } from './libs/config-helper';
-import { setAppConfig } from './libs/config-helper';
 
 const TAB_TYPE = 'siyuan-all-in-one-tab';
 const STORAGE_CONFIG = 'config';

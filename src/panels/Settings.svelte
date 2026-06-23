@@ -36,8 +36,6 @@
   let ragChunkOverlap = 0.1;
   let ragTopK = 5;
   let ragEmbeddingModel = 'Xenova/all-MiniLM-L6-v2';
-  let ragProviderId = '';
-  let ragModel = '';
 
   // Provider 编辑状态
   let editingProvider: Provider | null = null;

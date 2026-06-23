@@ -3,7 +3,7 @@
  * 存储键：'sources'
  */
 import type { ConceptNode, Relation } from './types/concept';
-import type { Card } from './types/card';
+import type { Card } from './types';
 
 export type SourceRecordType = 'file' | 'url' | 'paste' | 'pdf' | 'siyuan-doc';
 
