@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, afterUpdate } from 'svelte';
+  import { onMount, onDestroy, afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
   import type { RagSearchResult, EmbeddingProvider } from '../libs/rag';
@@ -28,10 +28,34 @@
   let activeSessionId: string | null = null;
   let inputText = '';
   let sending = false;
+  let pollTimer: any = null;
   let renamingId: string | null = null;
   let renameInput = '';
   let msgListEl: HTMLElement;
   let activeSession: ConversationSession | null = null;
+
+  // Poll store while sending to detect background completion (survives tab switch)
+  $: if (sending && activeSessionId) {
+    if (!pollTimer) {
+      pollTimer = setInterval(() => {
+        const fresh = conversationStore?.getById(activeSessionId);
+        if (fresh) {
+          activeSession = fresh;
+          const lastMsg = fresh.messages[fresh.messages.length - 1];
+          if (lastMsg?.role === 'assistant') {
+            sending = false;
+          }
+        }
+      }, 500);
+    }
+  } else if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  onDestroy(() => {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  });
 
   // ── Session CRUD ────────────────────────────────────────
 
@@ -45,6 +69,11 @@
   function switchSession(id: string) {
     activeSessionId = id;
     activeSession = conversationStore.getById(id);
+    if (activeSession) {
+      const lastMsg = activeSession.messages[activeSession.messages.length - 1];
+      if (lastMsg?.role === 'user') sending = true;
+      else sending = false;
+    }
   }
 
   function deleteSession(id: string) {
@@ -111,6 +140,11 @@
     }
 
     activeSession = activeSessionId ? conversationStore.getById(activeSessionId) : null;
+    // Recover pending state — if last message is from user, show "thinking..."
+    if (activeSession) {
+      const lastMsg = activeSession.messages[activeSession.messages.length - 1];
+      if (lastMsg?.role === 'user') sending = true;
+    }
 
     // Auto-initialize embedder on page load (silent)
     try {
