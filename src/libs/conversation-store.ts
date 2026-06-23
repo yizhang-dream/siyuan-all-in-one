@@ -1,6 +1,8 @@
 /*
  * 对话会话持久化层。
- * 存储键：'conversations'
+ * 双文件存储：
+ *   - 轻量索引：loadData/saveData 读写 chat-sessions.json
+ *   - 消息负载：SiYuan file API 读写 /data/storage/petal/siyuan-all-in-one/sessions/{id}.json
  */
 
 export interface ChatMessage {
@@ -10,69 +12,203 @@ export interface ChatMessage {
   sources?: { chunk: { id: string; sourceId: string; text: string; metadata: any }; score: number }[];
 }
 
-export interface ConversationSession {
+export interface SessionIndex {
   id: string;
   title: string;
-  messages: ChatMessage[];
+  messageCount: number;
   sourceIds: string[];
   createdAt: number;
   updatedAt: number;
 }
 
+const SESSION_DIR = '/data/storage/petal/siyuan-all-in-one/sessions';
+const INDEX_KEY = 'chat-sessions.json';
+
 export class ConversationStore {
-  private sessions: ConversationSession[] = [];
+  private sessions: SessionIndex[] = [];
+  private loadedMessages: Map<string, ChatMessage[]> = new Map();
   private plugin: any;
+  private apiBase: string;
 
   constructor(plugin: any) {
     this.plugin = plugin;
+    this.apiBase = this.getApiBase();
+  }
+
+  private getApiBase(): string {
+    try {
+      return (this.plugin as any).app?.kernel?.origin || 'http://127.0.0.1:6806';
+    } catch {
+      return 'http://127.0.0.1:6806';
+    }
+  }
+
+  private async putSessionFile(id: string, messages: ChatMessage[]): Promise<void> {
+    const path = `${SESSION_DIR}/${id}.json`;
+    const blob = new Blob([JSON.stringify({ messages })], { type: 'application/json' });
+    const form = new FormData();
+    form.append('path', path);
+    form.append('file', blob);
+    form.append('isDir', 'false');
+    await fetch(`${this.apiBase}/api/file/putFile`, { method: 'POST', body: form });
+  }
+
+  private async getSessionFile(id: string): Promise<ChatMessage[] | null> {
+    const path = `${SESSION_DIR}/${id}.json`;
+    const resp = await fetch(`${this.apiBase}/api/file/getFile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!resp.ok) return null;
+    const result = await resp.json();
+    // SiYuan wraps responses in { code, data }; data may be parsed JSON or base64
+    let data = result.code === 0 ? result.data : result;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(atob(data));
+      } catch {
+        return null;
+      }
+    }
+    return data?.messages || null;
+  }
+
+  private async deleteSessionFile(id: string): Promise<void> {
+    const path = `${SESSION_DIR}/${id}.json`;
+    await fetch(`${this.apiBase}/api/file/removeFile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
   }
 
   async load(): Promise<void> {
+    // Migration from old 'conversations' key
     try {
-      const data = await this.plugin.loadData('conversations');
-      this.sessions = Array.isArray(data) ? data : [];
+      const oldData = await this.plugin.loadData('conversations');
+      if (Array.isArray(oldData) && oldData.length > 0) {
+        for (const conv of oldData) {
+          const messages: ChatMessage[] = conv.messages || [];
+          await this.putSessionFile(conv.id, messages);
+          this.sessions.push({
+            id: conv.id,
+            title: conv.title || '新对话',
+            messageCount: messages.length,
+            sourceIds: conv.sourceIds || [],
+            createdAt: conv.createdAt || Date.now(),
+            updatedAt: conv.updatedAt || Date.now(),
+          });
+        }
+        await this.save();
+        // Clear old data key
+        await this.plugin.saveData('conversations', []);
+        return;
+      }
+    } catch {
+      // No old data — proceed to normal load
+    }
+
+    // Normal load of lightweight index
+    try {
+      const data = await this.plugin.loadData(INDEX_KEY);
+      if (data && Array.isArray(data.sessions)) {
+        this.sessions = data.sessions;
+      } else {
+        this.sessions = [];
+      }
     } catch {
       this.sessions = [];
     }
   }
 
   async save(): Promise<void> {
-    await this.plugin.saveData('conversations', this.sessions);
+    await this.plugin.saveData(INDEX_KEY, { sessions: this.sessions });
   }
 
-  getAll(): ConversationSession[] {
+  getAll(): SessionIndex[] {
     return [...this.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  getById(id: string): ConversationSession | null {
+  getById(id: string): SessionIndex | null {
     return this.sessions.find(s => s.id === id) ?? null;
   }
 
-  create(firstMessage?: ChatMessage, sourceIds?: string[]): ConversationSession {
+  async getMessages(id: string): Promise<ChatMessage[]> {
+    const cached = this.loadedMessages.get(id);
+    if (cached) return cached;
+    const messages = await this.getSessionFile(id);
+    if (messages) {
+      this.loadedMessages.set(id, messages);
+      return messages;
+    }
+    return [];
+  }
+
+  create(firstMessage?: ChatMessage, sourceIds?: string[]): SessionIndex {
     const id = crypto.randomUUID();
     const title = firstMessage
       ? firstMessage.content.split('\n')[0].trim().slice(0, 30) || '新对话'
       : '新对话';
     const now = Date.now();
-    const session: ConversationSession = {
+    const session: SessionIndex = {
       id,
       title,
-      messages: firstMessage ? [firstMessage] : [],
+      messageCount: firstMessage ? 1 : 0,
       sourceIds: sourceIds ?? [],
       createdAt: now,
       updatedAt: now,
     };
     this.sessions.push(session);
+
+    if (firstMessage) {
+      const messages = [firstMessage];
+      this.loadedMessages.set(id, messages);
+      this.putSessionFile(id, messages);
+    }
+
     this.save();
     return session;
   }
 
-  update(id: string, partial: Partial<ConversationSession>): void {
-    const idx = this.sessions.findIndex(s => s.id === id);
-    if (idx >= 0) {
-      Object.assign(this.sessions[idx], partial, { updatedAt: Date.now() });
-      this.save();
+  async addMessage(id: string, message: ChatMessage): Promise<void> {
+    let messages = this.loadedMessages.get(id);
+    if (!messages) {
+      messages = (await this.getSessionFile(id)) || [];
+      this.loadedMessages.set(id, messages);
     }
+    messages.push(message);
+
+    const session = this.sessions.find(s => s.id === id);
+    if (session) {
+      session.messageCount = messages.length;
+      session.updatedAt = Date.now();
+    }
+
+    await Promise.all([this.putSessionFile(id, messages), this.save()]);
+  }
+
+  async updateLastMessage(id: string, content: string): Promise<void> {
+    let messages = this.loadedMessages.get(id);
+    if (!messages) {
+      messages = (await this.getSessionFile(id)) || [];
+      this.loadedMessages.set(id, messages);
+    }
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === 'assistant') {
+        lastMsg.content = content;
+        const session = this.sessions.find(s => s.id === id);
+        if (session) session.updatedAt = Date.now();
+        await Promise.all([this.putSessionFile(id, messages), this.save()]);
+      }
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    this.sessions = this.sessions.filter(s => s.id !== id);
+    this.loadedMessages.delete(id);
+    await Promise.all([this.deleteSessionFile(id), this.save()]);
   }
 
   rename(id: string, title: string): void {
@@ -84,29 +220,20 @@ export class ConversationStore {
     }
   }
 
-  delete(id: string): void {
-    this.sessions = this.sessions.filter(s => s.id !== id);
-    this.save();
-  }
-
-  addMessage(id: string, message: ChatMessage): void {
+  async update(id: string, partial: Partial<{ title: string; messages: ChatMessage[] }>): Promise<void> {
     const session = this.sessions.find(s => s.id === id);
-    if (session) {
-      session.messages = [...session.messages, message];
-      session.updatedAt = Date.now();
-      this.save();
-    }
-  }
+    if (!session) return;
 
-  updateLastMessage(id: string, content: string): void {
-    const session = this.sessions.find(s => s.id === id);
-    if (session && session.messages.length > 0) {
-      const lastMsg = session.messages[session.messages.length - 1];
-      if (lastMsg.role === 'assistant') {
-        lastMsg.content = content;
-        session.updatedAt = Date.now();
-        this.save();
-      }
+    if (partial.title !== undefined) {
+      session.title = partial.title.substring(0, 50);
     }
+    if (partial.messages !== undefined) {
+      this.loadedMessages.set(id, partial.messages);
+      await this.putSessionFile(id, partial.messages);
+      session.messageCount = partial.messages.length;
+    }
+
+    session.updatedAt = Date.now();
+    await this.save();
   }
 }

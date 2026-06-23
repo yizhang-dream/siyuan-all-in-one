@@ -8,7 +8,7 @@
   import { callLLM, resolveLLMConfig } from '../libs/llm';
   import { renderMath } from '../libs/render';
   import { getT } from '../libs/i18n';
-  import { ConversationStore, type ConversationSession, type ChatMessage } from '../libs/conversation-store';
+  import { ConversationStore, type SessionIndex, type ChatMessage } from '../libs/conversation-store';
 
   export let plugin: any;
   export let vectorStore: any;
@@ -44,24 +44,25 @@
   let embedder: EmbeddingProvider;
   let conversationStore: ConversationStore;
 
-  let sessions: ConversationSession[] = [];
+  let sessions: SessionIndex[] = [];
   let activeSessionId: string | null = null;
+  let activeMessages: ChatMessage[] = [];
   let inputText = '';
   let sending = false;
   let pollTimer: any = null;
   let renamingId: string | null = null;
   let renameInput = '';
   let msgListEl: HTMLElement;
-  let activeSession: ConversationSession | null = null;
+  let activeSession: SessionIndex | null = null;
 
   // Poll store while sending to detect background completion (survives tab switch)
   $: if (sending && activeSessionId) {
     if (!pollTimer) {
-      pollTimer = setInterval(() => {
-        const fresh = conversationStore?.getById(activeSessionId);
-        if (fresh) {
-          activeSession = fresh;
-          const lastMsg = fresh.messages[fresh.messages.length - 1];
+      pollTimer = setInterval(async () => {
+        const msgs = await conversationStore?.getMessages(activeSessionId!);
+        if (msgs && msgs.length > 0) {
+          activeMessages = msgs;
+          const lastMsg = msgs[msgs.length - 1];
           if (lastMsg?.role === 'assistant') {
             sending = false;
           }
@@ -84,35 +85,39 @@
     sessions = [session, ...sessions];
     activeSessionId = session.id;
     activeSession = session;
+    activeMessages = [];
   }
 
-  function switchSession(id: string) {
+  async function switchSession(id: string) {
     activeSessionId = id;
     activeSession = conversationStore.getById(id);
-    if (activeSession) {
-      const lastMsg = activeSession.messages[activeSession.messages.length - 1];
+    activeMessages = await conversationStore.getMessages(id);
+    if (activeMessages.length > 0) {
+      const lastMsg = activeMessages[activeMessages.length - 1];
       if (lastMsg?.role === 'user') sending = true;
       else sending = false;
     }
   }
 
-  function deleteSession(id: string) {
-    conversationStore.delete(id);
+  async function deleteSession(id: string) {
+    await conversationStore.delete(id);
     sessions = conversationStore.getAll();
     if (activeSessionId === id) {
       activeSessionId = sessions[0]?.id || null;
+      activeSession = activeSessionId ? conversationStore.getById(activeSessionId) : null;
+      activeMessages = activeSessionId ? await conversationStore.getMessages(activeSessionId) : [];
       if (!activeSessionId) createNewSession();
     }
   }
 
   function renameSession(id: string, title: string) {
-    conversationStore.update(id, { title });
+    conversationStore.rename(id, title);
     sessions = conversationStore.getAll();
   }
 
   // ── Inline rename ───────────────────────────────────────
 
-  function startRename(session: ConversationSession) {
+  function startRename(session: SessionIndex) {
     renamingId = session.id;
     renameInput = session.title;
   }
@@ -160,9 +165,10 @@
     }
 
     activeSession = activeSessionId ? conversationStore.getById(activeSessionId) : null;
+    activeMessages = activeSessionId ? await conversationStore.getMessages(activeSessionId) : [];
     // Recover pending state — if last message is from user, show "thinking..."
-    if (activeSession) {
-      const lastMsg = activeSession.messages[activeSession.messages.length - 1];
+    if (activeMessages.length > 0) {
+      const lastMsg = activeMessages[activeMessages.length - 1];
       if (lastMsg?.role === 'user') sending = true;
     }
 
@@ -197,20 +203,20 @@
     }
 
     const userMsg: ChatMessage = { id: 'u' + Date.now(), role: 'user', content: text };
-    conversationStore.addMessage(activeSessionId, userMsg);
+    await conversationStore.addMessage(activeSessionId, userMsg);
     activeSession = conversationStore.getById(activeSessionId);
+    activeMessages = await conversationStore.getMessages(activeSessionId);
     inputText = '';
     sending = true;
     sessions = conversationStore.getAll();
 
     try {
-      const session = conversationStore.getById(activeSessionId);
-      const messages = session?.messages || [];
+      const messages = activeMessages;
 
       if (!embedder?.isReady()) await initEmbedder();
 
       // RAG retrieval — pass sourceIds filter so only selected sources are searched
-      const sourceIds = session?.sourceIds || [];
+      const sourceIds = activeSession?.sourceIds || [];
       const results = await ragQuery(text, store, embedder, {
         topK: config?.ragTopK || 5,
         sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
@@ -276,31 +282,34 @@ ${ctx}`
         renameSession(activeSessionId, title);
       }
 
-      conversationStore.addMessage(activeSessionId, {
+      await conversationStore.addMessage(activeSessionId, {
         id: 'a' + Date.now(),
         role: 'assistant',
         content: aiContent,
         sources: results,
       });
       activeSession = conversationStore.getById(activeSessionId);
+      activeMessages = await conversationStore.getMessages(activeSessionId);
 
       sessions = conversationStore.getAll();
     } catch (e: any) {
-      conversationStore.addMessage(activeSessionId, {
+      await conversationStore.addMessage(activeSessionId, {
         id: 'e' + Date.now(),
         role: 'assistant',
         content: `错误：${e?.message || e}`,
       });
       activeSession = conversationStore.getById(activeSessionId);
+      activeMessages = await conversationStore.getMessages(activeSessionId);
       sessions = conversationStore.getAll();
     }
 
     sending = false;
   }
 
-  function clearChat() {
+  async function clearChat() {
     if (!activeSessionId) return;
-    conversationStore.update(activeSessionId, { messages: [] });
+    await conversationStore.update(activeSessionId, { messages: [] });
+    activeMessages = [];
     sessions = conversationStore.getAll();
   }
 
@@ -418,7 +427,7 @@ ${ctx}`
     <!-- Messages -->
     <div class="chat-messages" bind:this={msgListEl}>
       {#if activeSession}
-        {#if activeSession.messages.length === 0}
+        {#if activeMessages.length === 0}
           <div class="rag-msg-empty">
             {#if store?.getCount() > 0}
               <p>已索引 {store.getCount()} 个文本块，可以开始提问</p>
@@ -427,7 +436,7 @@ ${ctx}`
             {/if}
           </div>
         {:else}
-          {#each activeSession.messages as msg (msg.id)}
+          {#each activeMessages as msg (msg.id)}
             <div class="chat-msg {msg.role}">
               <div class="msg-role">{msg.role === 'user' ? '你' : 'AI'}</div>
               <div class="msg-content">{@html mdToHtml(msg.content)}</div>
