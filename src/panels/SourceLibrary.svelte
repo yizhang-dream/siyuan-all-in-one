@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { showMessage, confirm, fetchSyncPost } from 'siyuan';
   import type { SourceRecord, SourceStore } from '../libs/source-store';
   import { ParserRegistry, TxtMdHtmlParser, PdfParser, PandocParser, XlsxParser, ImageOcrParser, SiyuanDocParser } from '../libs/parsers';
@@ -270,6 +270,10 @@
       retryCount: 0,
     });
 
+    // Force a reactive DOM update so the new item appears immediately
+    sources = sourceStore.getAll();
+    await tick();
+
     try {
       let text: string;
       const isImage = IMAGE_EXTENSIONS.has(ext);
@@ -281,6 +285,8 @@
       if (visionType !== 'off' && (isImage || isPdf)) {
         const arrayBuffer = await file.arrayBuffer();
         visionExtracting = new Set([...visionExtracting, id]);
+        // Flush the "⏳ 提取中..." status to the DOM before starting the long pipeline
+        await tick();
 
         // Render PDF pages to images (if PDF)
         let images: string[] = [];
@@ -650,6 +656,7 @@
   function statusLabel(s: SourceRecord): string {
     if (s.chunkStatus === 'done') return '✓ 完成';
     if (s.chunkStatus === 'error') return '✗ 错误';
+    if (visionExtracting.has(s.id)) return '⏳ 提取中...';
     return '⏳ 处理中';
   }
 
