@@ -127,40 +127,40 @@
       embeddingModel = embeddingModel || '';
     } else if (embeddingProvider === 'siliconflow') {
       embeddingEndpoint = 'https://api.siliconflow.cn/v1';
-      embeddingModel = 'BAAI/bge-large-zh-v1.5';
+      embeddingModel = '';
     } else if (embeddingProvider === 'qwen') {
       embeddingEndpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-      embeddingModel = 'text-embedding-v3';
+      embeddingModel = '';
     } else if (embeddingProvider === 'zhipu') {
       embeddingEndpoint = 'https://open.bigmodel.cn/api/paas/v4';
-      embeddingModel = 'embedding-2';
+      embeddingModel = '';
     } else if (embeddingProvider === 'hunyuan') {
       embeddingEndpoint = 'https://api.hunyuan.cloud.tencent.com/v1';
-      embeddingModel = 'hunyuan-embedding';
+      embeddingModel = '';
     } else if (embeddingProvider === 'baidu') {
       embeddingEndpoint = 'https://qianfan.baidubce.com/v2/embeddings';
-      embeddingModel = 'embedding-v1';
+      embeddingModel = '';
     } else if (embeddingProvider === 'cohere') {
       embeddingEndpoint = 'https://api.cohere.ai/v1';
-      embeddingModel = 'embed-multilingual-v3.0';
+      embeddingModel = '';
     } else if (embeddingProvider === 'jina') {
       embeddingEndpoint = 'https://api.jina.ai/v1';
-      embeddingModel = 'jina-embeddings-v3';
+      embeddingModel = '';
     } else if (embeddingProvider === 'mistral') {
       embeddingEndpoint = 'https://api.mistral.ai/v1';
-      embeddingModel = 'mistral-embed';
+      embeddingModel = '';
     } else if (embeddingProvider === 'voyage') {
       embeddingEndpoint = 'https://api.voyageai.com/v1';
-      embeddingModel = 'voyage-multimodal-3';
+      embeddingModel = '';
     } else if (embeddingProvider === 'gemini-embed') {
       embeddingEndpoint = 'https://generativelanguage.googleapis.com/v1beta/openai';
-      embeddingModel = 'text-embedding-004';
+      embeddingModel = '';
     } else if (embeddingProvider === 'together') {
       embeddingEndpoint = 'https://api.together.xyz/v1';
-      embeddingModel = 'togethercomputer/m2-bert-80M-8k-retrieval';
+      embeddingModel = '';
     } else if (embeddingProvider === 'nomic') {
       embeddingEndpoint = 'https://api-atlas.nomic.ai/v1';
-      embeddingModel = 'nomic-embed-text-v1.5';
+      embeddingModel = '';
     }
   }
 
