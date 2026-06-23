@@ -24,6 +24,15 @@ export const BUILTIN_PROVIDERS: Provider[] = [
         isBuiltIn: true,
     },
     {
+        id: 'glm',
+        name: '智谱 GLM (视觉)',
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        apiKey: '',
+        models: ['glm-4.6v-flash', 'glm-4.6v', 'glm-4.5', 'glm-4.5-flash'],
+        isBuiltIn: true,
+        disableThinking: true,
+    },
+    {
         id: 'openai',
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com',
@@ -89,6 +98,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     mindmapModel: '',
     ragProviderId: 'deepseek',
     ragModel: '',
+    visionProviderId: 'glm',
+    visionModel: 'glm-4.6v-flash',
     cardsPerDay: 30,
     scheduler: 'sm2',
     defaultDeck: 'Default',
@@ -152,6 +163,7 @@ export function cleanConfig(cfg: any): AppConfig {
     let providers: Provider[];
     let flashcardProviderId: string;
     let mindmapProviderId: string;
+    let visionProviderId: string;
 
     if (hasOldLlmConfig) {
         const migrated: Provider = {
@@ -165,6 +177,7 @@ export function cleanConfig(cfg: any): AppConfig {
         providers = [migrated, ...BUILTIN_PROVIDERS.map((p) => ({ ...p }))];
         flashcardProviderId = 'migrated';
         mindmapProviderId = 'migrated';
+        visionProviderId = 'migrated';
     } else {
         const rawProviders = Array.isArray(cfg?.providers) ? cfg.providers : [];
         providers = rawProviders.map(cleanProvider);
@@ -174,6 +187,7 @@ export function cleanConfig(cfg: any): AppConfig {
         }
         flashcardProviderId = String(cfg?.flashcardProviderId || providers[0]?.id || d.flashcardProviderId);
         mindmapProviderId = String(cfg?.mindmapProviderId || providers[0]?.id || d.mindmapProviderId);
+        visionProviderId = String(cfg?.visionProviderId || d.visionProviderId);
     }
 
     const rawAgents = Array.isArray(cfg?.agents) ? cfg.agents : [];
@@ -185,6 +199,8 @@ export function cleanConfig(cfg: any): AppConfig {
         mindmapModel: String(cfg?.mindmapModel ?? (hasOldLlmConfig ? cfg.llmModel : d.mindmapModel)),
         ragProviderId: String(cfg?.ragProviderId || d.ragProviderId),
         ragModel: String(cfg?.ragModel ?? d.ragModel),
+        visionProviderId,
+        visionModel: String(cfg?.visionModel ?? d.visionModel),
         cardsPerDay: cfg?.cardsPerDay ?? d.cardsPerDay,
         scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',
         defaultDeck: cfg?.defaultDeck ?? d.defaultDeck,

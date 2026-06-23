@@ -71,6 +71,9 @@ function getEndpoints(providerId: string): { chat: string; models: string } {
         case 'zhipu':
             // 智谱 BigModel：baseUrl 已含 /api/paas/v4，端点直接拼 /chat/completions
             return { chat: '/chat/completions', models: '/models' };
+        case 'glm':
+            // GLM 视觉：同智谱 BigModel 格式
+            return { chat: '/chat/completions', models: '/models' };
         default:
             return { chat: '/v1/chat/completions', models: '/v1/models' };
     }
@@ -347,6 +350,133 @@ export function extractLLMContent(json: any, providerId = 'openai-compatible'): 
         throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）`, 0);
     }
     return content;
+}
+
+/**
+ * 视觉 API 的图片输入。
+ * base64 为裸 base64 字符串（不含 data: 前缀）。
+ */
+export interface VisionImage {
+    base64: string;
+    mimeType?: string;
+}
+
+/**
+ * 调用 OpenAI 兼容的视觉 API 提取图片中的文字 / LaTeX 公式。
+ * 复用 resolveLLMConfig 查找 endpoint/apiKey，使用与 callLLM 相同的重试逻辑。
+ * 超时设为 60s（视觉调用比纯文本慢）。
+ */
+export async function callVisionLLM(
+    appConfig: AppConfig,
+    providerId: string,
+    model: string,
+    prompt: string,
+    images: VisionImage[],
+    options?: { maxTokens?: number }
+): Promise<string> {
+    const cfg = resolveLLMConfig(appConfig, providerId, model);
+    if (!cfg.endpoint || !cfg.model) {
+        throw new LLMError('请先在设置中配置视觉模型 Provider', 0);
+    }
+
+    const content: any[] = [{ type: 'text', text: prompt }];
+    for (const img of images) {
+        content.push({
+            type: 'image_url',
+            image_url: {
+                url: `data:${img.mimeType || 'image/png'};base64,${img.base64}`,
+                detail: 'high',
+            },
+        });
+    }
+
+    const messages = [{ role: 'user', content }] as any[];
+
+    // 合并配置（不覆盖 endpoint/model/apiKey，用 resolveLLMConfig 的）
+    const effectiveConfig: Record<string, any> = {};
+    for (const [key, value] of Object.entries({
+        model: cfg.model,
+        endpoint: cfg.endpoint,
+        apiKey: cfg.apiKey,
+        providerId: cfg.providerId,
+        maxTokens: options?.maxTokens ?? 4096,
+        temperature: 0.1,
+        timeout: 60_000,
+        maxRetries: 3,
+        retryDelayMs: 5_000,
+        disableThinking: cfg.disableThinking,
+    })) {
+        if (value !== undefined && value !== null && value !== '') {
+            effectiveConfig[key] = value;
+        }
+    }
+    const mergedCfg = { ...DEFAULT_CONFIG, ...effectiveConfig } as Required<LLMConfig>;
+    mergedCfg.endpoint = cfg.endpoint || '';
+    mergedCfg.model = cfg.model || '';
+
+    const maxRetries = mergedCfg.maxRetries;
+    const baseDelay = mergedCfg.retryDelayMs;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), mergedCfg.timeout);
+
+            // 构造 OpenAI 兼容的请求（不使用 buildLLMRequest，因为需要 image_url 格式）
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (mergedCfg.apiKey) headers['Authorization'] = 'Bearer ' + mergedCfg.apiKey;
+
+            const body: Record<string, any> = {
+                model: mergedCfg.model,
+                messages,
+                max_tokens: mergedCfg.maxTokens,
+                temperature: mergedCfg.temperature,
+            };
+            if (mergedCfg.disableThinking) {
+                body.thinking = { type: 'disabled' };
+            }
+
+            const resp = await fetch(mergedCfg.endpoint, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (resp.ok) {
+                const json = await resp.json();
+                return extractLLMContent(json, mergedCfg.providerId);
+            }
+
+            if (resp.status === 429) {
+                if (attempt < maxRetries) {
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    console.warn(`[vision] 429 限流，${delay}ms 后重试 (${attempt + 1}/${maxRetries})`);
+                    await sleep(delay);
+                    continue;
+                }
+                throw new LLMError('视觉 API 限流，已达最大重试次数', 429);
+            }
+
+            const errBody = await resp.text().catch(() => '');
+            throw new LLMError(`视觉 API 错误 ${resp.status}: ${errBody.slice(0, 200)}`, resp.status);
+        } catch (err: any) {
+            if (err instanceof LLMError) throw err;
+            if (err.name === 'AbortError') {
+                throw new LLMError('视觉 API 请求超时', 0);
+            }
+            if (attempt === maxRetries) {
+                throw new LLMError(`视觉 API 网络错误（重试 ${maxRetries} 次后）: ${err.message}`, 0);
+            }
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.warn(`[vision] 网络错误 (尝试 ${attempt + 1})，${delay}ms 后重试:`, err.message);
+            await sleep(delay);
+        }
+    }
+
+    throw new LLMError('视觉 API 调用失败', 0);
 }
 
 function joinMessages(messages: ChatMessage[], role: ChatMessage['role']): string {

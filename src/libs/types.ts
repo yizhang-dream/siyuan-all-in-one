@@ -137,6 +137,10 @@ export interface AppConfig {
     ragProviderId?: string;
     /** RAG 对话功能使用的模型名（可选，默认 fallback 到制卡） */
     ragModel?: string;
+    /** 视觉模型 OCR/公式提取功能使用的 Provider id */
+    visionProviderId?: string;
+    /** 视觉模型 OCR/公式提取功能使用的模型名 */
+    visionModel?: string;
     /** 每日新卡片上限 */
     cardsPerDay: number;
     /** 复习调度算法：SM-2 兼容默认，FSRS 可选。 */

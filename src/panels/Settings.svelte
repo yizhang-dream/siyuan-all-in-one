@@ -17,6 +17,8 @@
   let mindmapModel = '';
   let ragProviderId = '';
   let ragModel = '';
+  let visionProviderId = '';
+  let visionModel = '';
   // ── 嵌入模型 ──
   let embeddingProvider: EmbeddingProviderType = 'builtin';
   let embeddingEndpoint = '';
@@ -45,6 +47,8 @@
     mindmapModel = config.mindmapModel || '';
     ragProviderId = config.ragProviderId || flashcardProviderId;
     ragModel = config.ragModel || flashcardModel;
+    visionProviderId = config.visionProviderId || '';
+    visionModel = config.visionModel || '';
     embeddingProvider = config.ragEmbeddingProvider || 'builtin';
     embeddingEndpoint = config.ragEmbeddingConfig?.endpoint || '';
     embeddingApiKey = config.ragEmbeddingConfig?.apiKey || '';
@@ -64,6 +68,8 @@
       mindmapModel,
       ragProviderId,
       ragModel,
+      visionProviderId,
+      visionModel,
       cardsPerDay: Number(cardsPerDay),
       scheduler,
       defaultDeck,
@@ -97,6 +103,11 @@
     mindmapProviderId = e.target.value;
     const models = getProviderModels(mindmapProviderId);
     mindmapModel = models[0] || '';
+  }
+  function onVisionProviderChange(e: any) {
+    visionProviderId = e.target.value;
+    const models = getProviderModels(visionProviderId);
+    visionModel = models[0] || '';
   }
 
   // ── 嵌入模型 ──────────────────────────────
@@ -193,6 +204,7 @@
       // 如果删除的是当前选中的 provider，重置指针
       if (flashcardProviderId === p.id) { flashcardProviderId = providers[0]?.id || ''; flashcardModel = getProviderModels(flashcardProviderId)[0] || ''; }
       if (mindmapProviderId === p.id) { mindmapProviderId = providers[0]?.id || ''; mindmapModel = getProviderModels(mindmapProviderId)[0] || ''; }
+      if (visionProviderId === p.id) { visionProviderId = providers[0]?.id || ''; visionModel = getProviderModels(visionProviderId)[0] || ''; }
       save();
     });
   }
@@ -412,6 +424,25 @@
                 {/if}
               </select>
             </div>
+          </div>
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
+              <span>视觉模型</span>
+            </div>
+            <div class="feature-row">
+              <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
+                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+              <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
+                {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
+                {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
+                  <option value={visionModel}>{visionModel}</option>
+                {/if}
+              </select>
+            </div>
+            <p class="settings-hint">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
           </div>
         </div>
       </div>
@@ -752,6 +783,25 @@
                 {/if}
               </select>
             </div>
+          </div>
+
+          <div class="feature-block">
+            <div class="feature-label">
+              <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
+              <span>视觉模型</span>
+            </div>
+            <div class="feature-row">
+              <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
+                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+              <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
+                {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
+                {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
+                  <option value={visionModel}>{visionModel}</option>
+                {/if}
+              </select>
+            </div>
+            <p class="settings-hint">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
           </div>
         </div>
       </div>
