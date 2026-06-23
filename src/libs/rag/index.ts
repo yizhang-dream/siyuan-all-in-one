@@ -16,7 +16,7 @@ export { ingestDocument, ingestFile } from './ingest';
 export type { IngestOptions, IngestResult } from './ingest';
 
 export { ragQuery, ragContext, formatRagContext } from './query';
-export type { QueryOptions } from './query';
+export type { QueryOptions, QueryEmbedder } from './query';
 
 export { buildRagConceptRequest } from './rag-bridge';
 export type { RagConceptRequest, RagConceptRequestInput } from './rag-bridge';

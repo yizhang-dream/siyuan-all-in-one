@@ -5,9 +5,13 @@
  * RAG query layer: embed question → cosine search → format context.
  */
 
-import type { RagEmbedder } from './embedder';
 import type { VectorStore } from './vector-store';
 import type { RagSearchResult } from './types';
+
+/** Minimal embedder interface for query — only needs embed() */
+export interface QueryEmbedder {
+    embed(texts: string[]): Promise<number[][]>;
+}
 
 export interface QueryOptions {
     topK?: number;
@@ -19,7 +23,7 @@ export interface QueryOptions {
 export async function ragQuery(
     question: string,
     store: VectorStore,
-    embedder: RagEmbedder,
+    embedder: QueryEmbedder,
     options: QueryOptions = {}
 ): Promise<RagSearchResult[]> {
     const topK = options.topK || 5;
@@ -34,7 +38,7 @@ export async function ragQuery(
 export async function ragContext(
     question: string,
     store: VectorStore,
-    embedder: RagEmbedder,
+    embedder: QueryEmbedder,
     options: QueryOptions = {}
 ): Promise<string> {
     const results = await ragQuery(question, store, embedder, options);

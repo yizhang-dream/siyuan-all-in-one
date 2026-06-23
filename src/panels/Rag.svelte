@@ -6,6 +6,8 @@
   import type { RagSearchResult, EmbeddingProvider } from '../libs/rag';
   import type { RagConceptRequest } from '../libs/rag';
   import { callLLM, resolveLLMConfig } from '../libs/llm';
+  import type { ToolCall as LLMToolCall } from '../libs/llm';
+  import { getEnabledTools, executeTool, type ToolContext } from '../libs/tools';
   import { renderMath } from '../libs/render';
   import { getT } from '../libs/i18n';
   import { ConversationStore, type SessionIndex, type ChatMessage } from '../libs/conversation-store';
@@ -54,6 +56,9 @@
   let renameInput = '';
   let msgListEl: HTMLElement;
   let activeSession: SessionIndex | null = null;
+
+  // Agent mode toggle
+  let agentMode = false;
 
   // Poll store while sending to detect background completion (survives tab switch)
   $: if (sending && activeSessionId) {
@@ -274,7 +279,59 @@ ${ctx}`
       // Add system message at the beginning
       llmMessages.unshift({ role: 'system', content: systemPrompt });
 
-      const aiContent = await callLLM(llmMessages, llmConfig);
+      let finalContent = '';
+      let toolLog = '';
+
+      if (agentMode) {
+        // ── Agent loop ───────────────────────────────────────────
+        const tools = getEnabledTools();
+        const MAX_AGENT_ITERATIONS = 5;
+        let iterations = 0;
+        let agentRunning = true;
+
+        while (agentRunning && iterations < MAX_AGENT_ITERATIONS) {
+          iterations++;
+
+          const result = await callLLM(llmMessages, llmConfig, { tools });
+
+          if (result.toolCalls && result.toolCalls.length > 0) {
+            // Add assistant message with tool_calls to conversation history
+            llmMessages.push({
+              role: 'assistant',
+              content: result.content || '',
+              tool_calls: result.toolCalls,
+            });
+
+            const toolNames = result.toolCalls.map(tc => tc.function.name);
+            toolLog += `\n[调用工具: ${toolNames.join(', ')}]\n`;
+
+            // Execute each tool
+            const toolCtx: ToolContext = { plugin, vectorStore, embedder };
+            for (const tc of result.toolCalls) {
+              const toolResult = await executeTool(tc, toolCtx);
+              llmMessages.push({
+                role: 'tool' as any,
+                tool_call_id: tc.id,
+                content: toolResult,
+              });
+            }
+          } else if (result.content) {
+            finalContent += result.content;
+            agentRunning = false;
+          } else {
+            agentRunning = false;
+          }
+        }
+
+        // Prepend tool log to final content
+        if (toolLog) {
+          finalContent = toolLog + '\n' + finalContent;
+        }
+      } else {
+        // ── Normal (non-agent) mode ────────────────────────────
+        const aiContent = await callLLM(llmMessages, llmConfig);
+        finalContent = aiContent;
+      }
 
       // Auto-title: if this is the first message, generate title
       if (messages.length === 1) {
@@ -292,7 +349,7 @@ ${ctx}`
       await conversationStore.addMessage(activeSessionId, {
         id: 'a' + Date.now(),
         role: 'assistant',
-        content: aiContent,
+        content: finalContent,
         sources: results,
         contextDocuments,
       });
@@ -426,6 +483,10 @@ ${ctx}`
             选择来源
           </button>
         </div>
+        <label class="agent-toggle" title="启用 Agent 模式（自动调用工具）">
+          <input type="checkbox" bind:checked={agentMode} />
+          Agent
+        </label>
         <button class="b3-button b3-button--small" on:click={generateCandidates} disabled={store?.getCount() === 0}>
           <svg><use xlink:href="#iconAdd"></use></svg> 生成候选
         </button>
@@ -556,6 +617,17 @@ ${ctx}`
     display: flex; align-items: center; gap: 8px;
     font-size: var(--aio-fs-sm);
   }
+  .agent-toggle {
+    display: flex; align-items: center; gap: 4px;
+    font-size: var(--aio-fs-sm);
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--b3-border-color);
+    background: var(--b3-theme-surface);
+  }
+  .agent-toggle input { margin: 0; cursor: pointer; }
 
   .chat-messages {
     flex: 1; overflow-y: auto; padding: 16px;

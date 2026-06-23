@@ -10,6 +10,7 @@
 
 import type { AgentConfig } from './types';
 import type { AppConfig, Provider } from './types';
+import type { ToolDefinition, ToolCall } from './tools';
 
 /** Anthropic API 版本头，用于 Anthropic Claude 请求 */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -185,8 +186,10 @@ export interface LLMConfig {
 }
 
 export interface ChatMessage {
-    role: 'system' | 'user' | 'assistant';
+    role: 'system' | 'user' | 'assistant' | 'tool';
     content: string;
+    tool_calls?: ToolCall[];
+    tool_call_id?: string;
 }
 
 export type StructuredOutputStrategy = 'openai-compatible' | 'gemini-native' | 'prompt-only';
@@ -527,12 +530,29 @@ function joinMessages(messages: ChatMessage[], role: ChatMessage['role']): strin
 
 /**
  * 调用 LLM API，带 429 指数退避。
- * 返回 response content 字符串。
+ * 返回 response content 字符串（无 tools 参数）或完整响应（含 tool_calls）。
+ *
+ * 重载1: 无 tools → 返回 string（向后兼容）
  */
 export async function callLLM(
     messages: ChatMessage[],
     config?: LLMConfig
-): Promise<string> {
+): Promise<string>;
+
+/**
+ * 重载2: 有 tools → 返回包含 content/toolCalls/finishReason 的对象
+ */
+export async function callLLM(
+    messages: ChatMessage[],
+    config: LLMConfig,
+    options: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
+): Promise<{ content: string | null; toolCalls?: ToolCall[]; finishReason: string }>;
+
+export async function callLLM(
+    messages: ChatMessage[],
+    config?: LLMConfig,
+    options?: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
+): Promise<any> {
     // 安全合并：过滤掉空值，防止用户留空的字段（如 model=''）覆盖默认值
     const effectiveConfig: Record<string, any> = {};
     if (config) {
@@ -566,18 +586,25 @@ export async function callLLM(
 
             const request = buildLLMRequest(messages, cfg);
 
+            // Inject tools into the request body if provided
+            const body = { ...request.body };
+            if (options?.tools && options.tools.length > 0) {
+                body.tools = options.tools;
+                body.tool_choice = 'auto';
+            }
+
             const resp = await fetch(cfg.endpoint, {
                 method: 'POST',
                 headers: request.headers,
-                body: JSON.stringify(request.body),
-                signal: controller.signal,
+                body: JSON.stringify(body),
+                signal: options?.abortSignal || controller.signal,
             });
 
             clearTimeout(timeoutId);
 
             if (resp.ok) {
                 const json = await resp.json();
-                return extractLLMContent(json, cfg.providerId);
+                return parseLLMResponse(json, cfg.providerId, options?.tools);
             }
 
             if (resp.status === 429) {
@@ -607,6 +634,55 @@ export async function callLLM(
     }
 
     throw new LLMError('API 调用失败', 0);
+}
+
+/** Parse LLM response, extracting content and optionally tool_calls. */
+function parseLLMResponse(
+    json: any,
+    providerId: string,
+    tools?: ToolDefinition[]
+): string | { content: string | null; toolCalls?: ToolCall[]; finishReason: string } {
+    if (providerId === 'gemini') {
+        // Gemini doesn't support tool_calls in the same way; fall back to content extraction
+        return extractLLMContent(json, providerId);
+    }
+    if (providerId === 'anthropic') {
+        // Anthropic doesn't support tool_calls in the same way; fall back to content extraction
+        return extractLLMContent(json, providerId);
+    }
+
+    const choice = json?.choices?.[0];
+    if (!choice) {
+        throw new LLMError(`API 响应缺少 choices: ${JSON.stringify(json).slice(0, 500)}`, 0);
+    }
+
+    const message = choice.message || {};
+    const content: string | null = message.content || null;
+    const rawToolCalls = message.tool_calls;
+    const finishReason: string = choice.finish_reason || 'stop';
+
+    if (tools && rawToolCalls && Array.isArray(rawToolCalls) && rawToolCalls.length > 0) {
+        const toolCalls: ToolCall[] = rawToolCalls.map((tc: any) => ({
+            id: tc.id || '',
+            type: 'function' as const,
+            function: {
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+            },
+        }));
+        return { content, toolCalls, finishReason };
+    }
+
+    if (tools && finishReason === 'tool_calls') {
+        // finish_reason indicates tool_calls but we couldn't parse them
+        throw new LLMError(`API 响应 finish_reason=tool_calls 但无法解析 tool_calls: ${JSON.stringify(json).slice(0, 500)}`, 0);
+    }
+
+    // No tools or no tool_calls — return content string for backward compatibility
+    if (!content) {
+        throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）: ${JSON.stringify(json).slice(0, 500)}`, 0);
+    }
+    return content;
 }
 
 /** AI 生成的原始卡片数据 */
