@@ -168,9 +168,18 @@
 
   // Tool list helpers
   let expandedTools: Record<string, boolean> = {};
+  let showCategoryFilter = false;
+  let visibleCategories: Set<string> = new Set(Object.keys(TOOL_CATEGORIES));
 
   function toggleExpandTool(name: string) {
     expandedTools = { ...expandedTools, [name]: !expandedTools[name] };
+  }
+
+  function toggleVisibleCategory(catKey: string) {
+    const newSet = new Set(visibleCategories);
+    if (newSet.has(catKey)) newSet.delete(catKey);
+    else newSet.add(catKey);
+    visibleCategories = newSet;
   }
 
   function getAllToolNames(): string[] {
@@ -576,6 +585,8 @@
           contextDocuments,
         });
         activeMessages = [...localDisplayMessages];
+        await tick();
+        scrollToBottom(true);
       } else {
         // ── Normal (non-agent) mode ────────────────────────────
         // RAG retrieval
@@ -887,6 +898,7 @@ ${ctx}`
                       {#if tc._expanded}
                         <pre class="tool-call-params">{(() => { try { return JSON.stringify(JSON.parse(tc.function?.arguments || '{}'), null, 2); } catch { return tc.function?.arguments || '{}'; } })()}</pre>
                         {#if tc._result}
+                          <div class="tool-call-result-label">结果</div>
                           <pre class="tool-call-result">{tc._result}</pre>
                         {/if}
                       {/if}
@@ -926,9 +938,9 @@ ${ctx}`
         <button class="chat-send-btn" class:aborting={sending} on:click={handleSendClick}
                 disabled={!sending && !inputText.trim()} aria-label={sending ? '停止生成' : '发送'}>
           {#if sending}
-            <span class="send-icon abort-icon">■</span>
+            <svg class="send-icon"><use xlink:href="#iconPause"></use></svg>
           {:else}
-            <span class="send-icon">➤</span>
+            <svg class="send-icon"><use xlink:href="#iconUp"></use></svg>
           {/if}
         </button>
       </div>
@@ -945,7 +957,7 @@ ${ctx}`
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="tool-dialog" on:click|stopPropagation>
       <div class="tool-dialog-header">
-        <span class="tool-dialog-title">工具选择</span>
+        <h3 class="tool-dialog-title">工具选择</h3>
         <div class="tool-dialog-header-actions">
           <button class="tool-header-btn" on:click={selectAllTools} title="刷新">
             <svg class="tool-header-icon"><use xlink:href="#iconRefresh"></use></svg>
@@ -959,7 +971,7 @@ ${ctx}`
         提示：每个工具都有复杂的参数和特定的使用场景。请按需启用，避免不必要地消耗 token。
       </div>
       <div class="tool-dialog-body">
-        {#each Object.entries(TOOL_CATEGORIES) as [catKey, cat]}
+        {#each Object.entries(TOOL_CATEGORIES).filter(([k]) => visibleCategories.has(k)) as [catKey, cat]}
           <div class="tool-category">
             <div class="tool-category-header">
               <span class="tool-category-title">
@@ -978,7 +990,7 @@ ${ctx}`
                 {@const def = allTools.find(t => t.function.name === toolName)}
                 {#if def}
                   {@const displayName = def.function.displayName || def.function.name}
-                  <div class="tool-item-card" class:tool-item-expanded={expandedTools[toolName]}>
+                  <div class="tool-item-card" class:tool-item-expanded={expandedTools[toolName]} class:selected={isToolEnabled(toolName)}>
                     <div class="tool-item-main">
                       <div class="tool-item-left">
                         <input type="checkbox" checked={isToolEnabled(toolName)}
@@ -1000,13 +1012,18 @@ ${ctx}`
                         </label>
                         <span class="tool-item-arrow" class:expanded={expandedTools[toolName]}
                               on:click={() => toggleExpandTool(toolName)} role="button" tabindex="0"
-                              on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpandTool(toolName); } }}>▶</span>
+                              on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpandTool(toolName); } }}>
+                          <svg class="tool-arrow-icon"><use xlink:href="#iconRight"></use></svg>
+                        </span>
                       </div>
                     </div>
                     {#if expandedTools[toolName]}
                       <div class="tool-item-detail">
-                        <div class="tool-detail-label">参数说明：</div>
-                        <pre class="tool-detail-params">{JSON.stringify(def.function.parameters, null, 2)}</pre>
+                        <div class="tool-detail-desc">{def.function.description}</div>
+                        {#if def.function.parameters?.required?.length}
+                          <div class="tool-detail-label">必需参数：</div>
+                          <div class="tool-detail-params">{def.function.parameters.required.join(', ')}</div>
+                        {/if}
                       </div>
                     {/if}
                   </div>
@@ -1018,6 +1035,25 @@ ${ctx}`
       </div>
       <div class="tool-dialog-footer">
         <span class="tool-footer-count">已选择: {calcSelectedCount()}/{calcTotalCount()}</span>
+        <div class="tool-footer-right">
+          <div class="tool-filter-wrap">
+            <button class="tool-filter-btn" on:click|stopPropagation={() => showCategoryFilter = !showCategoryFilter} title="筛选分类">
+              <svg class="tool-filter-icon"><use xlink:href="#iconFilter"></use></svg>
+            </button>
+            {#if showCategoryFilter}
+              <!-- svelte-ignore a11y-click-events-have-key-events -->
+              <!-- svelte-ignore a11y-no-static-element-interactions -->
+              <div class="tool-filter-dropdown" on:click|stopPropagation>
+                {#each Object.entries(TOOL_CATEGORIES) as [catKey, cat]}
+                  <label class="tool-filter-item">
+                    <input type="checkbox" checked={visibleCategories.has(catKey)} on:change={() => toggleVisibleCategory(catKey)} />
+                    <span>{cat.label}</span>
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1260,7 +1296,7 @@ ${ctx}`
   }
   .chat-send-btn {
     position: absolute; right: 6px; bottom: 6px; width: 36px; height: 36px;
-    border-radius: 50%; border: none;
+    border-radius: 6px; border: none;
     background: var(--b3-theme-primary); color: var(--b3-theme-on-primary);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; transition: all 0.2s ease;
@@ -1269,8 +1305,7 @@ ${ctx}`
   .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .chat-send-btn.aborting { background: #ef4444; color: #fff; }
   .chat-send-btn.aborting:hover:not(:disabled) { background: #dc2626; transform: scale(1.05); }
-  .send-icon { font-size: 14px; line-height: 1; }
-  .abort-icon { font-size: 12px; }
+  .send-icon { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; }
 
   /* ── Agent tool button ─────────────────────────────── */
   .agent-tool-btn {
@@ -1318,6 +1353,14 @@ ${ctx}`
     border-top: 1px solid var(--b3-border-color);
   }
   .tool-call-params { font-family: var(--b3-font-family-code); }
+  .tool-call-result-label {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--b3-theme-on-surface-light);
+    background: var(--b3-theme-surface);
+    border-top: 1px solid var(--b3-border-color);
+  }
 
   /* ── Tool selection dialog ─────────────────────────── */
   .tool-dialog-overlay {
@@ -1422,6 +1465,7 @@ ${ctx}`
   }
   .tool-item-card:hover { border-color: var(--b3-theme-primary-light); }
   .tool-item-card.tool-item-expanded { border-color: var(--b3-theme-primary-light); }
+  .tool-item-card.selected { background: var(--b3-theme-primary-lightest); border-color: var(--b3-theme-primary); }
 
   .tool-item-main {
     display: flex; align-items: center; justify-content: space-between;
@@ -1468,7 +1512,10 @@ ${ctx}`
     padding: 4px 2px;
     transition: transform 0.15s;
     user-select: none;
+    display: flex;
+    align-items: center;
   }
+  .tool-arrow-icon { width: 14px; height: 14px; fill: currentColor; stroke: currentColor; }
   .tool-item-arrow.expanded {
     transform: rotate(90deg);
   }
@@ -1484,6 +1531,12 @@ ${ctx}`
     font-weight: 500;
     margin-bottom: 4px;
     color: var(--b3-theme-on-surface-light);
+  }
+  .tool-detail-desc {
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface);
+    margin-bottom: 6px;
+    line-height: 1.5;
   }
   .tool-detail-params {
     margin: 0;
@@ -1511,6 +1564,37 @@ ${ctx}`
     font-weight: 500;
     color: var(--b3-theme-on-surface);
   }
+  .tool-footer-right { position: relative; display: flex; align-items: center; }
+  .tool-filter-wrap { position: relative; }
+  .tool-filter-btn {
+    background: none; border: 1px solid var(--b3-border-color);
+    border-radius: 4px; cursor: pointer;
+    padding: 4px; display: flex; align-items: center;
+    color: var(--b3-theme-on-surface-light);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tool-filter-btn:hover { color: var(--b3-theme-primary); border-color: var(--b3-theme-primary); }
+  .tool-filter-icon { width: 14px; height: 14px; fill: currentColor; stroke: currentColor; }
+  .tool-filter-dropdown {
+    position: absolute; bottom: 100%; right: 0;
+    margin-bottom: 4px;
+    background: var(--b3-theme-background);
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    box-shadow: var(--b3-dialog-shadow);
+    padding: 6px 0;
+    z-index: 100;
+    min-width: 140px;
+  }
+  .tool-filter-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px; cursor: pointer;
+    font-size: var(--aio-fs-sm);
+    white-space: nowrap;
+    user-select: none;
+  }
+  .tool-filter-item:hover { background: var(--b3-theme-surface-lighter); }
+  .tool-filter-item input { margin: 0; cursor: pointer; }
 
   @media (max-width: 640px) {
     .chat-messages { padding: 10px; }
