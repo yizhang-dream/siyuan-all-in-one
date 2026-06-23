@@ -1,147 +1,68 @@
 # 思源 All-in-One 知识闪卡
 
-这是一个面向思源笔记的学习插件：用 OpenNotebook 后端负责资源解析和检索，用 AI 抽取概念、关系和闪卡候选，再用概念图谱把思维导图与间隔重复闪卡连接起来。
-
-核心范式：闪卡和思维导图不再是两套彼此孤立的数据。插件以 `ConceptNode` 作为中间层，让卡片能指向概念，概念能反查卡片，概念关系能生成思维导图，同时卡片仍然保留间隔重复调度。
+一个面向思源笔记的概念中心学习插件：AI 辅助制卡、本地 RAG 检索（内建 ONNX + 15 家云嵌入服务）、间隔重复复习（SM-2/FSRS）、概念导图——全部集成在一个工作台内。
 
 ## 功能特点
 
-- 间隔重复复习，支持键盘快捷键；默认 SM-2，可在设置中切换到 `ts-fsrs` 驱动的 FSRS。
-- AI 候选流水线：来源文本到概念、关系、卡片、卡片归属。
-- OpenNotebook 集成：notebook、source、note、search、chat context、选中笔记详情。
-- 混合来源候选生成：手动片段、OpenNotebook 选源/选笔记、思源文档可以一起进入同一条流水线。
-- 概念中心数据模型：概念、关系、卡片都保留来源引用。
-- 卡片与导图双向工作流：从卡片同步/打开概念导图，导图里保留卡片锚点。
-- 导图制卡：从当前导图节点生成闪卡，并用 `linkedCardIds` 保持导图反向关联。
-- 图谱生成：主流程入口，从混合来源生成概念、关系、闪卡候选，确认后同步概念导图。
-- 快速制卡：保留手动/Agent 单独制卡，适合临时片段和不需要图谱的卡片。
-- 诊断面板：检查本地数据、模型配置、OpenNotebook 连接和 AI dry run。
-- Provider Adapter：支持 OpenAI-compatible、本地兼容服务、DeepSeek、Gemini、Anthropic、火山、智谱等配置差异。
-- 导入导出：导入 Anki `.apkg/.txt/.csv`，也能恢复插件原生备份 `cards-json`、`concepts-json`、`mindmaps-markdown`；导出卡片 JSON/CSV/Anki TSV/Markdown、概念图 JSON、导图 Markdown。
+- **5 标签布局**：来源库、RAG 对话、制卡（制卡/复习/浏览/导入子标签）、导图（图谱视图/导图视图）、设置。
+- **间隔重复复习**：默认 SM-2，可在设置中切换到 FSRS（`ts-fsrs` 驱动），支持快捷键和 drill 机制。
+- **AI 智能制卡**：流水线式提取概念 → 推断关系 → 生成卡片 → 卡片归属。多 Agent 系统支持用户自定义提示词模板。
+- **RAG 检索与多 Provider 嵌入**：内建 ONNX 嵌入器（`@huggingface/transformers` + paraphrase-multilingual-MiniLM-L12-v2），同时支持 15 家云嵌入服务：Ollama、SiliconFlow、Qwen、智谱、混元、百度、Cohere、Jina、Mistral、Voyage、Gemini、Together、Nomic、OpenAI、自定义。
+- **对话会话**：多轮 RAG 对话，支持上下文注入、来源引用和 Agent 工具调用（知识检索、SQL 查询、获取块内容、新建笔记）。
+- **来源库**：支持 txt/md/html/csv/docx/pptx/xlsx/epub/pdf 文件导入、URL 抓取、文本粘贴、思源文档选取。PDF/图片支持云端视觉 API 公式提取。
+- **概念图 + 导图**：图谱和思维导图两种视图，展示概念节点、类型化关系和卡片锚点（Phase 4 开发中）。
+- **LLM Provider 系统**：内置 18 家服务商（DeepSeek、智谱、OpenAI、Moonshot、硅基流动、火山引擎、MiniMax、通义千问、混元、阶跃星辰、零一万物、OpenCode、Gemini、Anthropic），支持自定义 OpenAI 兼容端点。
+- **导入导出**：插件原生备份/恢复卡片、概念、导图；导出为 JSON/CSV/Markdown。
 
 ## 架构
 
 ```mermaid
 flowchart LR
-  Raw["PDF / 课件 / 网页 / 笔记 / 任意资源"]
-  ON["OpenNotebook 后端"]
-  Sources["PipelineSource[]"]
-  AI["提示词流水线"]
+  Raw["PDF / 文档 / URL / 粘贴"]
+  Sources["SourceStore + 解析器"]
+  AI["AI 流水线\n(概念 → 关系 → 卡片)"]
   Concepts["ConceptStore"]
   Cards["CardStore"]
   Maps["MindmapStore"]
+  RAG["VectorStore\n(分块 → 嵌入 → 检索)"]
 
-  Raw --> ON
-  ON --> Sources
+  Raw --> Sources
   Sources --> AI
+  Sources --> RAG
   AI --> Concepts
   AI --> Cards
   Concepts --> Maps
   Cards --> Maps
-  Cards --> Concepts
+  RAG -->|"上下文"| AI
 ```
 
-技术文档：
-
-- [架构说明](docs/ARCHITECTURE.md)
-- [快速部署指南](docs/INSTALL.md)
-- [测试与部署手册](docs/TESTING.md)
-- [提示词策略](docs/PROMPT_STRATEGY.md)
-- [思源内置闪卡复用判断](docs/SIYUAN_RIFF_REUSE.md)
-- [GitHub 准备清单](docs/GITHUB_PREP.md)
+技术文档：[架构说明](docs/ARCHITECTURE.md)、[快速部署指南](docs/INSTALL.md)、[测试与部署手册](docs/TESTING.md)、[提示词策略](docs/PROMPT_STRATEGY.md)。
 
 ## 快速安装
 
-下载 release zip 后在思源中导入：
-
-1. 打开思源。
-2. 进入 `设置 -> 集市/社区 -> 插件`。
-3. 导入 `siyuan-all-in-one-v1.0.0.zip`。
-4. 启用插件并重载思源。
-
-如果要使用 OpenNotebook 负责资源解析和 RAG，请单独启动 OpenNotebook，并在插件设置里配置 Notebook endpoint，通常是：
-
-```text
-http://localhost:5055
-```
-
-模型设置支持分别指定闪卡模型和导图模型。OpenAI-compatible 服务只需填写 base URL、model 和 API key；Gemini 和 Anthropic 会自动使用各自原生请求格式。本地兼容服务可以留空 API key。
+1. 打开思源 → 设置 → 集市 → 插件。
+2. 导入 `siyuan-all-in-one-v2.0.0.zip`。
+3. 启用插件并重载思源。
 
 ## 开发
 
 ```bash
 npm install
-npm run verify
+npm run build        # 构建 dist/
+npm run deploy:siyuan -- --apply   # 部署到本机思源
+npm run verify       # lint + 类型检查 + 构建
+npm run check:full   # 部署后完整检查
+npm run check:live   # 真实 LLM + RAG 集成测试
 ```
-
-构建：
-
-```bash
-npm run build
-```
-
-部署到本机思源插件目录：
-
-```bash
-npm run deploy:siyuan -- --apply
-```
-
-部署/检查脚本会自动探测常见的思源 data 目录。如果你的工作空间是自定义路径：
-
-```bash
-npm run deploy:siyuan -- --apply --siyuan-data "/path/to/SiYuan/data"
-npm run check:full -- --siyuan-data "/path/to/SiYuan/data"
-```
-
-也可以用环境变量：
-
-```bash
-SIYUAN_DATA_DIR=/path/to/SiYuan/data
-SIYUAN_PLUGIN_DIR=/path/to/SiYuan/data/plugins/siyuan-all-in-one
-SIYUAN_PLUGIN_DATA_DIR=/path/to/SiYuan/data/storage/petal/siyuan-all-in-one
-SIYUAN_KERNEL_ENDPOINT=http://127.0.0.1:6806
-```
-
-部署后完整检查：
-
-```bash
-npm run check:full
-```
-
-真实 OpenNotebook + LLM 检查：
-
-```bash
-npm run check:live
-```
-
-`check:live` 会调用真实配置的服务，但当前脚本使用内存 store 和内容哈希检查，避免修改真实插件数据。
 
 ## 数据模型
 
-新模型以概念为中心：
-
-- `ConceptNode`：概念标题、解释、标签、来源、挂载卡片、父子/相关节点。
-- `Relation`：概念之间的类型化关系，并保留来源。
-- `Card`：带 SM-2 兼容字段、可选 FSRS 状态、`conceptId`、`cardType`、`sourceRefs` 的卡片。
-- `Mindmap`：由概念和卡片图谱生成的视图。
-
-学习闭环：
-
-1. 把复杂资源交给 OpenNotebook，也可以直接选择思源文档或粘贴片段。
-2. 在插件里选择 source、note、思源文档，或组合成混合来源。
-3. 生成概念、关系和闪卡候选。
-4. 人工确认候选。
-5. 用 SM-2 或可选 FSRS 复习卡片。
-6. 从卡片跳到概念导图，再从导图回到卡片。
-
-## 备份与恢复
-
-`导入导出` 面板支持两类导入：
-
-- Anki 兼容导入：`.apkg/.txt/.csv`。
-- 插件原生恢复：`cards-json`、`concepts-json`、`mindmaps-markdown`。
-
-其中 `mindmaps-markdown` 仍是 markmap 兼容 Markdown，同时包含 `siyuan-all-in-one-mindmap` 元数据注释，用于恢复 `cardIds`、`linkedCardIds`、来源和时间戳。
+- **ConceptNode**：概念标题、摘要、标签、来源、挂载卡片、父子/相关节点。
+- **Relation**：概念之间的类型化关系，保留来源引用。
+- **Card**：带 SM-2/FSRS 字段、conceptId、cardType、sourceRefs 的卡片。
+- **Mindmap**：由概念和卡片图谱生成的视图。
+- **SourceRecord**：导入的文档，包含类型、内容、分块状态、元数据。
+- **SessionIndex / ChatMessage**：对话会话，包含多轮消息、工具调用、来源上下文。
 
 ## 当前验证状态
 
