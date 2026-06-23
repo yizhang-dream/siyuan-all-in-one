@@ -111,7 +111,7 @@
     {:else if activeTab === 'sources'}
       <SourceLibrary {plugin} {sourceStore} {vectorStore} bind:appStore />
     {:else if activeTab === 'knowledge'}
-      <Knowledge {plugin} {cardStore} {conceptStore} {sourceStore} {config} />
+      <Knowledge {plugin} {cardStore} {conceptStore} {sourceStore} {config} {mindmapStore} bind:appStore />
     {:else if activeTab === 'settings'}
       <SettingsPanel showAsTab={true} {plugin} {config} />
     {/if}

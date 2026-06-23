@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import Concepts from './Concepts.svelte';
+  import Mindmap from './Mindmap.svelte';
 
   export let plugin: any;
   export let cardStore: any;
@@ -7,19 +8,9 @@
   export let sourceStore: any;
   export let config: any;
   export let appStore: any = null;
+  export let mindmapStore: any = null;
 
   let mode: 'graph' | 'mindmap' = 'graph';
-  let selectedSourceIds: string[] = [];
-
-  onMount(() => {
-    // TODO Phase 4: Load conceptStore data for graph view
-    // TODO Phase 4: Load mindmap data for mindmap view
-
-    if (appStore?.selectedSourceIds?.length) {
-      selectedSourceIds = [...appStore.selectedSourceIds];
-      appStore.selectedSourceIds = [];
-    }
-  });
 </script>
 
 <div class="knowledge-panel">
@@ -32,19 +23,15 @@
         导图视图
       </button>
     </div>
-    <div class="knowledge-toolbar-spacer"></div>
-    <button class="b3-button b3-button--small" on:click={() => appStore?.onSwitchTab?.('sources')}>
-      从来源库选取
-    </button>
   </div>
 
   {#if mode === 'graph'}
     <div class="knowledge-graph-view">
-      <p style="padding:20px;opacity:0.5">图谱视图 — Concepts.svelte 核心逻辑迁移中（见 Phase 4）</p>
+      <Concepts {plugin} {cardStore} {conceptStore} {mindmapStore} {config} {sourceStore} {appStore} />
     </div>
   {:else}
     <div class="knowledge-mindmap-view">
-      <p style="padding:20px;opacity:0.5">导图视图 — Mindmap.svelte 核心逻辑迁移中（见 Phase 4）</p>
+      <Mindmap {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
     </div>
   {/if}
 </div>
@@ -61,7 +48,6 @@
     padding: 8px 12px;
     border-bottom: 1px solid var(--b3-border-color);
   }
-  .knowledge-toolbar-spacer { flex: 1; }
   .mode-switch {
     display: flex;
     gap: 4px;
