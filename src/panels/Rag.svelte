@@ -23,6 +23,9 @@
 
   function mdToHtml(text: string): string {
     if (!text) return '';
+    if (text.length > 10000) {
+      console.warn('[all-in-one] mdToHtml: large content (' + text.length + ' chars), may block UI');
+    }
     try {
       // Fix: merge list numbers split across lines (e.g., "1.\n**text**" → "1. **text**")
       const fixed = text.replace(/(^|\n)(\d+)\.\s*\n\s*(\S)/gm, '$1$2. $3');
@@ -164,11 +167,21 @@
   // ── Lifecycle ───────────────────────────────────────────
 
   onMount(async () => {
+    const t0 = performance.now();
+    console.log('[all-in-one] onMount: start');
+
     store = vectorStore || new VectorStore(plugin);
-    if (!vectorStore) await store.load();
+    if (!vectorStore) {
+      console.log('[all-in-one] onMount: loading vectorStore...');
+      await store.load();
+      console.log('[all-in-one] onMount: vectorStore loaded in', (performance.now() - t0).toFixed(0), 'ms');
+    }
 
     conversationStore = new ConversationStore(plugin);
+    console.log('[all-in-one] onMount: loading conversationStore...');
     await conversationStore.load();
+    console.log('[all-in-one] onMount: conversationStore loaded in', (performance.now() - t0).toFixed(0), 'ms');
+
     sessions = conversationStore.getAll();
 
     // Pre-fill from sourceTarget
@@ -188,23 +201,34 @@
     }
 
     activeSession = activeSessionId ? conversationStore.getById(activeSessionId) : null;
-    activeMessages = activeSessionId ? await conversationStore.getMessages(activeSessionId) : [];
+    if (activeSessionId) {
+      console.log('[all-in-one] onMount: loading messages for session', activeSessionId);
+      activeMessages = await conversationStore.getMessages(activeSessionId);
+      console.log('[all-in-one] onMount: messages loaded, count=', activeMessages.length, 'in', (performance.now() - t0).toFixed(0), 'ms');
+    } else {
+      activeMessages = [];
+    }
+
     // Recover pending state — if last message is from user, show "thinking..."
     if (activeMessages.length > 0) {
       const lastMsg = activeMessages[activeMessages.length - 1];
       if (lastMsg?.role === 'user') sending = true;
     }
 
-    // Only auto-init builtin embedder (ONNX model blocks Event Loop).
-    // Cloud providers (ollama, openai, etc.) have negligible init cost — deferred to first send().
+    // Only auto-init builtin embedder (deferred, doesn't await)
     const embCfg = plugin.getConfig();
     if (embCfg?.ragEmbeddingProvider === 'builtin') {
+      console.log('[all-in-one] onMount: starting builtin embedder (background)');
       getRagEmbedderProvider(plugin).then(em => {
         embedder = em;
+        console.log('[all-in-one] onMount: builtin embedder ready');
       }).catch(() => {});
+    } else {
+      console.log('[all-in-one] onMount: skip embedder init (provider=' + embCfg?.ragEmbeddingProvider + ')');
     }
 
     msgListEl?.addEventListener('scroll', handleMsgScroll);
+    console.log('[all-in-one] onMount: DONE in', (performance.now() - t0).toFixed(0), 'ms');
   });
 
   async function initEmbedder() {
