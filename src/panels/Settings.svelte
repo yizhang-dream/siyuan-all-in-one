@@ -17,7 +17,6 @@
   let mindmapModel = '';
   let ragProviderId = '';
   let ragModel = '';
-  let visionProviderId = '';
   let visionModel = '';
   let visionProviderType: 'off' | 'paddleocr' | 'cloud' = 'off';
   // ── 嵌入模型 ──
@@ -48,7 +47,6 @@
     mindmapModel = config.mindmapModel || '';
     ragProviderId = config.ragProviderId || flashcardProviderId;
     ragModel = config.ragModel || flashcardModel;
-    visionProviderId = config.visionProviderId || '';
     visionModel = config.visionModel || '';
     visionProviderType = config.visionProviderType || 'off';
     embeddingProvider = config.ragEmbeddingProvider || 'builtin';
@@ -70,7 +68,6 @@
       mindmapModel,
       ragProviderId,
       ragModel,
-      visionProviderId,
       visionModel,
       visionProviderType,
       cardsPerDay: Number(cardsPerDay),
@@ -106,11 +103,6 @@
     mindmapProviderId = e.target.value;
     const models = getProviderModels(mindmapProviderId);
     mindmapModel = models[0] || '';
-  }
-  function onVisionProviderChange(e: any) {
-    visionProviderId = e.target.value;
-    const models = getProviderModels(visionProviderId);
-    visionModel = models[0] || '';
   }
   function onVisionProviderTypeChange(e: any) {
     visionProviderType = e.target.value;
@@ -210,7 +202,7 @@
       // 如果删除的是当前选中的 provider，重置指针
       if (flashcardProviderId === p.id) { flashcardProviderId = providers[0]?.id || ''; flashcardModel = getProviderModels(flashcardProviderId)[0] || ''; }
       if (mindmapProviderId === p.id) { mindmapProviderId = providers[0]?.id || ''; mindmapModel = getProviderModels(mindmapProviderId)[0] || ''; }
-      if (visionProviderId === p.id) { visionProviderId = providers[0]?.id || ''; visionModel = getProviderModels(visionProviderId)[0] || ''; }
+      if (flashcardProviderId === p.id) { visionModel = getProviderModels(flashcardProviderId)[0] || ''; }
       save();
     });
   }
@@ -447,18 +439,15 @@
                 <p class="settings-hint" style="margin:0;">内置离线 OCR，无需配置 API。首次使用需下载模型（约 100MB）。</p>
               {:else if visionProviderType === 'cloud'}
                 <div class="feature-row">
-                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
-                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
-                  </select>
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                    {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
-                    {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
+                    {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
+                    {#if !getProviderModels(flashcardProviderId).includes(visionModel) && visionModel}
                       <option value={visionModel}>{visionModel}</option>
                     {/if}
                   </select>
-                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === visionProviderId); if (p) editProvider(p); }}>获取模型</button>
+                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === flashcardProviderId); if (p) editProvider(p); }}>管理模型</button>
                 </div>
-                <p class="settings-hint" style="margin:0;">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
+                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。推荐 GLM glm-ocr 或 glm-4.6v-flash。</p>
               {/if}
             </div>
           </div>
@@ -818,18 +807,15 @@
                 <p class="settings-hint" style="margin:0;">内置离线 OCR，无需配置 API。首次使用需下载模型（约 100MB）。</p>
               {:else if visionProviderType === 'cloud'}
                 <div class="feature-row">
-                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
-                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
-                  </select>
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                    {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
-                    {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
+                    {#each getProviderModels(flashcardProviderId) as m}<option value={m}>{m}</option>{/each}
+                    {#if !getProviderModels(flashcardProviderId).includes(visionModel) && visionModel}
                       <option value={visionModel}>{visionModel}</option>
                     {/if}
                   </select>
-                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === visionProviderId); if (p) editProvider(p); }}>获取模型</button>
+                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === flashcardProviderId); if (p) editProvider(p); }}>管理模型</button>
                 </div>
-                <p class="settings-hint" style="margin:0;">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
+                <p class="settings-hint" style="margin:0;">视觉复用制卡的 Provider（API Key 和地址）。选择支持 vision 的模型。推荐 GLM glm-ocr 或 glm-4.6v-flash。</p>
               {/if}
             </div>
           </div>
