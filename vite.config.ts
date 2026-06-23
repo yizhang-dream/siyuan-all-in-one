@@ -76,6 +76,7 @@ export default defineConfig({
             plugins: [],
             external: [
                 "siyuan",
+                "paddleocr-js",
                 "process",
                 // Node.js built-in modules used by @huggingface/transformers (transformers.node.cjs)
                 // and onnxruntime (ort.node.min.js). These MUST be external so Electron's renderer

@@ -6,6 +6,9 @@
   import { genId } from '../libs/config';
   import { ingestDocument } from '../libs/rag/ingest';
   import { getRagEmbedderProvider } from '../libs/rag';
+  import { callVisionLLM, resolveLLMConfig } from '../libs/llm';
+  import { renderPdfPages } from '../libs/pdf-renderer';
+  import { paddleOcrExtract, isPaddleOcrAvailable } from '../libs/paddleocr';
   const fs: typeof import('fs') = eval('require')('fs');
   const os: typeof import('os') = eval('require')('os');
   const path: typeof import('path') = eval('require')('path');
@@ -47,6 +50,10 @@
   let docResults: Array<{ id: string; title: string; path: string }> = [];
   let docSearching = false;
   let siyuanSearchError = '';
+
+  // 视觉提取（公式/扫描件）设置
+  let visionEnabled = false;
+  let visionExtracting = new Set<string>();
 
   // 各扩展名文件输入框引用（每个按钮一个）
   let fileInputRefs: Record<string, HTMLInputElement> = {};
@@ -248,6 +255,7 @@
   // ── 文件导入逻辑 ───────────────────────────────────
 
   const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.html', '.htm', '.csv', '.tsv', '.log', '.xml', '.json']);
+  const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.webp']);
 
   async function importFile(file: File, forceType?: string) {
     const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
@@ -266,37 +274,88 @@
 
     try {
       let text: string;
-      const parser = registry.getParser(ext);
+      const isImage = IMAGE_EXTENSIONS.has(ext);
+      const isPdf = sourceType === 'pdf' || ext === '.pdf';
 
-      if (parser) {
-        // All parsers use fs.readFileSync internally — write buffer to temp file as shim
-        const ext = file.name.split('.').pop() || 'tmp';
-        const tmpPath = path.join(os.tmpdir(), `import_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
-        const buf = Buffer.from(await file.arrayBuffer());
-        fs.writeFileSync(tmpPath, buf);
-        try {
-          const result = await parser.parse(tmpPath);
-          text = result.text;
-        } finally {
-          try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup errors */ }
+      // ── 视觉提取 pipeline（PDF/图片） ─────────────────
+      if (visionEnabled && (isImage || isPdf)) {
+        const arrayBuffer = await file.arrayBuffer();
+        visionExtracting = new Set([...visionExtracting, id]);
+
+        if (isPdf) {
+          const pages = await renderPdfPages(arrayBuffer);
+          const pageTexts: string[] = [];
+          const cfg = plugin.getConfig();
+          const usePaddleOcr = cfg.usePaddleOcrOffline === true;
+
+          for (const page of pages) {
+            if (usePaddleOcr && await isPaddleOcrAvailable()) {
+              const pt = await paddleOcrExtract(page.base64, { formula: true });
+              pageTexts.push(pt);
+            } else {
+              const pt = await callVisionLLM(
+                cfg, cfg.visionProviderId, cfg.visionModel,
+                VISION_PROMPT,
+                [{ base64: page.base64, mimeType: 'image/png' }],
+                { maxTokens: 4096 }
+              );
+              pageTexts.push(pt);
+            }
+          }
+          text = pageTexts.join('\n\n');
+        } else {
+          // Image file
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          const cfg = plugin.getConfig();
+          const usePaddleOcr = cfg.usePaddleOcrOffline === true;
+
+          if (usePaddleOcr && await isPaddleOcrAvailable()) {
+            text = await paddleOcrExtract(base64, { formula: true });
+          } else {
+            text = await callVisionLLM(
+              cfg, cfg.visionProviderId, cfg.visionModel,
+              VISION_PROMPT,
+              [{ base64, mimeType: file.type || 'image/png' }],
+              { maxTokens: 4096 }
+            );
+          }
         }
-      } else if (TEXT_EXTENSIONS.has(ext)) {
-        text = await file.text();
-        if (ext === '.html' || ext === '.htm') {
-          text = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        }
-      } else if (sourceType === 'pdf' || ext === '.pdf') {
-        // Use pdf-extractor directly if available
-        const buffer = await file.arrayBuffer();
-        try {
-          const { extractPdfText } = await import('../libs/sources/pdf-extractor');
-          const result = await extractPdfText(buffer, file.name);
-          text = result.text;
-        } catch {
-          throw new Error('PDF 解析失败，请确保 pdf-extractor 可用');
-        }
+
+        const nextSet = new Set(visionExtracting);
+        nextSet.delete(id);
+        visionExtracting = nextSet;
       } else {
-        throw new Error(`不支持的文件类型: ${ext}。当前仅支持文本文件直接导入，其他格式请使用系统 Pandoc 导入。`);
+        // ── 普通 parser pipeline ─────────────────────────
+        const parser = registry.getParser(ext);
+
+        if (parser) {
+          const ext = file.name.split('.').pop() || 'tmp';
+          const tmpPath = path.join(os.tmpdir(), `import_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
+          const buf = Buffer.from(await file.arrayBuffer());
+          fs.writeFileSync(tmpPath, buf);
+          try {
+            const result = await parser.parse(tmpPath);
+            text = result.text;
+          } finally {
+            try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup errors */ }
+          }
+        } else if (TEXT_EXTENSIONS.has(ext)) {
+          text = await file.text();
+          if (ext === '.html' || ext === '.htm') {
+            text = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+        } else if (isPdf) {
+          const buffer = await file.arrayBuffer();
+          try {
+            const { extractPdfText } = await import('../libs/sources/pdf-extractor');
+            const result = await extractPdfText(buffer, file.name);
+            text = result.text;
+          } catch {
+            throw new Error('PDF 解析失败，请确保 pdf-extractor 可用');
+          }
+        } else {
+          throw new Error(`不支持的文件类型: ${ext}。当前仅支持文本文件直接导入，其他格式请使用系统 Pandoc 导入。`);
+        }
       }
 
       const contentHash = await sha256(text);
@@ -322,6 +381,10 @@
     await sourceStore.save();
     loadSources();
   }
+
+  // ── 视觉提取 prompt ──────────────────────────────────
+
+  const VISION_PROMPT = '请精确提取此图片中的所有内容。普通文字保持原文，数学公式用 LaTeX 格式（行内 $...$，独立 $$...$$），表格用 Markdown。只输出提取结果，不要解释。';
 
   // ── 共享 dedup 辅助 ────────────────────────────────
 
@@ -685,6 +748,13 @@
       </div>
     </div>
 
+    <div class="toolbar-vision-toggle">
+      <label class="vision-checkbox-label" title="视觉提取（公式/扫描件自动识别），PDF 和图片导入时自动使用">
+        <input type="checkbox" bind:checked={visionEnabled} />
+        <span>📷 视觉提取</span>
+      </label>
+    </div>
+
     <div class="toolbar-spacer"></div>
 
     <!-- 搜索框 -->
@@ -932,6 +1002,35 @@
     height: 0;
     opacity: 0;
     pointer-events: none;
+  }
+
+  .toolbar-vision-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .vision-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--aio-fs-xs);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--b3-theme-surface-lighter);
+    transition: background 0.12s;
+
+    &:hover {
+      background: var(--b3-theme-surface);
+    }
+
+    input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
   }
 
   .toolbar-spacer {

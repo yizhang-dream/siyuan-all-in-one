@@ -106,6 +106,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     agents: [],
     ragEmbeddingProvider: 'builtin',
     ragEmbeddingConfig: { endpoint: '', apiKey: '', model: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2' },
+    usePaddleOcrOffline: false,
 };
 
 /** 生成唯一 id（用于自定义 Provider） */
@@ -211,5 +212,6 @@ export function cleanConfig(cfg: any): AppConfig {
             apiKey: String(cfg?.ragEmbeddingConfig?.apiKey ?? ''),
             model: String(cfg?.ragEmbeddingConfig?.model ?? ''),
         },
+        usePaddleOcrOffline: cfg?.usePaddleOcrOffline === true,
     };
 }

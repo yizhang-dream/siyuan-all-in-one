@@ -153,4 +153,6 @@ export interface AppConfig {
     ragEmbeddingProvider: EmbeddingProviderType;
     /** RAG 嵌入向量提供方连接配置 */
     ragEmbeddingConfig: { endpoint: string; apiKey: string; model: string; };
+    /** 是否使用 PaddleOCR 离线提取（不需 API，替代云端视觉） */
+    usePaddleOcrOffline?: boolean;
 }

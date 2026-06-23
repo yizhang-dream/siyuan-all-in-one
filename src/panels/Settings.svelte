@@ -19,6 +19,7 @@
   let ragModel = '';
   let visionProviderId = '';
   let visionModel = '';
+  let usePaddleOcrOffline = false;
   // ── 嵌入模型 ──
   let embeddingProvider: EmbeddingProviderType = 'builtin';
   let embeddingEndpoint = '';
@@ -49,6 +50,7 @@
     ragModel = config.ragModel || flashcardModel;
     visionProviderId = config.visionProviderId || '';
     visionModel = config.visionModel || '';
+    usePaddleOcrOffline = config.usePaddleOcrOffline === true;
     embeddingProvider = config.ragEmbeddingProvider || 'builtin';
     embeddingEndpoint = config.ragEmbeddingConfig?.endpoint || '';
     embeddingApiKey = config.ragEmbeddingConfig?.apiKey || '';
@@ -70,6 +72,7 @@
       ragModel,
       visionProviderId,
       visionModel,
+      usePaddleOcrOffline,
       cardsPerDay: Number(cardsPerDay),
       scheduler,
       defaultDeck,
@@ -443,6 +446,10 @@
               </select>
             </div>
             <p class="settings-hint">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
+            <label class="b3-label" style="margin-top: 6px;">
+              <input type="checkbox" bind:checked={usePaddleOcrOffline} />
+              使用 PaddleOCR 离线提取（不需 API，首次运行自动下载 ~112MB 模型）
+            </label>
           </div>
         </div>
       </div>
@@ -802,6 +809,10 @@
               </select>
             </div>
             <p class="settings-hint">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
+            <label class="b3-label" style="margin-top: 6px;">
+              <input type="checkbox" bind:checked={usePaddleOcrOffline} />
+              使用 PaddleOCR 离线提取（不需 API，首次运行自动下载 ~112MB 模型）
+            </label>
           </div>
         </div>
       </div>
