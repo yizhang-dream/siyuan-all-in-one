@@ -53,7 +53,7 @@ export function sourceLocatorText(ref: Partial<SourceRef> = {}): string {
 export function getSourceAction(ref: Partial<SourceRef> = {}): SourceActionDescriptor {
     if (ref.type === 'source' && (ref.sourceId || ref.quote)) {
         return {
-            kind: 'open-opennotebook',
+            kind: 'open-rag',
             label: '打开来源',
             target: ref.sourceId,
             copyText: sourceLocatorText(ref),

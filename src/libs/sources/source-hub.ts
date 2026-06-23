@@ -164,7 +164,7 @@ function ragResultsToPipelineSources(results: RagSearchResult[]): PipelineSource
         const chunk = result.chunk;
         return {
             id: `rag-${chunk.id}`,
-            type: 'rag' as const,
+            type: 'source' as const,
             sourceId: chunk.sourceId,
             chunkId: chunk.id,
             quote: chunk.text.slice(0, 500),

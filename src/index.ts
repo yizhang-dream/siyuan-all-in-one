@@ -11,13 +11,15 @@ import './index.scss';
 import { AIO_ICONS } from './icons';
 import App from './App.svelte';
 import SettingsPanel from './panels/Settings.svelte';
-import { AIO_ICONS } from './icons';
 import { CardStore } from './libs/store';
 import { MindmapStore } from './libs/mindmap-store';
 import { ConceptStore } from './libs/store/concept-store';
 import { SourceStore } from './libs/source-store';
+import { ConversationStore } from './libs/conversation-store';
+import { VectorStore } from './libs/rag';
 import type { AppConfig } from './libs/types';
 import { DEFAULT_CONFIG, cleanConfig } from './libs/config';
+import { setAppConfig } from './libs/config-helper';
 import { setAppConfig } from './libs/config-helper';
 
 const TAB_TYPE = 'siyuan-all-in-one-tab';
@@ -28,6 +30,8 @@ export default class SiYuanAllInOne extends Plugin {
     private mindmapStore!: MindmapStore;
     private conceptStore!: ConceptStore;
     private sourceStore!: SourceStore;
+    private conversationStore!: ConversationStore;
+    private vectorStore!: VectorStore;
     private appInstance: any = null;
     private settingsDialog: Dialog | null = null;
     private settingsApp: any = null;
@@ -47,8 +51,13 @@ export default class SiYuanAllInOne extends Plugin {
         await this.conceptStore.load();
         this.sourceStore = new SourceStore(this);
         await this.sourceStore.load();
+        this.conversationStore = new ConversationStore(this);
+        await this.conversationStore.load();
+        this.vectorStore = new VectorStore(this);
+        await this.vectorStore.load();
         await this.migrateSourceRefs();
         await this.loadConfig();
+        setAppConfig(this.appConfig);
 
         // 同步 SiYuan 字号/字体到插件 CSS 变量
         this.syncSiyuanTypography();
