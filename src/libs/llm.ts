@@ -74,6 +74,16 @@ function getEndpoints(providerId: string): { chat: string; models: string } {
         case 'glm-coding':
             // 智谱编程套餐：baseUrl 已含 /api/coding/paas/v4，端点路径相同
             return { chat: '/chat/completions', models: '/models' };
+        // 以下 provider 的 baseUrl 已含 /v1 路径，端点不使用 /v1 前缀
+        case 'moonshot-coding':
+        case 'qwen':
+        case 'hunyuan':
+        case 'stepfun':
+        case 'lingyiwanwu':
+            return { chat: '/chat/completions', models: '/models' };
+        case 'volcano-coding':
+            // 火山引擎 编程套餐：使用 /api/coding/v3 路径
+            return { chat: '/api/coding/v3/chat/completions', models: '/api/coding/v3/models' };
         default:
             return { chat: '/v1/chat/completions', models: '/v1/models' };
     }
