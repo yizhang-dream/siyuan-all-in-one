@@ -31,8 +31,7 @@
   let renamingId: string | null = null;
   let renameInput = '';
   let msgListEl: HTMLElement;
-
-  $: activeSession = activeSessionId ? conversationStore?.getById(activeSessionId) : null;
+  let activeSession: ConversationSession | null = null;
 
   // ── Session CRUD ────────────────────────────────────────
 
@@ -40,10 +39,12 @@
     const session = conversationStore.create(undefined, sourceIds);
     sessions = [session, ...sessions];
     activeSessionId = session.id;
+    activeSession = session;
   }
 
   function switchSession(id: string) {
     activeSessionId = id;
+    activeSession = conversationStore.getById(id);
   }
 
   function deleteSession(id: string) {
@@ -109,6 +110,8 @@
       activeSessionId = sessions[0].id;
     }
 
+    activeSession = activeSessionId ? conversationStore.getById(activeSessionId) : null;
+
     // Auto-initialize embedder on page load (silent)
     try {
       resetEmbeddingProvider();
@@ -141,19 +144,19 @@
 
     const userMsg: ChatMessage = { id: 'u' + Date.now(), role: 'user', content: text };
     conversationStore.addMessage(activeSessionId, userMsg);
-    activeSessionId = activeSessionId;
+    activeSession = conversationStore.getById(activeSessionId);
     inputText = '';
     sending = true;
     sessions = conversationStore.getAll();
 
     try {
-      const activeSession = conversationStore.getById(activeSessionId);
-      const messages = activeSession?.messages || [];
+      const session = conversationStore.getById(activeSessionId);
+      const messages = session?.messages || [];
 
       if (!embedder?.isReady()) await initEmbedder();
 
       // RAG retrieval — pass sourceIds filter so only selected sources are searched
-      const sourceIds = activeSession?.sourceIds || [];
+      const sourceIds = session?.sourceIds || [];
       const results = await ragQuery(text, store, embedder, {
         topK: config?.ragTopK || 5,
         sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
@@ -204,7 +207,7 @@
         content: aiContent,
         sources: results,
       });
-      activeSessionId = activeSessionId;
+      activeSession = conversationStore.getById(activeSessionId);
 
       sessions = conversationStore.getAll();
     } catch (e: any) {
@@ -213,7 +216,7 @@
         role: 'assistant',
         content: `错误：${e?.message || e}`,
       });
-      activeSessionId = activeSessionId;
+      activeSession = conversationStore.getById(activeSessionId);
       sessions = conversationStore.getAll();
     }
 
