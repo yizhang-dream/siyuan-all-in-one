@@ -32,6 +32,31 @@ export interface ToolCallResult {
     content: string;  // JSON string of the result
 }
 
+/**
+ * Per-tool configuration for persistence.
+ */
+export interface ToolConfig {
+    enabled: boolean;
+    autoApprove: boolean;
+}
+
+/**
+ * Persisted agent tool selection config.
+ */
+export interface AgentToolsConfig {
+    selectedTools: Record<string, ToolConfig>;     // agent mode
+    selectedToolsAsk: Record<string, ToolConfig>;  // ask mode
+}
+
+/**
+ * Tool categories used by the tool selection dialog.
+ */
+export const TOOL_CATEGORIES: Record<string, { label: string; tools: string[] }> = {
+    rag: { label: '知识检索', tools: ['rag_search'] },
+    siyuan: { label: '思源笔记', tools: ['sql_query', 'get_block_content'] },
+    utility: { label: '其他工具', tools: ['create_note'] },
+};
+
 // ── Executor context ──────────────────────────────────────
 
 export interface ToolContext {
@@ -40,95 +65,119 @@ export interface ToolContext {
     embedder?: EmbeddingProvider;
 }
 
-// ── Tool definitions ──────────────────────────────────────
+// ── All tool definitions (master list) ────────────────────
 
-export function getEnabledTools(): ToolDefinition[] {
-    return [
-        {
-            type: 'function',
-            function: {
-                name: 'rag_search',
-                description: 'Search the imported document knowledge base for relevant information',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        query: {
-                            type: 'string',
-                            description: 'The search query to find relevant information in the knowledge base',
-                        },
-                        topK: {
-                            type: 'number',
-                            description: 'Number of results to return (default 5)',
-                        },
+const ALL_TOOL_DEFINITIONS: ToolDefinition[] = [
+    {
+        type: 'function',
+        function: {
+            name: 'rag_search',
+            description: 'Search the imported document knowledge base for relevant information',
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: {
+                        type: 'string',
+                        description: 'The search query to find relevant information in the knowledge base',
                     },
-                    required: ['query'],
-                },
-            },
-            autoApprove: true,
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'sql_query',
-                description: 'Run a SQL query on the SiYuan note database. Use to find blocks, documents, or metadata.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        stmt: {
-                            type: 'string',
-                            description: 'SQL statement to execute against the SiYuan database',
-                        },
+                    topK: {
+                        type: 'number',
+                        description: 'Number of results to return (default 5)',
                     },
-                    required: ['stmt'],
                 },
+                required: ['query'],
             },
-            autoApprove: true,
         },
-        {
-            type: 'function',
-            function: {
-                name: 'get_block_content',
-                description: 'Get the Markdown content of a SiYuan block by its ID',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        blockId: {
-                            type: 'string',
-                            description: 'The block ID to retrieve content for',
-                        },
+        autoApprove: true,
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'sql_query',
+            description: 'Run a SQL query on the SiYuan note database. Use to find blocks, documents, or metadata.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    stmt: {
+                        type: 'string',
+                        description: 'SQL statement to execute against the SiYuan database',
                     },
-                    required: ['blockId'],
                 },
+                required: ['stmt'],
             },
-            autoApprove: true,
         },
-        {
-            type: 'function',
-            function: {
-                name: 'create_note',
-                description: 'Create a new note in the SiYuan notebook. Returns the new document ID.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        notebookId: {
-                            type: 'string',
-                            description: 'The notebook ID where the note will be created',
-                        },
-                        title: {
-                            type: 'string',
-                            description: 'The title of the new note',
-                        },
-                        content: {
-                            type: 'string',
-                            description: 'The Markdown content of the new note',
-                        },
+        autoApprove: true,
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_block_content',
+            description: 'Get the Markdown content of a SiYuan block by its ID',
+            parameters: {
+                type: 'object',
+                properties: {
+                    blockId: {
+                        type: 'string',
+                        description: 'The block ID to retrieve content for',
                     },
-                    required: ['notebookId', 'title', 'content'],
                 },
+                required: ['blockId'],
             },
-            autoApprove: true,
         },
-    ];
+        autoApprove: true,
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'create_note',
+            description: 'Create a new note in the SiYuan notebook. Returns the new document ID.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    notebookId: {
+                        type: 'string',
+                        description: 'The notebook ID where the note will be created',
+                    },
+                    title: {
+                        type: 'string',
+                        description: 'The title of the new note',
+                    },
+                    content: {
+                        type: 'string',
+                        description: 'The Markdown content of the new note',
+                    },
+                },
+                required: ['notebookId', 'title', 'content'],
+            },
+        },
+        autoApprove: true,
+    },
+];
+
+/**
+ * Return all tool definitions (unfiltered).
+ */
+export function getAllTools(): ToolDefinition[] {
+    return ALL_TOOL_DEFINITIONS;
+}
+
+/**
+ * Return tool definitions filtered by the given selection config.
+ * If no config is provided, returns all tools (backward compatible).
+ * The autoApprove flag is overridden by the config if present.
+ */
+export function getEnabledTools(selectedTools?: Record<string, ToolConfig>): ToolDefinition[] {
+    if (!selectedTools) return ALL_TOOL_DEFINITIONS;
+    return ALL_TOOL_DEFINITIONS.filter(t => {
+        const cfg = selectedTools[t.function.name];
+        return cfg === undefined || cfg.enabled;
+    }).map(t => {
+        const cfg = selectedTools[t.function.name];
+        if (cfg && cfg.autoApprove !== undefined) {
+            return { ...t, autoApprove: cfg.autoApprove };
+        }
+        return t;
+    });
 }
 
 // ── Tool executors ────────────────────────────────────────

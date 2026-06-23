@@ -675,10 +675,16 @@ function parseLLMResponse(
 
     if (tools && finishReason === 'tool_calls') {
         // finish_reason indicates tool_calls but we couldn't parse them
-        throw new LLMError(`API 响应 finish_reason=tool_calls 但无法解析 tool_calls: ${JSON.stringify(json).slice(0, 500)}`, 0);
+        // Return empty toolCalls rather than throwing — let the caller handle it
+        return { content, toolCalls: undefined, finishReason };
     }
 
-    // No tools or no tool_calls — return content string for backward compatibility
+    // When tools are provided, always return object format
+    if (tools) {
+        return { content, toolCalls: undefined, finishReason };
+    }
+
+    // No tools — return content string for backward compatibility
     if (!content) {
         throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）: ${JSON.stringify(json).slice(0, 500)}`, 0);
     }

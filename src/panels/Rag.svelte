@@ -7,10 +7,14 @@
   import type { RagConceptRequest } from '../libs/rag';
   import { callLLM, resolveLLMConfig } from '../libs/llm';
   import type { ToolCall as LLMToolCall } from '../libs/llm';
-  import { getEnabledTools, executeTool, type ToolContext } from '../libs/tools';
+  import {
+    getAllTools, getEnabledTools, executeTool,
+    TOOL_CATEGORIES,
+    type ToolContext, type ToolDefinition, type ToolConfig, type AgentToolsConfig
+  } from '../libs/tools';
   import { renderMath } from '../libs/render';
   import { getT } from '../libs/i18n';
-  import { ConversationStore, type SessionIndex, type ChatMessage } from '../libs/conversation-store';
+  import { ConversationStore, type SessionIndex, type ChatMessage, type ContextDocument } from '../libs/conversation-store';
 
   export let plugin: any;
   export let vectorStore: any;
@@ -80,6 +84,87 @@
 
   // Agent mode toggle
   let agentMode = false;
+
+  // Tool selection
+  let showToolDialog = false;
+  let agentToolsConfig: AgentToolsConfig = {
+    selectedTools: {},
+    selectedToolsAsk: {},
+  };
+
+  async function loadAgentToolsConfig() {
+    try {
+      const data = await plugin.loadData('agent-tools-config');
+      if (data?.selectedTools || data?.selectedToolsAsk) {
+        agentToolsConfig = data;
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function saveAgentToolsConfig() {
+    await plugin.saveData('agent-tools-config', agentToolsConfig);
+  }
+
+  // Helper: get tool config for current mode
+  function getCurrentToolConfig(): Record<string, ToolConfig> {
+    return agentMode
+      ? agentToolsConfig.selectedTools
+      : agentToolsConfig.selectedToolsAsk;
+  }
+
+  // Helper: check if a tool is enabled for current mode
+  function isToolEnabled(name: string): boolean {
+    const cfg = getCurrentToolConfig()[name];
+    return cfg === undefined || cfg.enabled;
+  }
+
+  // Helper: get tool autoApprove for current mode
+  function getToolAutoApprove(name: string): boolean {
+    const cfg = getCurrentToolConfig()[name];
+    if (cfg !== undefined) return cfg.autoApprove;
+    const allTools = getAllTools();
+    const def = allTools.find(t => t.function.name === name);
+    return def?.autoApprove ?? true;
+  }
+
+  // Toggle tool enabled/disabled
+  function toggleTool(name: string) {
+    const cfg = getCurrentToolConfig();
+    const existing = cfg[name] || { enabled: true, autoApprove: true };
+    cfg[name] = { ...existing, enabled: !existing.enabled };
+    saveAgentToolsConfig();
+  }
+
+  // Toggle tool autoApprove
+  function toggleToolAutoApprove(name: string) {
+    const cfg = getCurrentToolConfig();
+    const existing = cfg[name] || { enabled: true, autoApprove: true };
+    cfg[name] = { ...existing, autoApprove: !existing.autoApprove };
+    saveAgentToolsConfig();
+  }
+
+  // Category select-all / deselect-all
+  function toggleCategory(category: string, enable: boolean) {
+    const tools = TOOL_CATEGORIES[category]?.tools || [];
+    const cfg = getCurrentToolConfig();
+    for (const name of tools) {
+      const existing = cfg[name] || { enabled: true, autoApprove: true };
+      cfg[name] = { ...existing, enabled: enable };
+    }
+    saveAgentToolsConfig();
+  }
+
+  // Check if all tools in a category are enabled
+  function isCategoryAllEnabled(category: string): boolean {
+    const tools = TOOL_CATEGORIES[category]?.tools || [];
+    return tools.length > 0 && tools.every(t => isToolEnabled(t));
+  }
+
+  // Check if any tool in a category is enabled
+  function isCategoryAnyEnabled(category: string): boolean {
+    const tools = TOOL_CATEGORIES[category]?.tools || [];
+    return tools.some(t => isToolEnabled(t));
+  }
 
   $: currentModel = plugin?.getConfig()?.ragModel || plugin?.getConfig()?.flashcardModel || '未配置模型';
 
@@ -238,6 +323,8 @@
       console.log('[all-in-one] onMount: skip embedder init (provider=' + embCfg?.ragEmbeddingProvider + ')');
     }
 
+    await loadAgentToolsConfig();
+
     msgListEl?.addEventListener('scroll', handleMsgScroll);
     console.log('[all-in-one] onMount: DONE in', (performance.now() - t0).toFixed(0), 'ms');
   });
@@ -287,15 +374,6 @@
       if (!embedder?.isReady()) await initEmbedder();
       if (requestId !== activeRequestId) return;
 
-      // RAG retrieval — pass sourceIds filter so only selected sources are searched
-      const sourceIds = activeSession?.sourceIds || [];
-      const results = await ragQuery(text, store, embedder, {
-        topK: config?.ragTopK || 5,
-        sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
-      });
-      if (requestId !== activeRequestId) return;
-      const ctx = formatRagContext(results);
-
       // LLM call
       const cfg = plugin.getConfig();
       const providerId = cfg.ragProviderId || cfg.flashcardProviderId;
@@ -314,8 +392,170 @@
 
       const llmConfig = resolveLLMConfig(cfg, providerId, model);
 
-      const systemPrompt = ctx
-        ? `你是一个知识助手。请始终使用 Markdown 格式回复，包括但不限于：
+      // Build full conversation history for LLM (multi-turn)
+      const llmMessages = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      let finalContent = '';
+      let contextDocuments: ContextDocument[] = [];
+      let localDisplayMessages: ChatMessage[] = [...messages]; // local copy for rendering
+
+      if (agentMode) {
+        // ── Agent mode: copilot-style agent loop ────────────────
+        const systemPrompt = `你是一个知识助手，可以使用工具来检索信息、查询数据库和创建笔记。请始终使用 Markdown 格式回复，包括但不限于：
+- 使用 **加粗** 突出重点
+- 使用 \`代码块\` 展示代码
+- 使用 - 或 1. 创建列表
+- 使用 ### 标题组织内容
+- 使用 > 引用原文
+
+你可以使用以下工具：
+1. rag_search — 搜索已导入的文档知识库
+2. sql_query — 查询思源笔记数据库
+3. get_block_content — 获取思源笔记块内容
+4. create_note — 创建新笔记
+
+每次调用工具后，我会把结果反馈给你。请根据结果决定下一步行动或给出最终答案。`;
+
+        agentAbortController = new AbortController();
+        const enabledTools = getEnabledTools(agentToolsConfig.selectedTools);
+        let shouldContinue = true;
+
+        // Add system message
+        llmMessages.unshift({ role: 'system', content: systemPrompt });
+
+        for (; shouldContinue; ) {
+          if (agentAbortController?.signal.aborted) break;
+          if (requestId !== activeRequestId) break;
+
+          const response = await callLLM(llmMessages, llmConfig, {
+            tools: enabledTools,
+            abortSignal: agentAbortController!.signal,
+          });
+
+          const { content, toolCalls } = response;
+
+          if (!toolCalls || toolCalls.length === 0) {
+            // NO tool calls → agent finished, use content as final answer
+            shouldContinue = false;
+            finalContent = content || '';
+
+            // Add assistant message to LLM history
+            llmMessages.push({ role: 'assistant', content: finalContent });
+
+            break;
+          }
+
+          // Add assistant message with tool_calls to LLM history
+          llmMessages.push({
+            role: 'assistant',
+            content: content || '',
+            tool_calls: toolCalls.map(tc => ({ ...tc, type: 'function' as const })),
+          });
+
+          // Build display message for tool calls
+          const displayToolCalls = toolCalls.map(tc => ({
+            ...tc,
+            _expanded: false,
+            _result: undefined as string | undefined,
+          }));
+
+          localDisplayMessages.push({
+            id: 'a' + Date.now(),
+            role: 'assistant',
+            content: content || '',
+            tool_calls: displayToolCalls as any,
+          });
+          activeMessages = [...localDisplayMessages];
+          await tick();
+          scrollToBottom(true);
+
+          // Execute each tool and add results
+          const toolCtx: ToolContext = { plugin, vectorStore: store, embedder };
+          for (const tc of toolCalls) {
+            if (agentAbortController?.signal.aborted) break;
+            if (requestId !== activeRequestId) break;
+
+            const toolResult = await executeTool(tc, toolCtx);
+
+            // Add tool result to LLM history
+            llmMessages.push({
+              role: 'tool' as any,
+              tool_call_id: tc.id,
+              content: toolResult,
+            });
+
+            // Add tool result to local display (pair with tool call by id)
+            localDisplayMessages.push({
+              id: 't' + Date.now(),
+              role: 'tool',
+              content: toolResult,
+              tool_call_id: tc.id,
+              name: tc.function.name,
+            });
+
+            // Update the tool call display with result
+            const lastAssistantMsg = localDisplayMessages[localDisplayMessages.length - 2];
+            if (lastAssistantMsg?.tool_calls) {
+              const tcd = (lastAssistantMsg.tool_calls as any[]).find(x => x.id === tc.id);
+              if (tcd) tcd._result = toolResult;
+            }
+
+            // Extract context documents from rag_search results
+            if (tc.function.name === 'rag_search') {
+              try {
+                const parsed = JSON.parse(toolResult);
+                if (parsed.results) {
+                  contextDocuments = parsed.results.map((r: any) => ({
+                    sourceId: r.source || '',
+                    title: r.source || '知识库',
+                    chunkText: (r.text || '').substring(0, 80),
+                    score: r.score || 0,
+                  }));
+                }
+              } catch { /* ignore parse errors */ }
+            }
+
+            activeMessages = [...localDisplayMessages];
+            await tick();
+            scrollToBottom(true);
+          }
+        }
+
+        // Save final assistant message with context documents
+        // Keep localDisplayMessages for rendering (includes intermediate tool calls)
+        // On session switch/reload, only the final answer will be shown
+        if (finalContent) {
+          await conversationStore.addMessage(activeSessionId, {
+            id: 'a' + Date.now(),
+            role: 'assistant',
+            content: finalContent,
+            contextDocuments,
+          });
+          // Add the persisted message to local display so tool calls remain visible
+          localDisplayMessages.push({
+            id: 'a-final-' + Date.now(),
+            role: 'assistant',
+            content: finalContent,
+            contextDocuments,
+          });
+          activeMessages = [...localDisplayMessages];
+        }
+      } else {
+        // ── Normal (non-agent) mode ────────────────────────────
+        // RAG retrieval
+        const sourceIds = activeSession?.sourceIds || [];
+        const results = await ragQuery(text, store, embedder, {
+          topK: config?.ragTopK || 5,
+          sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
+        });
+        if (requestId !== activeRequestId) return;
+        const ctx = formatRagContext(results);
+
+        const systemPrompt = ctx
+          ? `你是一个知识助手。请始终使用 Markdown 格式回复，包括但不限于：
 - 使用 **加粗** 突出重点
 - 使用 \`代码块\` 展示代码
 - 使用 - 或 1. 创建列表
@@ -330,7 +570,7 @@
 
 以下是检索到的文档内容：
 ${ctx}`
-        : `你是一个知识助手。请始终使用 Markdown 格式回复，包括但不限于：
+          : `你是一个知识助手。请始终使用 Markdown 格式回复，包括但不限于：
 - 使用 **加粗** 突出重点
 - 使用 \`代码块\` 展示代码
 - 使用 - 或 1. 创建列表
@@ -339,66 +579,26 @@ ${ctx}`
 
 用户尚未导入任何文档。如果需要基于具体文档回答，请提示用户先在"来源库"导入文件。`;
 
-      // Build full conversation history for LLM (multi-turn)
-      const llmMessages = messages.map(m => ({
-        role: m.role,
-        content: m.content
-      }));
-      // Add system message at the beginning
-      llmMessages.unshift({ role: 'system', content: systemPrompt });
-
-      let finalContent = '';
-      let toolLog = '';
-
-      if (agentMode) {
-        // ── Agent loop ───────────────────────────────────────────
-        const tools = getEnabledTools();
-        const MAX_AGENT_ITERATIONS = 5;
-        let iterations = 0;
-        let agentRunning = true;
-
-        while (agentRunning && iterations < MAX_AGENT_ITERATIONS) {
-          iterations++;
-
-          const result = await callLLM(llmMessages, llmConfig, { tools });
-
-          if (result.toolCalls && result.toolCalls.length > 0) {
-            // Add assistant message with tool_calls to conversation history
-            llmMessages.push({
-              role: 'assistant',
-              content: result.content || '',
-              tool_calls: result.toolCalls,
-            });
-
-            const toolNames = result.toolCalls.map(tc => tc.function.name);
-            toolLog += `\n[调用工具: ${toolNames.join(', ')}]\n`;
-
-            // Execute each tool
-            const toolCtx: ToolContext = { plugin, vectorStore, embedder };
-            for (const tc of result.toolCalls) {
-              const toolResult = await executeTool(tc, toolCtx);
-              llmMessages.push({
-                role: 'tool' as any,
-                tool_call_id: tc.id,
-                content: toolResult,
-              });
-            }
-          } else if (result.content) {
-            finalContent += result.content;
-            agentRunning = false;
-          } else {
-            agentRunning = false;
-          }
-        }
-
-        // Prepend tool log to final content
-        if (toolLog) {
-          finalContent = toolLog + '\n' + finalContent;
-        }
-      } else {
-        // ── Normal (non-agent) mode ────────────────────────────
+        llmMessages.unshift({ role: 'system', content: systemPrompt });
         const aiContent = await callLLM(llmMessages, llmConfig);
         finalContent = aiContent;
+
+        if (requestId !== activeRequestId) return;
+
+        contextDocuments = results.map(r => ({
+          sourceId: r.chunk.sourceId,
+          title: r.chunk.metadata?.fileName || r.chunk.metadata?.title || '来源',
+          chunkText: r.chunk.text.substring(0, 80),
+          score: r.score,
+        }));
+
+        await conversationStore.addMessage(activeSessionId, {
+          id: 'a' + Date.now(),
+          role: 'assistant',
+          content: finalContent,
+          sources: results,
+          contextDocuments,
+        });
       }
       if (requestId !== activeRequestId) return;
 
@@ -408,21 +608,6 @@ ${ctx}`
         renameSession(activeSessionId, title);
       }
 
-      const contextDocuments = results.map(r => ({
-        sourceId: r.chunk.sourceId,
-        title: r.chunk.metadata?.fileName || r.chunk.metadata?.title || '来源',
-        chunkText: r.chunk.text.substring(0, 80),
-        score: r.score,
-      }));
-      if (requestId !== activeRequestId) return;
-
-      await conversationStore.addMessage(activeSessionId, {
-        id: 'a' + Date.now(),
-        role: 'assistant',
-        content: finalContent,
-        sources: results,
-        contextDocuments,
-      });
       activeSession = conversationStore.getById(activeSessionId);
       activeMessages = await conversationStore.getMessages(activeSessionId);
       await tick();
@@ -496,7 +681,13 @@ ${ctx}`
     }
   }
 
+  let agentAbortController: AbortController | null = null;
+
   function abortSend() {
+    if (agentAbortController) {
+      agentAbortController.abort();
+      agentAbortController = null;
+    }
     activeRequestId++;
     sending = false;
     showMessage('已停止生成');
@@ -616,6 +807,9 @@ ${ctx}`
         <label class="agent-toggle" title="启用 Agent 模式（自动调用工具）">
           <input type="checkbox" bind:checked={agentMode} />
           Agent
+          <button class="agent-tool-btn" title="工具选择"
+                  on:click|stopPropagation={() => showToolDialog = !showToolDialog}
+                  tabindex="-1">⚙️</button>
         </label>
         <button class="b3-button b3-button--small" on:click={generateCandidates} disabled={store?.getCount() === 0}>
           <svg><use xlink:href="#iconAdd"></use></svg> 生成候选
@@ -646,6 +840,27 @@ ${ctx}`
                 <div class="msg-role">你</div>
               {/if}
               <div class="msg-content">{@html mdToHtml(msg.content)}</div>
+              {#if msg.tool_calls?.length}
+                <div class="msg-tool-calls">
+                  <div class="tool-calls-header">🔧 调用工具 ({msg.tool_calls.length})</div>
+                  {#each msg.tool_calls as tc}
+                    <div class="tool-call-item">
+                      <div class="tool-call-name" on:click={() => { tc._expanded = !tc._expanded; }}
+                           role="button" tabindex="0"
+                           on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tc._expanded = !tc._expanded; } }}>
+                        <span class="tool-call-icon">{tc._result ? '✓' : '◷'}</span>
+                        {tc.function?.name || tc.name}
+                      </div>
+                      {#if tc._expanded}
+                        <pre class="tool-call-params">{(() => { try { return JSON.stringify(JSON.parse(tc.function?.arguments || '{}'), null, 2); } catch { return tc.function?.arguments || '{}'; } })()}</pre>
+                        {#if tc._result}
+                          <pre class="tool-call-result">{tc._result}</pre>
+                        {/if}
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
               {#if msg.contextDocuments?.length}
                 <div class="msg-context">
                   <div class="context-label">📚 参考来源：</div>
@@ -687,6 +902,57 @@ ${ctx}`
     </div>
   </div>
 </div>
+
+<!-- Tool selection dialog -->
+{#if showToolDialog}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="tool-dialog-overlay" on:click={() => showToolDialog = false}>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="tool-dialog" on:click|stopPropagation>
+      <div class="tool-dialog-header">
+        <span>工具选择 {agentMode ? '(Agent 模式)' : '(Ask 模式)'}</span>
+        <button class="b3-button" on:click={() => showToolDialog = false}>✕</button>
+      </div>
+      <div class="tool-dialog-body">
+        {#each Object.entries(TOOL_CATEGORIES) as [catKey, cat]}
+          <div class="tool-category">
+            <div class="tool-category-title">
+              <span>{cat.label}</span>
+              <button class="b3-button b3-button--small"
+                      on:click={() => toggleCategory(catKey, !isCategoryAllEnabled(catKey))}>
+                {isCategoryAllEnabled(catKey) ? '取消全选' : '全选'}
+              </button>
+            </div>
+            {#each cat.tools as toolName}
+              {@const allTools = getAllTools()}
+              {@const def = allTools.find(t => t.function.name === toolName)}
+              {#if def}
+                <div class="tool-item">
+                  <label class="tool-check-label">
+                    <input type="checkbox" checked={isToolEnabled(toolName)}
+                           on:change={() => toggleTool(toolName)} />
+                    <span class="tool-name">{def.function.name}</span>
+                    <span class="tool-desc">{def.function.description}</span>
+                  </label>
+                  <label class="tool-approve-label" title="自动执行（无需确认）">
+                    <span class="tool-approve-text">自动</span>
+                    <label class="b3-switch">
+                      <input type="checkbox" checked={getToolAutoApprove(toolName)}
+                             on:change={() => toggleToolAutoApprove(toolName)} />
+                      <span class="b3-switch-slider"></span>
+                    </label>
+                  </label>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style lang="scss">
   .rag-chat-layout {
@@ -936,6 +1202,128 @@ ${ctx}`
   .chat-send-btn.aborting:hover:not(:disabled) { background: #dc2626; transform: scale(1.05); }
   .send-icon { font-size: 14px; line-height: 1; }
   .abort-icon { font-size: 12px; }
+
+  /* ── Agent tool button ─────────────────────────────── */
+  .agent-tool-btn {
+    background: none; border: none; cursor: pointer; font-size: 14px; line-height: 1;
+    padding: 0 2px; opacity: 0.5; transition: opacity 0.2s;
+  }
+  .agent-tool-btn:hover { opacity: 1; }
+
+  /* ── Tool calls in messages ────────────────────────── */
+  .msg-tool-calls {
+    margin: 8px 0;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: var(--aio-fs-sm);
+  }
+  .tool-calls-header {
+    padding: 6px 10px;
+    background: var(--b3-theme-surface-lighter);
+    font-weight: 500;
+  }
+  .tool-call-item {
+    border-top: 1px solid var(--b3-border-color);
+  }
+  .tool-call-item:first-child { border-top: none; }
+  .tool-call-name {
+    padding: 6px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+  }
+  .tool-call-name:hover { background: var(--b3-theme-surface); }
+  .tool-call-icon { font-size: 12px; width: 16px; text-align: center; }
+  .tool-call-params, .tool-call-result {
+    margin: 0;
+    padding: 8px 12px;
+    background: var(--b3-theme-background);
+    font-size: 12px;
+    max-height: 200px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border-top: 1px solid var(--b3-border-color);
+  }
+  .tool-call-params { font-family: var(--b3-font-family-code); }
+
+  /* ── Tool selection dialog ─────────────────────────── */
+  .tool-dialog-overlay {
+    position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+    background: rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .tool-dialog {
+    background: var(--b3-theme-background);
+    border-radius: 8px;
+    box-shadow: var(--b3-dialog-shadow);
+    width: 480px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tool-dialog-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--b3-border-color);
+    font-weight: 600;
+  }
+  .tool-dialog-body {
+    padding: 12px 16px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .tool-category {
+    margin-bottom: 16px;
+  }
+  .tool-category:last-child { margin-bottom: 0; }
+  .tool-category-title {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+    margin-bottom: 4px;
+    font-weight: 500;
+    font-size: var(--aio-fs-sm);
+    color: var(--b3-theme-on-surface);
+    border-bottom: 1px solid var(--b3-border-color);
+  }
+  .tool-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 4px;
+    gap: 8px;
+  }
+  .tool-item:hover { background: var(--b3-theme-surface-lighter); }
+  .tool-check-label {
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; flex: 1; min-width: 0;
+  }
+  .tool-check-label input[type="checkbox"] { margin: 0; cursor: pointer; }
+  .tool-name {
+    font-weight: 500;
+    font-size: var(--aio-fs-sm);
+    font-family: var(--b3-font-family-code);
+    white-space: nowrap;
+  }
+  .tool-desc {
+    font-size: 11px;
+    color: var(--b3-theme-on-surface-light);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tool-approve-label {
+    display: flex; align-items: center; gap: 4px;
+    cursor: pointer; flex-shrink: 0;
+    font-size: 11px;
+    color: var(--b3-theme-on-surface-light);
+  }
+  .tool-approve-text { margin-right: 2px; }
 
   @media (max-width: 640px) {
     .chat-messages { padding: 10px; }

@@ -14,10 +14,20 @@ export interface ContextDocument {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   sources?: { chunk: { id: string; sourceId: string; text: string; metadata: any }; score: number }[];
   contextDocuments?: ContextDocument[];  // source context for this message
+  /** Agent: tool_calls on assistant messages */
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
+  /** Agent: tool_call_id for tool result messages */
+  tool_call_id?: string;
+  /** Agent: tool name for tool result messages */
+  name?: string;
 }
 
 export interface SessionIndex {
