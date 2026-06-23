@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
-  import { marked } from 'marked';
+  // Use SiYuan's built-in Lute renderer (window.Lute) — no npm dependency needed
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
   import type { RagSearchResult, EmbeddingProvider } from '../libs/rag';
   import type { RagConceptRequest } from '../libs/rag';
@@ -22,9 +22,19 @@
   function mdToHtml(text: string): string {
     if (!text) return '';
     try {
-      return marked.parse(text, { breaks: true }) as string;
+      const lute = (window as any).Lute.New();
+      lute.SetInlineMath(true);
+      lute.SetInlineMathAllowDigitAfterOpenMarker(true);
+      lute.SetGFMStrikethrough(true);
+      lute.SetMark(true);
+      lute.SetSup(true);
+      lute.SetSub(true);
+      lute.SetCallout(true);
+      lute.SetSuperBlock(true);
+      lute.SetSanitize(true);
+      return lute.Md2HTML(text);
     } catch {
-      return text; // fallback to raw text on parse error
+      return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
   }
 
