@@ -293,6 +293,9 @@ export async function getRagEmbedderProvider(plugin?: any): Promise<EmbeddingPro
         case 'cohere':
         case 'jina':
         case 'mistral':
+        case 'voyage':
+        case 'together':
+        case 'nomic':
         case 'custom': {
             const { CustomEmbedder } = await import('./embedder-remote');
             _provider = new CustomEmbedder(cfg.ragEmbeddingConfig);
@@ -301,6 +304,11 @@ export async function getRagEmbedderProvider(plugin?: any): Promise<EmbeddingPro
         case 'baidu': {
             const { BaiduEmbedder } = await import('./embedder-remote');
             _provider = new BaiduEmbedder(cfg.ragEmbeddingConfig);
+            break;
+        }
+        case 'gemini-embed': {
+            const { GeminiEmbedder } = await import('./embedder-remote');
+            _provider = new GeminiEmbedder(cfg.ragEmbeddingConfig);
             break;
         }
         default: {

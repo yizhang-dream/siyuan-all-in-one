@@ -207,3 +207,15 @@ export class BaiduEmbedder extends CustomEmbedder {
         return this.config.endpoint.replace(/\/+$/, '');
     }
 }
+
+/**
+ * Gemini (OpenAI-compatible) embedder — endpoint includes /openai prefix.
+ * The base URL is like https://generativelanguage.googleapis.com/v1beta/openai
+ * so we append only /embeddings (not /v1/embeddings).
+ */
+export class GeminiEmbedder extends CustomEmbedder {
+    getEndpoint(): string {
+        const base = this.config.endpoint.replace(/\/+$/, '');
+        return `${base}/embeddings`;
+    }
+}

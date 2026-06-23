@@ -5,7 +5,7 @@
  * Multi-provider embedding type definitions.
  */
 
-export type EmbeddingProviderType = 'builtin' | 'ollama' | 'siliconflow' | 'qwen' | 'zhipu' | 'hunyuan' | 'baidu' | 'cohere' | 'jina' | 'mistral' | 'openai' | 'custom';
+export type EmbeddingProviderType = 'builtin' | 'ollama' | 'siliconflow' | 'qwen' | 'zhipu' | 'hunyuan' | 'baidu' | 'cohere' | 'jina' | 'mistral' | 'voyage' | 'gemini-embed' | 'together' | 'nomic' | 'openai' | 'custom';
 
 export interface EmbeddingConfig {
     endpoint: string;

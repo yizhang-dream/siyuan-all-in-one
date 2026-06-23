@@ -149,6 +149,18 @@
     } else if (embeddingProvider === 'mistral') {
       embeddingEndpoint = 'https://api.mistral.ai/v1';
       embeddingModel = 'mistral-embed';
+    } else if (embeddingProvider === 'voyage') {
+      embeddingEndpoint = 'https://api.voyageai.com/v1';
+      embeddingModel = 'voyage-multimodal-3';
+    } else if (embeddingProvider === 'gemini-embed') {
+      embeddingEndpoint = 'https://generativelanguage.googleapis.com/v1beta/openai';
+      embeddingModel = 'text-embedding-004';
+    } else if (embeddingProvider === 'together') {
+      embeddingEndpoint = 'https://api.together.xyz/v1';
+      embeddingModel = 'togethercomputer/m2-bert-80M-8k-retrieval';
+    } else if (embeddingProvider === 'nomic') {
+      embeddingEndpoint = 'https://api-atlas.nomic.ai/v1';
+      embeddingModel = 'nomic-embed-text-v1.5';
     }
   }
 
@@ -176,7 +188,7 @@
         embeddingModelList = (json.data || [])
           .filter((m: any) => m.id.startsWith('text-embedding-'))
           .map((m: any) => m.id);
-      } else if (embeddingProvider === 'siliconflow' || embeddingProvider === 'qwen' || embeddingProvider === 'zhipu' || embeddingProvider === 'hunyuan' || embeddingProvider === 'baidu' || embeddingProvider === 'cohere' || embeddingProvider === 'jina' || embeddingProvider === 'mistral') {
+      } else if (embeddingProvider === 'siliconflow' || embeddingProvider === 'qwen' || embeddingProvider === 'zhipu' || embeddingProvider === 'hunyuan' || embeddingProvider === 'baidu' || embeddingProvider === 'cohere' || embeddingProvider === 'jina' || embeddingProvider === 'mistral' || embeddingProvider === 'voyage' || embeddingProvider === 'gemini-embed' || embeddingProvider === 'together' || embeddingProvider === 'nomic') {
         const resp = await fetch(`${embeddingEndpoint.replace(/\/$/, '')}/models`, {
           headers: embeddingApiKey ? { 'Authorization': `Bearer ${embeddingApiKey}` } : {},
         });
@@ -525,6 +537,10 @@
             <option value="cohere">Cohere</option>
             <option value="jina">Jina AI</option>
             <option value="mistral">Mistral AI</option>
+            <option value="voyage">Voyage AI</option>
+            <option value="gemini-embed">Google Gemini</option>
+            <option value="together">Together AI</option>
+            <option value="nomic">Nomic AI</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
@@ -907,6 +923,10 @@
             <option value="cohere">Cohere</option>
             <option value="jina">Jina AI</option>
             <option value="mistral">Mistral AI</option>
+            <option value="voyage">Voyage AI</option>
+            <option value="gemini-embed">Google Gemini</option>
+            <option value="together">Together AI</option>
+            <option value="nomic">Nomic AI</option>
             <option value="openai">OpenAI</option>
             <option value="custom">自定义 (OpenAI 兼容)</option>
           </select>
