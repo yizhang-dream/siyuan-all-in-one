@@ -26,10 +26,7 @@ export default defineConfig({
             // sharp — native C++ image processing addon. Stubbed because it cannot
             // load in Electron's sandboxed renderer and is never called by our plugin.
             "sharp": resolve(__dirname, "src/stubs/sharp.js"),
-            // canvas — native C++ node-canvas addon. Stubbed because it cannot load
-            // in Electron's sandboxed renderer. PaddleOCR depends on it but running
-            // in Electron (browser context) means the native Canvas API is available.
-            "canvas": resolve(__dirname, "src/stubs/canvas.js"),
+
             "@huggingface/transformers": resolve(__dirname, "node_modules/@huggingface/transformers/dist/transformers.node.cjs"),
 
             // transformers.js uses onnxruntime-node by default; alias to the
@@ -59,18 +56,6 @@ export default defineConfig({
                 // Copy the ONNX model binary (preserves onnx/ structure)
                 { src: "node_modules/@huggingface/transformers/.cache/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/model_quantized.onnx", dest: "./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/" },
                 // pdfjs-dist runs on main thread via disableWorker: true — no worker needed
-                // Bundle paddleocr-js for offline OCR at runtime (eval('require') resolves from dist/node_modules/)
-                // Only copy dist/ and package.json — not the 131MB nested node_modules/ (onnxruntime-web is webpack-bundled into dist/)
-                { src: "node_modules/paddleocr-js/dist/**/*", dest: "./node_modules/paddleocr-js/dist" },
-                { src: "node_modules/paddleocr-js/package.json", dest: "./node_modules/paddleocr-js" },
-                { src: "node_modules/paddleocr-js/LICENSE", dest: "./node_modules/paddleocr-js" },
-                // canvas — stub native addon so paddleocr-js require('canvas') doesn't fail
-                { src: "src/stubs/canvas-package/index.js", dest: "./node_modules/canvas" },
-                { src: "src/stubs/canvas-package/package.json", dest: "./node_modules/canvas" },
-                // Bundle PaddleOCR model files (~112MB) for offline OCR
-                // These must be in TensorFlow.js GraphModel format (model.json + .bin weight files)
-                // Download and convert using: scripts/download-paddleocr-models.ps1
-                { src: "src/models/paddleocr/**/*", dest: "./models/paddleocr/" },
             ],
         }),
     ],
@@ -92,7 +77,6 @@ export default defineConfig({
             plugins: [],
             external: [
                 "siyuan",
-                "paddleocr-js",
                 "process",
                 // Node.js built-in modules used by @huggingface/transformers (transformers.node.cjs)
                 // and onnxruntime (ort.node.min.js). These MUST be external so Electron's renderer

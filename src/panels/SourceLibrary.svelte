@@ -291,23 +291,14 @@
           images = [Buffer.from(arrayBuffer).toString('base64')];
         }
 
-        if (visionType === 'paddleocr') {
-          const { isPaddleOcrAvailable, paddleOcrExtract } = await import('../libs/paddleocr');
-          if (!(await isPaddleOcrAvailable())) {
-            throw new Error('PaddleOCR 未安装，请在设置中切换到"云 API"或安装 PaddleOCR');
-          }
-          const texts = await Promise.all(images.map(img => paddleOcrExtract(img, { formula: true })));
-          text = texts.join('\n\n');
-        } else {
-          // Cloud vision API
-          const visionImages = images.map(b64 => ({ base64: b64, mimeType: 'image/png' as const }));
-          text = await callVisionLLM(
-            cfg, cfg.flashcardProviderId, cfg.visionModel || 'glm-ocr',
-            VISION_PROMPT,
-            visionImages,
-            { maxTokens: 4096 }
-          );
-        }
+        // Cloud vision API
+        const visionImages = images.map(b64 => ({ base64: b64, mimeType: 'image/png' as const }));
+        text = await callVisionLLM(
+          cfg, cfg.flashcardProviderId, cfg.visionModel || 'glm-ocr',
+          VISION_PROMPT,
+          visionImages,
+          { maxTokens: 4096 }
+        );
 
         const nextSet = new Set(visionExtracting);
         nextSet.delete(id);

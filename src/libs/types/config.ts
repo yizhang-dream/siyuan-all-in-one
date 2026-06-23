@@ -45,6 +45,6 @@ export interface AppConfig {
     ragEmbeddingProvider: 'builtin' | 'ollama' | 'openai' | 'custom';
     /** RAG 嵌入向量提供方连接配置 */
     ragEmbeddingConfig: { endpoint: string; apiKey: string; model: string; };
-    /** 视觉提取引擎类型：关闭 / 内置 PaddleOCR / 云 API */
-    visionProviderType: 'off' | 'paddleocr' | 'cloud';
+    /** 视觉提取引擎类型：关闭 / 云 API */
+    visionProviderType: 'off' | 'cloud';
 }

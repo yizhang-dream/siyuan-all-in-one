@@ -18,7 +18,7 @@
   let ragProviderId = '';
   let ragModel = '';
   let visionModel = '';
-  let visionProviderType: 'off' | 'paddleocr' | 'cloud' = 'off';
+  let visionProviderType: 'off' | 'cloud' = 'off';
   // ── 嵌入模型 ──
   let embeddingProvider: EmbeddingProviderType = 'builtin';
   let embeddingEndpoint = '';
@@ -443,12 +443,9 @@
             <div class="vision-provider-row">
               <select class="b3-select" value={visionProviderType} on:change={onVisionProviderTypeChange} aria-label="视觉提取引擎">
                 <option value="off">关闭</option>
-                <option value="paddleocr">内置 PaddleOCR</option>
-                <option value="cloud">云 API</option>
+                <option value="cloud">云 API (视觉大模型)</option>
               </select>
-              {#if visionProviderType === 'paddleocr'}
-                <p class="settings-hint" style="margin:0;">内置离线 OCR，首次使用需初始化（约 244MB）</p>
-              {:else if visionProviderType === 'cloud'}
+              {#if visionProviderType === 'cloud'}
                 <div class="feature-row">
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
                     {#if getProviderModels(flashcardProviderId).length === 0}
@@ -818,12 +815,9 @@
             <div class="vision-provider-row">
               <select class="b3-select" value={visionProviderType} on:change={onVisionProviderTypeChange} aria-label="视觉提取引擎">
                 <option value="off">关闭</option>
-                <option value="paddleocr">内置 PaddleOCR</option>
-                <option value="cloud">云 API</option>
+                <option value="cloud">云 API (视觉大模型)</option>
               </select>
-              {#if visionProviderType === 'paddleocr'}
-                <p class="settings-hint" style="margin:0;">内置离线 OCR，首次使用需初始化（约 244MB）</p>
-              {:else if visionProviderType === 'cloud'}
+              {#if visionProviderType === 'cloud'}
                 <div class="feature-row">
                   <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
                     {#if getProviderModels(flashcardProviderId).length === 0}
