@@ -6,9 +6,8 @@
   import { genId } from '../libs/config';
   import { ingestDocument } from '../libs/rag/ingest';
   import { getRagEmbedderProvider } from '../libs/rag';
-  import { callVisionLLM, resolveLLMConfig } from '../libs/llm';
+  import { callVisionLLM } from '../libs/llm';
   import { renderPdfPages } from '../libs/pdf-renderer';
-  import { paddleOcrExtract, isPaddleOcrAvailable } from '../libs/paddleocr';
   const fs: typeof import('fs') = eval('require')('fs');
   const os: typeof import('os') = eval('require')('os');
   const path: typeof import('path') = eval('require')('path');
@@ -52,7 +51,6 @@
   let siyuanSearchError = '';
 
   // 视觉提取（公式/扫描件）设置
-  let visionEnabled = false;
   let visionExtracting = new Set<string>();
 
   // 各扩展名文件输入框引用（每个按钮一个）
@@ -278,47 +276,37 @@
       const isPdf = sourceType === 'pdf' || ext === '.pdf';
 
       // ── 视觉提取 pipeline（PDF/图片） ─────────────────
-      if (visionEnabled && (isImage || isPdf)) {
+      const cfg = plugin.getConfig();
+      const visionType = cfg?.visionProviderType || 'off';
+      if (visionType !== 'off' && (isImage || isPdf)) {
         const arrayBuffer = await file.arrayBuffer();
         visionExtracting = new Set([...visionExtracting, id]);
 
+        // Render PDF pages to images (if PDF)
+        let images: string[] = [];
         if (isPdf) {
-          const pages = await renderPdfPages(arrayBuffer);
-          const pageTexts: string[] = [];
-          const cfg = plugin.getConfig();
-          const usePaddleOcr = cfg.usePaddleOcrOffline === true;
-
-          for (const page of pages) {
-            if (usePaddleOcr && await isPaddleOcrAvailable()) {
-              const pt = await paddleOcrExtract(page.base64, { formula: true });
-              pageTexts.push(pt);
-            } else {
-              const pt = await callVisionLLM(
-                cfg, cfg.visionProviderId, cfg.visionModel,
-                VISION_PROMPT,
-                [{ base64: page.base64, mimeType: 'image/png' }],
-                { maxTokens: 4096 }
-              );
-              pageTexts.push(pt);
-            }
-          }
-          text = pageTexts.join('\n\n');
+          const pages = await renderPdfPages(arrayBuffer, { maxPages: 10 });
+          images = pages.map(p => p.base64);
         } else {
-          // Image file
-          const base64 = Buffer.from(arrayBuffer).toString('base64');
-          const cfg = plugin.getConfig();
-          const usePaddleOcr = cfg.usePaddleOcrOffline === true;
+          images = [Buffer.from(arrayBuffer).toString('base64')];
+        }
 
-          if (usePaddleOcr && await isPaddleOcrAvailable()) {
-            text = await paddleOcrExtract(base64, { formula: true });
-          } else {
-            text = await callVisionLLM(
-              cfg, cfg.visionProviderId, cfg.visionModel,
-              VISION_PROMPT,
-              [{ base64, mimeType: file.type || 'image/png' }],
-              { maxTokens: 4096 }
-            );
+        if (visionType === 'paddleocr') {
+          const { isPaddleOcrAvailable, paddleOcrExtract } = await import('../libs/paddleocr');
+          if (!(await isPaddleOcrAvailable())) {
+            throw new Error('PaddleOCR 未安装，请在设置中切换到"云 API"或安装 PaddleOCR');
           }
+          const texts = await Promise.all(images.map(img => paddleOcrExtract(img, { formula: true })));
+          text = texts.join('\n\n');
+        } else {
+          // Cloud vision API
+          const visionImages = images.map(b64 => ({ base64: b64, mimeType: 'image/png' as const }));
+          text = await callVisionLLM(
+            cfg, cfg.visionProviderId || 'glm', cfg.visionModel || 'glm-4.6v-flash',
+            VISION_PROMPT,
+            visionImages,
+            { maxTokens: 4096 }
+          );
         }
 
         const nextSet = new Set(visionExtracting);
@@ -748,13 +736,6 @@
       </div>
     </div>
 
-    <div class="toolbar-vision-toggle">
-      <label class="vision-checkbox-label" title="视觉提取（公式/扫描件自动识别），PDF 和图片导入时自动使用">
-        <input type="checkbox" bind:checked={visionEnabled} />
-        <span>📷 视觉提取</span>
-      </label>
-    </div>
-
     <div class="toolbar-spacer"></div>
 
     <!-- 搜索框 -->
@@ -1002,35 +983,6 @@
     height: 0;
     opacity: 0;
     pointer-events: none;
-  }
-
-  .toolbar-vision-toggle {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-  }
-
-  .vision-checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: var(--aio-fs-xs);
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--b3-theme-surface-lighter);
-    transition: background 0.12s;
-
-    &:hover {
-      background: var(--b3-theme-surface);
-    }
-
-    input[type="checkbox"] {
-      margin: 0;
-      cursor: pointer;
-    }
   }
 
   .toolbar-spacer {

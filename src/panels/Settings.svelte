@@ -19,7 +19,7 @@
   let ragModel = '';
   let visionProviderId = '';
   let visionModel = '';
-  let usePaddleOcrOffline = false;
+  let visionProviderType: 'off' | 'paddleocr' | 'cloud' = 'off';
   // ── 嵌入模型 ──
   let embeddingProvider: EmbeddingProviderType = 'builtin';
   let embeddingEndpoint = '';
@@ -50,7 +50,7 @@
     ragModel = config.ragModel || flashcardModel;
     visionProviderId = config.visionProviderId || '';
     visionModel = config.visionModel || '';
-    usePaddleOcrOffline = config.usePaddleOcrOffline === true;
+    visionProviderType = config.visionProviderType || 'off';
     embeddingProvider = config.ragEmbeddingProvider || 'builtin';
     embeddingEndpoint = config.ragEmbeddingConfig?.endpoint || '';
     embeddingApiKey = config.ragEmbeddingConfig?.apiKey || '';
@@ -72,7 +72,7 @@
       ragModel,
       visionProviderId,
       visionModel,
-      usePaddleOcrOffline,
+      visionProviderType,
       cardsPerDay: Number(cardsPerDay),
       scheduler,
       defaultDeck,
@@ -111,6 +111,9 @@
     visionProviderId = e.target.value;
     const models = getProviderModels(visionProviderId);
     visionModel = models[0] || '';
+  }
+  function onVisionProviderTypeChange(e: any) {
+    visionProviderType = e.target.value;
   }
 
   // ── 嵌入模型 ──────────────────────────────
@@ -432,24 +435,32 @@
           <div class="feature-block">
             <div class="feature-label">
               <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
-              <span>视觉模型</span>
+              <span>视觉提取</span>
             </div>
-            <div class="feature-row">
-              <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
-                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+            <div class="vision-provider-row">
+              <select class="b3-select" value={visionProviderType} on:change={onVisionProviderTypeChange} aria-label="视觉提取引擎">
+                <option value="off">关闭</option>
+                <option value="paddleocr">内置 PaddleOCR</option>
+                <option value="cloud">云 API</option>
               </select>
-              <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
-                {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
-                  <option value={visionModel}>{visionModel}</option>
-                {/if}
-              </select>
+              {#if visionProviderType === 'paddleocr'}
+                <p class="settings-hint" style="margin:0;">内置离线 OCR，无需配置 API。首次使用需下载模型（约 100MB）。</p>
+              {:else if visionProviderType === 'cloud'}
+                <div class="feature-row">
+                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
+                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+                  </select>
+                  <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
+                    {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
+                    {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
+                      <option value={visionModel}>{visionModel}</option>
+                    {/if}
+                  </select>
+                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === visionProviderId); if (p) editProvider(p); }}>获取模型</button>
+                </div>
+                <p class="settings-hint" style="margin:0;">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
+              {/if}
             </div>
-            <p class="settings-hint">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
-            <label class="b3-label" style="margin-top: 6px;">
-              <input type="checkbox" bind:checked={usePaddleOcrOffline} />
-              使用 PaddleOCR 离线提取（不需 API，首次运行自动下载 ~112MB 模型）
-            </label>
           </div>
         </div>
       </div>
@@ -795,24 +806,32 @@
           <div class="feature-block">
             <div class="feature-label">
               <svg width="18" height="18"><use xlink:href="#iconAioGraph"></use></svg>
-              <span>视觉模型</span>
+              <span>视觉提取</span>
             </div>
-            <div class="feature-row">
-              <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
-                {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+            <div class="vision-provider-row">
+              <select class="b3-select" value={visionProviderType} on:change={onVisionProviderTypeChange} aria-label="视觉提取引擎">
+                <option value="off">关闭</option>
+                <option value="paddleocr">内置 PaddleOCR</option>
+                <option value="cloud">云 API</option>
               </select>
-              <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
-                {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
-                {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
-                  <option value={visionModel}>{visionModel}</option>
-                {/if}
-              </select>
+              {#if visionProviderType === 'paddleocr'}
+                <p class="settings-hint" style="margin:0;">内置离线 OCR，无需配置 API。首次使用需下载模型（约 100MB）。</p>
+              {:else if visionProviderType === 'cloud'}
+                <div class="feature-row">
+                  <select class="b3-select" value={visionProviderId} on:change={onVisionProviderChange} aria-label="视觉模型 Provider">
+                    {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+                  </select>
+                  <select class="b3-select" bind:value={visionModel} aria-label="视觉模型">
+                    {#each getProviderModels(visionProviderId) as m}<option value={m}>{m}</option>{/each}
+                    {#if !getProviderModels(visionProviderId).includes(visionModel) && visionModel}
+                      <option value={visionModel}>{visionModel}</option>
+                    {/if}
+                  </select>
+                  <button class="b3-button b3-button--small" on:click={() => { const p = providers.find(x => x.id === visionProviderId); if (p) editProvider(p); }}>获取模型</button>
+                </div>
+                <p class="settings-hint" style="margin:0;">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
+              {/if}
             </div>
-            <p class="settings-hint">用于 PDF/图片的公式与文字提取（OpenAI 兼容格式）。推荐 GLM glm-4.6v-flash（免费）</p>
-            <label class="b3-label" style="margin-top: 6px;">
-              <input type="checkbox" bind:checked={usePaddleOcrOffline} />
-              使用 PaddleOCR 离线提取（不需 API，首次运行自动下载 ~112MB 模型）
-            </label>
           </div>
         </div>
       </div>
@@ -1113,6 +1132,9 @@
   .feature-row { display: flex; gap: 8px;
     .b3-select { flex: 1; }
     > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  }
+  .vision-provider-row { display: flex; flex-direction: column; gap: 6px;
+    .b3-select { width: 100%; }
   }
 
   .save-btn { margin-top: 8px; align-self: flex-start; }
