@@ -28,6 +28,8 @@
   let activeSessionId: string | null = null;
   let inputText = '';
   let sending = false;
+  let renamingId: string | null = null;
+  let renameInput = '';
   let msgListEl: HTMLElement;
 
   $: activeSession = activeSessionId ? conversationStore?.getById(activeSessionId) : null;
@@ -56,6 +58,29 @@
   function renameSession(id: string, title: string) {
     conversationStore.update(id, { title });
     sessions = conversationStore.getAll();
+  }
+
+  // ── Inline rename ───────────────────────────────────────
+
+  function startRename(session: ConversationSession) {
+    renamingId = session.id;
+    renameInput = session.title;
+  }
+
+  function commitRename(id: string) {
+    if (renameInput.trim()) {
+      conversationStore.rename(id, renameInput.trim());
+      sessions = conversationStore.getAll();
+    }
+    renamingId = null;
+  }
+
+  function handleRenameKeydown(e: KeyboardEvent, id: string) {
+    if (e.key === 'Enter') {
+      commitRename(id);
+    } else if (e.key === 'Escape') {
+      renamingId = null;
+    }
   }
 
   // ── Lifecycle ───────────────────────────────────────────
@@ -256,7 +281,19 @@
              tabindex="0"
              on:click={() => switchSession(session.id)}
              on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchSession(session.id); } }}>
-          <span class="session-title">{session.title}</span>
+          {#if renamingId === session.id}
+            <input class="session-rename-input"
+                   bind:value={renameInput}
+                   on:keydown={(e) => handleRenameKeydown(e, session.id)}
+                   on:blur={() => commitRename(session.id)}
+                   autofocus />
+          {:else}
+            <span class="session-title"
+                  on:dblclick={() => startRename(session)}
+                  title="双击重命名">
+              {session.title}
+            </span>
+          {/if}
           <span class="session-time">{new Date(session.updatedAt).toLocaleDateString()}</span>
           <button class="session-delete" on:click|stopPropagation={() => deleteSession(session.id)}>×</button>
         </div>
@@ -371,6 +408,16 @@
   .session-item.active { background: var(--b3-theme-primary-lightest); }
   .session-title { flex: 1; font-size: var(--aio-fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .session-time { font-size: 11px; color: var(--b3-theme-on-surface-light); }
+  .session-rename-input {
+    flex: 1;
+    border: 1px solid var(--b3-theme-primary);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: var(--aio-fs-sm);
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    outline: none;
+  }
   .session-delete { opacity: 0; background: none; border: none; cursor: pointer; color: var(--b3-theme-error); }
   .session-item:hover .session-delete { opacity: 1; }
   .session-empty { padding: 16px; text-align: center; opacity: 0.5; font-size: var(--aio-fs-sm); }

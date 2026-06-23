@@ -75,6 +75,15 @@ export class ConversationStore {
     }
   }
 
+  rename(id: string, title: string): void {
+    const session = this.sessions.find(s => s.id === id);
+    if (session) {
+      session.title = title.substring(0, 50);
+      session.updatedAt = Date.now();
+      this.save();
+    }
+  }
+
   delete(id: string): void {
     this.sessions = this.sessions.filter(s => s.id !== id);
     this.save();
