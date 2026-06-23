@@ -475,7 +475,7 @@
           if (!toolCalls || toolCalls.length === 0) {
             // NO tool calls → agent finished, use content as final answer
             shouldContinue = false;
-            finalContent = content || '';
+            finalContent = content ?? '';
 
             // Add assistant message to LLM history
             llmMessages.push({ role: 'assistant', content: finalContent });
@@ -559,25 +559,23 @@
           }
         }
 
-        // Save final assistant message with context documents
-        // Keep localDisplayMessages for rendering (includes intermediate tool calls)
-        // On session switch/reload, only the final answer will be shown
-        if (finalContent) {
-          await conversationStore.addMessage(activeSessionId, {
-            id: 'a' + Date.now(),
-            role: 'assistant',
-            content: finalContent,
-            contextDocuments,
-          });
-          // Add the persisted message to local display so tool calls remain visible
-          localDisplayMessages.push({
-            id: 'a-final-' + Date.now(),
-            role: 'assistant',
-            content: finalContent,
-            contextDocuments,
-          });
-          activeMessages = [...localDisplayMessages];
-        }
+        // Save final assistant message with context documents.
+        // Always persist even if content is empty (some APIs return content:null with finish_reason:stop),
+        // so the UI always shows the final answer slot.
+        await conversationStore.addMessage(activeSessionId, {
+          id: 'a' + Date.now(),
+          role: 'assistant',
+          content: finalContent,
+          contextDocuments,
+        });
+        // Add the persisted message to local display so tool calls remain visible
+        localDisplayMessages.push({
+          id: 'a-final-' + Date.now(),
+          role: 'assistant',
+          content: finalContent,
+          contextDocuments,
+        });
+        activeMessages = [...localDisplayMessages];
       } else {
         // ── Normal (non-agent) mode ────────────────────────────
         // RAG retrieval
@@ -949,18 +947,26 @@ ${ctx}`
       <div class="tool-dialog-header">
         <span class="tool-dialog-title">工具选择</span>
         <div class="tool-dialog-header-actions">
-          <button class="tool-header-btn" on:click={selectAllTools}>全选</button>
-          <button class="tool-header-btn tool-close-btn" on:click={() => showToolDialog = false}>关闭</button>
+          <button class="tool-header-btn" on:click={selectAllTools} title="刷新">
+            <svg class="tool-header-icon"><use xlink:href="#iconRefresh"></use></svg>
+          </button>
+          <button class="tool-header-btn tool-close-btn" on:click={() => showToolDialog = false} title="关闭">
+            <svg class="tool-header-icon"><use xlink:href="#iconClose"></use></svg>
+          </button>
         </div>
       </div>
       <div class="tool-info-banner">
-        选择AI可用工具会额外消耗token，请按需选择。
+        提示：每个工具都有复杂的参数和特定的使用场景。请按需启用，避免不必要地消耗 token。
       </div>
       <div class="tool-dialog-body">
         {#each Object.entries(TOOL_CATEGORIES) as [catKey, cat]}
           <div class="tool-category">
             <div class="tool-category-header">
-              <span class="tool-category-title">{cat.label}</span>
+              <span class="tool-category-title">
+                <svg class="cat-icon"><use xlink:href="#iconList"></use></svg>
+                {cat.label}
+                <span class="tool-category-count">({cat.tools.length})</span>
+              </span>
               <button class="tool-category-select-all"
                       on:click={() => toggleCategory(catKey, !isCategoryAllEnabled(catKey))}>
                 {isCategoryAllEnabled(catKey) ? '取消全选' : '全选'}
@@ -1011,7 +1017,6 @@ ${ctx}`
         {/each}
       </div>
       <div class="tool-dialog-footer">
-        <span class="tool-footer-hint">可为每个工具单独设置是否自动批准</span>
         <span class="tool-footer-count">已选择: {calcSelectedCount()}/{calcTotalCount()}</span>
       </div>
     </div>
@@ -1350,9 +1355,11 @@ ${ctx}`
     color: var(--b3-theme-primary);
     padding: 4px 8px;
     border-radius: 4px;
+    display: flex; align-items: center;
   }
   .tool-header-btn:hover { background: var(--b3-theme-surface-lighter); }
   .tool-close-btn { color: var(--b3-theme-on-surface); }
+  .tool-header-icon { width: 16px; height: 16px; }
 
   /* Info banner */
   .tool-info-banner {
@@ -1383,6 +1390,13 @@ ${ctx}`
     font-weight: 500;
     font-size: var(--aio-fs-sm);
     color: var(--b3-theme-on-surface);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .tool-category-title .cat-icon { width: 14px; height: 14px; flex-shrink: 0; }
+  .tool-category-count {
+    font-weight: 400;
+    color: var(--b3-theme-on-surface-light);
+    font-size: 11px;
   }
   .tool-category-select-all {
     background: none; border: none; cursor: pointer;

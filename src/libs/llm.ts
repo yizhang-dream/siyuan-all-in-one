@@ -546,7 +546,7 @@ export async function callLLM(
     messages: ChatMessage[],
     config: LLMConfig,
     options: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
-): Promise<{ content: string | null; toolCalls?: ToolCall[]; finishReason: string }>;
+): Promise<{ content: string; toolCalls?: ToolCall[]; finishReason: string }>;
 
 export async function callLLM(
     messages: ChatMessage[],
@@ -641,13 +641,24 @@ function parseLLMResponse(
     json: any,
     providerId: string,
     tools?: ToolDefinition[]
-): string | { content: string | null; toolCalls?: ToolCall[]; finishReason: string } {
+): string | { content: string; toolCalls?: ToolCall[]; finishReason: string } {
+    // Helper: extract content string, using '' for null/undefined
+    function safeContent(raw: any): string {
+        if (typeof raw === 'string') return raw;
+        if (raw === null || raw === undefined) return '';
+        return String(raw);
+    }
+
     if (providerId === 'gemini') {
-        // Gemini doesn't support tool_calls in the same way; fall back to content extraction
+        if (tools) {
+            return { content: extractLLMContent(json, providerId), toolCalls: undefined, finishReason: 'stop' };
+        }
         return extractLLMContent(json, providerId);
     }
     if (providerId === 'anthropic') {
-        // Anthropic doesn't support tool_calls in the same way; fall back to content extraction
+        if (tools) {
+            return { content: extractLLMContent(json, providerId), toolCalls: undefined, finishReason: 'stop' };
+        }
         return extractLLMContent(json, providerId);
     }
 
@@ -657,7 +668,7 @@ function parseLLMResponse(
     }
 
     const message = choice.message || {};
-    const content: string | null = message.content || null;
+    const content: string = safeContent(message.content);
     const rawToolCalls = message.tool_calls;
     const finishReason: string = choice.finish_reason || 'stop';
 
@@ -674,12 +685,10 @@ function parseLLMResponse(
     }
 
     if (tools && finishReason === 'tool_calls') {
-        // finish_reason indicates tool_calls but we couldn't parse them
-        // Return empty toolCalls rather than throwing — let the caller handle it
         return { content, toolCalls: undefined, finishReason };
     }
 
-    // When tools are provided, always return object format
+    // When tools are provided, always return object format (content is always a string)
     if (tools) {
         return { content, toolCalls: undefined, finishReason };
     }
