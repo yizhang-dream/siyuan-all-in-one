@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { showMessage } from 'siyuan';
   // Use SiYuan's built-in Lute renderer (window.Lute) — no npm dependency needed
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
@@ -118,6 +118,10 @@
     activeSessionId = id;
     activeSession = conversationStore.getById(id);
     activeMessages = await conversationStore.getMessages(id);
+    await tick();
+    if (msgListEl) {
+      renderMath(msgListEl);
+    }
     if (activeMessages.length > 0) {
       const lastMsg = activeMessages[activeMessages.length - 1];
       if (lastMsg?.role === 'user') sending = true;
@@ -258,6 +262,10 @@
     await conversationStore.addMessage(activeSessionId, userMsg);
     activeSession = conversationStore.getById(activeSessionId);
     activeMessages = await conversationStore.getMessages(activeSessionId);
+    await tick();
+    if (msgListEl) {
+      renderMath(msgListEl);
+    }
     inputText = '';
     sending = true;
     scrollToBottom(true);
@@ -403,6 +411,11 @@ ${ctx}`
       });
       activeSession = conversationStore.getById(activeSessionId);
       activeMessages = await conversationStore.getMessages(activeSessionId);
+      await tick();
+      if (msgListEl) {
+        renderMath(msgListEl);
+        scrollToBottom(true);
+      }
 
       sessions = conversationStore.getAll();
     } catch (e: any) {
@@ -413,6 +426,11 @@ ${ctx}`
       });
       activeSession = conversationStore.getById(activeSessionId);
       activeMessages = await conversationStore.getMessages(activeSessionId);
+      await tick();
+      if (msgListEl) {
+        renderMath(msgListEl);
+        scrollToBottom(true);
+      }
       sessions = conversationStore.getAll();
     }
 
@@ -463,12 +481,6 @@ ${ctx}`
     }
   }
 
-  afterUpdate(() => {
-    if (msgListEl) {
-      renderMath(msgListEl);
-      scrollToBottom();
-    }
-  });
 </script>
 
 <div class="rag-chat-layout">
