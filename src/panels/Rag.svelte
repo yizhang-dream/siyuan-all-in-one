@@ -478,20 +478,40 @@
         agentAbortController = new AbortController();
         const enabledTools = getEnabledTools(agentToolsConfig.selectedTools);
         let shouldContinue = true;
+        const maxIterations = 10;
+        let iterationCount = 0;
 
         // Add system message
         llmMessages.unshift({ role: 'system', content: systemPrompt });
 
-        for (; shouldContinue; ) {
+        for (; shouldContinue && iterationCount < maxIterations; iterationCount++) {
           if (agentAbortController?.signal.aborted) break;
           if (requestId !== activeRequestId) break;
+
+          // Create streaming display message — shows partial content in real time
+          const streamingMsg: ChatMessage = {
+            id: 'a' + Date.now(),
+            role: 'assistant',
+            content: '',
+          };
+          localDisplayMessages.push(streamingMsg);
+          activeMessages = [...localDisplayMessages];
+          await tick();
+          scrollToBottom(true);
 
           const response = await callLLM(llmMessages, llmConfig, {
             tools: enabledTools,
             abortSignal: agentAbortController!.signal,
+            onChunk: (delta: string) => {
+              streamingMsg.content += delta;
+              activeMessages = [...localDisplayMessages];
+            },
           });
 
           const { content, toolCalls } = response;
+
+          // Streaming finished — finalize display content
+          streamingMsg.content = content ?? '';
 
           if (!toolCalls || toolCalls.length === 0) {
             // NO tool calls → agent finished, use content as final answer
@@ -511,19 +531,13 @@
             tool_calls: toolCalls.map(tc => ({ ...tc, type: 'function' as const })),
           });
 
-          // Build display message for tool calls
+          // Build display tool calls and attach to existing streaming message
           const displayToolCalls = toolCalls.map(tc => ({
             ...tc,
             _expanded: false,
             _result: undefined as string | undefined,
           }));
-
-          localDisplayMessages.push({
-            id: 'a' + Date.now(),
-            role: 'assistant',
-            content: content || '',
-            tool_calls: displayToolCalls as any,
-          });
+          streamingMsg.tool_calls = displayToolCalls as any;
           activeMessages = [...localDisplayMessages];
           await tick();
           scrollToBottom(true);
@@ -578,6 +592,15 @@
             await tick();
             scrollToBottom(true);
           }
+        }
+
+        // Max iterations guard: if we exited because the LLM kept calling tools
+        if (iterationCount >= maxIterations && shouldContinue) {
+          const warningMsg = '已达到最大工具调用次数 (10)，已终止';
+          finalContent = warningMsg;
+          shouldContinue = false;
+          llmMessages.push({ role: 'assistant', content: warningMsg });
+          // The existing final-save block below will persist this to the store
         }
 
         // Save final assistant message with context documents.

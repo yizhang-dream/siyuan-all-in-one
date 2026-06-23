@@ -258,6 +258,13 @@ export interface LLMRequest {
     body: Record<string, any>;
 }
 
+export interface CallLLMOptions {
+    tools?: ToolDefinition[];
+    abortSignal?: AbortSignal;
+    onChunk?: (text: string) => void;
+    onToolCallChunk?: (toolCall: ToolCall) => void;
+}
+
 /**
  * 根据 provider 构造请求体和认证头。
  * 外部继续传统一的 ChatMessage，差异集中在这里，避免 UI/流水线感知厂商协议。
@@ -545,13 +552,13 @@ export async function callLLM(
 export async function callLLM(
     messages: ChatMessage[],
     config: LLMConfig,
-    options: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
+    options: CallLLMOptions
 ): Promise<{ content: string; toolCalls?: ToolCall[]; finishReason: string }>;
 
 export async function callLLM(
     messages: ChatMessage[],
     config?: LLMConfig,
-    options?: { tools?: ToolDefinition[]; abortSignal?: AbortSignal }
+    options?: CallLLMOptions
 ): Promise<any> {
     // 安全合并：过滤掉空值，防止用户留空的字段（如 model=''）覆盖默认值
     const effectiveConfig: Record<string, any> = {};
@@ -593,6 +600,12 @@ export async function callLLM(
                 body.tool_choice = 'auto';
             }
 
+            // Enable SSE streaming if callbacks are provided
+            const useStreaming = !!(options?.onChunk || options?.onToolCallChunk);
+            if (useStreaming) {
+                body.stream = true;
+            }
+
             const resp = await fetch(cfg.endpoint, {
                 method: 'POST',
                 headers: request.headers,
@@ -603,6 +616,9 @@ export async function callLLM(
             clearTimeout(timeoutId);
 
             if (resp.ok) {
+                if (useStreaming && resp.body) {
+                    return await parseStreamingResponse(resp, cfg.providerId, options!.tools, options!.onChunk, options!.onToolCallChunk);
+                }
                 const json = await resp.json();
                 return parseLLMResponse(json, cfg.providerId, options?.tools);
             }
@@ -696,6 +712,116 @@ function parseLLMResponse(
     // No tools — return content string for backward compatibility
     if (!content) {
         throw new LLMError(`API 响应缺少可解析的文本内容（provider: ${providerId}）: ${JSON.stringify(json).slice(0, 500)}`, 0);
+    }
+    return content;
+}
+
+/**
+ * Parse SSE streaming response from OpenAI-compatible API.
+ * Accumulates text deltas and tool call deltas, then returns the same format as parseLLMResponse.
+ */
+async function parseStreamingResponse(
+    resp: Response,
+    providerId: string,
+    tools?: ToolDefinition[],
+    onChunk?: (text: string) => void,
+    onToolCallChunk?: (toolCall: ToolCall) => void,
+): Promise<string | { content: string; toolCalls?: ToolCall[]; finishReason: string }> {
+    const reader = resp.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accumulatedContent = '';
+    const toolCallAccumulators: Map<number, any> = new Map();
+    let finishReason = 'stop';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const dataStr = trimmed.slice(6).trim();
+            if (dataStr === '[DONE]') continue;
+
+            try {
+                const parsed = JSON.parse(dataStr);
+                const choice = parsed.choices?.[0];
+                if (!choice) continue;
+
+                if (choice.finish_reason) {
+                    finishReason = choice.finish_reason;
+                }
+
+                const delta = choice.delta || {};
+
+                // Text delta
+                if (delta.content) {
+                    accumulatedContent += delta.content;
+                    onChunk?.(delta.content);
+                }
+
+                // Tool call delta — accumulate by index
+                if (delta.tool_calls) {
+                    for (const tc of delta.tool_calls) {
+                        const idx = tc.index;
+                        if (!toolCallAccumulators.has(idx)) {
+                            toolCallAccumulators.set(idx, {
+                                id: tc.id || '',
+                                type: 'function' as const,
+                                function: {
+                                    name: tc.function?.name || '',
+                                    arguments: tc.function?.arguments || '',
+                                },
+                            });
+                        } else {
+                            const existing = toolCallAccumulators.get(idx);
+                            if (tc.function) {
+                                if (tc.function.name) existing.function.name = tc.function.name;
+                                if (tc.function.arguments) existing.function.arguments += tc.function.arguments;
+                            }
+                            if (tc.id) existing.id = tc.id;
+                        }
+                    }
+                }
+            } catch {
+                // Skip unparseable chunks
+            }
+        }
+    }
+
+    // Build final tool calls from accumulators
+    const toolCalls: ToolCall[] | undefined = toolCallAccumulators.size > 0
+        ? Array.from(toolCallAccumulators.values()).map(tc => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: {
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+            },
+        }))
+        : undefined;
+
+    // Notify complete tool calls
+    if (toolCalls && onToolCallChunk) {
+        for (const tc of toolCalls) {
+            onToolCallChunk(tc);
+        }
+    }
+
+    const content = accumulatedContent;
+
+    if (tools) {
+        return { content: content || '', toolCalls, finishReason };
+    }
+
+    // No tools — return content string for backward compatibility
+    if (!content) {
+        throw new LLMError(`API 流式响应未返回文本内容（provider: ${providerId}）`, 0);
     }
     return content;
 }
