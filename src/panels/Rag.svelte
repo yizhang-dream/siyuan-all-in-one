@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, afterUpdate } from 'svelte';
+  import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
   import { showMessage } from 'siyuan';
   // Use SiYuan's built-in Lute renderer (window.Lute) — no npm dependency needed
   import { VectorStore, getRagEmbedderProvider, resetEmbeddingProvider, ragQuery, ragContext, formatRagContext, buildRagConceptRequest } from '../libs/rag';
@@ -57,6 +57,21 @@
   let renamingId: string | null = null;
   let renameInput = '';
   let msgListEl: HTMLElement;
+  let autoScroll = true;
+
+  function handleMsgScroll() {
+    if (!msgListEl) return;
+    const threshold = 100;
+    autoScroll = (msgListEl.scrollHeight - msgListEl.scrollTop - msgListEl.clientHeight) < threshold;
+  }
+
+  function scrollToBottom(force = false) {
+    if (!msgListEl) return;
+    tick().then(() => {
+      if (force || autoScroll) msgListEl.scrollTop = msgListEl.scrollHeight;
+    });
+  }
+
   let activeSession: SessionIndex | null = null;
 
   // Agent mode toggle
@@ -83,6 +98,7 @@
 
   onDestroy(() => {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    msgListEl?.removeEventListener('scroll', handleMsgScroll);
   });
 
   // ── Session CRUD ────────────────────────────────────────
@@ -186,6 +202,8 @@
     } catch {
       // silent
     }
+
+    msgListEl?.addEventListener('scroll', handleMsgScroll);
   });
 
   async function initEmbedder() {
@@ -215,6 +233,7 @@
     activeMessages = await conversationStore.getMessages(activeSessionId);
     inputText = '';
     sending = true;
+    scrollToBottom(true);
     sessions = conversationStore.getAll();
 
     try {
@@ -418,7 +437,10 @@ ${ctx}`
   }
 
   afterUpdate(() => {
-    if (msgListEl) renderMath(msgListEl);
+    if (msgListEl) {
+      renderMath(msgListEl);
+      scrollToBottom();
+    }
   });
 </script>
 
@@ -627,16 +649,72 @@ ${ctx}`
     display: flex; flex-direction: column; gap: 10px;
   }
   .rag-msg-empty { display: flex; align-items: center; justify-content: center; flex: 1; opacity: 0.4; font-size: var(--aio-fs-sm); }
+  .chat-messages::-webkit-scrollbar { width: 8px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--b3-theme-on-surface-light); border-radius: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb:hover { background: var(--b3-theme-on-surface); }
 
-  .chat-msg { padding: 8px 12px; border-radius: 6px; max-width: 85%; overflow: hidden; }
-  .chat-msg.user { align-self: flex-end; background: var(--b3-theme-primary-lightest); }
-  .chat-msg.assistant { align-self: flex-start; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); }
+  .chat-msg { padding: 8px 12px; border-radius: 6px; overflow: hidden; }
+  .chat-msg.user { align-self: flex-end; background: var(--b3-theme-primary-lightest); max-width: 80%; }
+  .chat-msg.assistant { align-self: flex-start; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); max-width: 92%; }
   .msg-role { font-size: var(--aio-fs-xs); font-weight: 600; margin-bottom: 4px; opacity: 0.6; }
   .msg-content { font-size: var(--aio-fs-base); line-height: 1.6; word-break: break-word; overflow: hidden; }
   .msg-content :global(p) { margin: 0.4em 0; }
   .msg-content :global(ol), .msg-content :global(ul) { margin: 0.4em 0; padding-left: 1.8em; }
   .msg-content :global(li) { margin: 0.2em 0; }
-  .msg-content.thinking { opacity: 0.5; font-style: italic; }
+  .msg-content :global(pre) {
+    position: relative;
+    margin: 8px 0;
+    padding: 0 !important;
+    border-radius: 6px;
+    background: var(--b3-theme-surface);
+    border: 1px solid var(--b3-border-color);
+    box-shadow: var(--b3-tooltips-shadow);
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .msg-content :global(pre) :global(code) {
+    display: block;
+    padding: 12px !important;
+    margin: 0;
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+    font-family: var(--b3-font-family-code);
+    font-size: 0.9em;
+    line-height: 1.5;
+    background: transparent !important;
+  }
+  .msg-content :global(pre) :global(code)::-webkit-scrollbar {
+    width: 8px; height: 8px;
+  }
+  .msg-content :global(pre) :global(code)::-webkit-scrollbar-track {
+    background: var(--b3-theme-background); border-radius: 4px;
+  }
+  .msg-content :global(pre) :global(code)::-webkit-scrollbar-thumb {
+    background: var(--b3-scroll-color); border-radius: 4px;
+  }
+  .msg-content :global(code) {
+    font-family: var(--b3-font-family-code);
+    background: var(--b3-theme-surface-light);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  @keyframes aio-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  .msg-content.thinking {
+    display: flex; align-items: center; gap: 8px; opacity: 0.5;
+  }
+  .msg-content.thinking::before {
+    content: '';
+    display: inline-block; width: 14px; height: 14px; flex-shrink: 0;
+    border: 2px solid var(--b3-theme-on-surface-light);
+    border-top-color: var(--b3-theme-primary);
+    border-radius: 50%;
+    animation: aio-spin 1s linear infinite;
+  }
 
   .msg-sources { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--b3-theme-surface-lighter); font-size: var(--aio-fs-xs); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .source-chip { padding: 1px 6px; border-radius: 3px; background: var(--b3-theme-surface-lighter); cursor: default; }
@@ -686,5 +764,10 @@ ${ctx}`
     border: 1px solid var(--b3-border-color); border-radius: 6px;
     padding: 8px 12px; font-size: var(--aio-fs-base);
     background: var(--b3-theme-surface); color: var(--b3-theme-on-surface);
+  }
+  .chat-input-bar button {
+    transition: all 0.2s ease;
+    &:hover:not(:disabled) { transform: scale(1.05); }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
   }
 </style>
