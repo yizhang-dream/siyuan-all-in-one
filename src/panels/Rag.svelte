@@ -216,10 +216,14 @@
       activeMessages = [];
     }
 
-    // Recover pending state — if last message is from user, show "thinking..."
+    // Recover pending state — if last message is from user AND session is recent, show "thinking..."
     if (activeMessages.length > 0) {
       const lastMsg = activeMessages[activeMessages.length - 1];
-      if (lastMsg?.role === 'user') sending = true;
+      const now = Date.now();
+      const sessionAge = activeSession?.updatedAt ? now - activeSession.updatedAt : Infinity;
+      if (lastMsg?.role === 'user' && sessionAge < 120_000) {  // < 2 minutes
+        sending = true;
+      }
     }
 
     // Only auto-init builtin embedder (deferred, doesn't await)
