@@ -1,4 +1,5 @@
 import { readSiyuanDocsAsPipelineSources, type DocItem } from '../sources';
+import type { SourceStore } from '../source-store';
 import type { PipelineSource } from '../ai/pipeline';
 import { localTextFilesToPipelineSources, type LocalTextFileInput } from './local-file-adapters';
 import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
@@ -29,6 +30,9 @@ export interface SourceHubRequest {
     // Options
     maxCharsPerSiyuanDoc?: number;
     maxCharsPerLocalFileChunk?: number;
+    // SourceStore: read pre-parsed content instead of re-parsing
+    sourceStore?: SourceStore;
+    selectedSourceIds?: string[];
 }
 
 export interface SourceHubResult {
@@ -60,6 +64,24 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
         sources.push(...await readSiyuanDocsAsPipelineSources(siyuanDocs, {
             maxCharsPerDoc: request.maxCharsPerSiyuanDoc || 8000,
         }));
+    }
+
+    // SourceStore: read pre-parsed content (avoids re-parsing files already
+    // imported through SourceLibrary → sourceStore).
+    if (request.mode === 'mixed' && request.selectedSourceIds?.length && request.sourceStore) {
+        for (const id of request.selectedSourceIds) {
+            const record = request.sourceStore.getById(id);
+            if (record?.content) {
+                sources.push({
+                    id: record.id,
+                    type: 'source' as const,
+                    sourceId: record.id,
+                    chunkId: record.id,
+                    text: record.content,
+                    quote: record.content.slice(0, 500),
+                });
+            }
+        }
     }
 
     if (request.mode === 'mixed' && localFiles.length > 0) {

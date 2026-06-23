@@ -2,6 +2,7 @@
   import { afterUpdate } from 'svelte';
   import { showMessage } from 'siyuan';
   import { confirmPipelineResult, runPromptPipeline, type PipelineSource, type PipelineStep } from '../libs/ai';
+  import { collectPipelineSources } from '../libs/sources/source-hub';
   import { buildConfirmationOptions, createCandidateSelection, trimSelectionForAcceptedConcepts } from '../libs/ai/selection';
   import { syncConceptMindmap } from '../libs/concept-mindmap-sync';
   import { resolveLLMConfig } from '../libs/llm';
@@ -173,32 +174,15 @@
     }, 0);
   }
 
-  function buildPipelineSources(cfg: any): PipelineSource[] {
-    const sources: PipelineSource[] = [];
-
-    // Read from SourceStore if sources were pre-selected
-    if (appStore?.selectedSourceIds?.length && sourceStore) {
-      for (const id of appStore.selectedSourceIds) {
-        const record = sourceStore.getById(id);
-        if (record?.content) {
-          sources.push({
-            id: record.id,
-            text: record.content,
-            type: 'source',
-            sourceId: record.id,
-          });
-        }
-      }
-      appStore.selectedSourceIds = [];
-    }
-
-    // Keep manual text source mode if user typed text
-    const text = sourceText.trim();
-    if (text) {
-      sources.push({ id: 'manual', text, type: 'manual' });
-    }
-
-    return sources;
+  async function buildPipelineSources(): Promise<PipelineSource[]> {
+    const result = await collectPipelineSources({
+      mode: 'mixed',
+      sourceStore,
+      selectedSourceIds: appStore?.selectedSourceIds || [],
+      manualText: sourceText,
+    });
+    appStore.selectedSourceIds = [];
+    return result.sources;
   }
 
   // Phase 4: Removed independent source selection (OpenNotebook, SiYuan docs, local files, URLs, PDFs)
