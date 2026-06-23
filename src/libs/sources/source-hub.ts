@@ -1,21 +1,16 @@
-import { fetchOpenNotebookPipelineSources } from '../ai/source-adapters';
-import type { PipelineSource } from '../ai/pipeline';
 import { readSiyuanDocsAsPipelineSources, type DocItem } from '../sources';
+import type { PipelineSource } from '../ai/pipeline';
 import { localTextFilesToPipelineSources, type LocalTextFileInput } from './local-file-adapters';
 import { textToUnstructuredPipelineSources } from './unstructured-partitioner';
 import { fetchWebPage, webPageToPipelineSources } from './web-fetcher';
 import { extractPdfText, pdfToPipelineSources } from './pdf-extractor';
+import type { RagSearchResult } from '../rag';
 
-export type SourceHubMode = 'manual' | 'opennotebook' | 'mixed';
+export type SourceHubMode = 'manual' | 'mixed';
 
 export interface SourceHubRequest {
     mode: SourceHubMode;
     manualText?: string;
-    // OpenNotebook (optional)
-    notebookEndpoint?: string;
-    notebookQuery?: string;
-    notebookSourceIds?: string[];
-    notebookNoteIds?: string[];
     // SiYuan + local files
     siyuanDocs?: DocItem[];
     localFiles?: LocalTextFileInput[];
@@ -26,9 +21,12 @@ export interface SourceHubRequest {
     urls?: string[];
     // Built-in: PDF files
     pdfBuffers?: Array<{ buffer: ArrayBuffer; fileName: string }>;
+    // Local RAG
+    ragQuestion?: string;
+    ragStore?: any;
+    ragEmbedder?: any;
+    ragTopK?: number;
     // Options
-    openNotebookLimit?: number;
-    openNotebookSearchType?: 'text' | 'vector';
     maxCharsPerSiyuanDoc?: number;
     maxCharsPerLocalFileChunk?: number;
 }
@@ -41,10 +39,10 @@ export interface SourceHubResult {
 export interface SourceHubStats {
     manual: number;
     file: number;
-    openNotebook: number;
     siyuan: number;
     url: number;
     pdf: number;
+    rag: number;
     totalBeforeDedupe: number;
     total: number;
 }
@@ -52,9 +50,6 @@ export interface SourceHubStats {
 export async function collectPipelineSources(request: SourceHubRequest): Promise<SourceHubResult> {
     const sources: PipelineSource[] = [];
     const manualText = String(request.manualText || '').trim();
-    const notebookQuery = String(request.notebookQuery || '').trim();
-    const notebookSourceIds = uniqueStrings(request.notebookSourceIds || []);
-    const notebookNoteIds = uniqueStrings(request.notebookNoteIds || []);
     const siyuanDocs = request.siyuanDocs || [];
     const localFiles = request.localFiles || [];
     const urls = uniqueStrings(request.urls || []);
@@ -62,22 +57,6 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
 
     if ((request.mode === 'manual' || request.mode === 'mixed') && manualText) {
         sources.push(buildManualPipelineSource(manualText));
-    }
-
-    // OpenNotebook (optional, only when endpoint configured)
-    if (
-        (request.mode === 'opennotebook' || request.mode === 'mixed') &&
-        request.notebookEndpoint &&
-        (notebookQuery || notebookSourceIds.length > 0 || notebookNoteIds.length > 0)
-    ) {
-        sources.push(...await fetchOpenNotebookPipelineSources({
-            endpoint: request.notebookEndpoint,
-            query: notebookQuery,
-            sourceIds: notebookSourceIds,
-            noteIds: notebookNoteIds,
-            limit: request.openNotebookLimit || 12,
-            searchType: request.openNotebookSearchType || 'text',
-        }));
     }
 
     if (request.mode === 'mixed' && siyuanDocs.length > 0) {
@@ -117,6 +96,16 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
         }
     }
 
+    // Local RAG: semantic search over ingested documents
+    const ragQuestion = String(request.ragQuestion || '').trim();
+    if (request.mode === 'mixed' && ragQuestion && request.ragStore && request.ragEmbedder) {
+        const { ragQuery } = await import('../rag');
+        const ragResults = await ragQuery(ragQuestion, request.ragStore, request.ragEmbedder, {
+            topK: request.ragTopK || 5,
+        });
+        sources.push(...ragResultsToPipelineSources(ragResults));
+    }
+
     // Unstructured partitioner (explicitly provided text)
     const unstructuredText = String(request.unstructuredText || '').trim();
     if (request.mode === 'mixed' && unstructuredText) {
@@ -134,10 +123,10 @@ export async function collectPipelineSources(request: SourceHubRequest): Promise
         stats: {
             manual: deduped.filter((s) => s.type === 'manual').length,
             file: deduped.filter((s) => s.type === 'file').length,
-            openNotebook: deduped.filter((s) => s.type === 'opennotebook').length,
             siyuan: deduped.filter((s) => s.type === 'siyuan').length,
             url: deduped.filter((s) => s.type === 'url').length,
             pdf: deduped.filter((s) => s.type === 'pdf').length,
+            rag: deduped.filter((s) => s.type === 'rag').length,
             totalBeforeDedupe,
             total: deduped.length,
         },
@@ -174,4 +163,20 @@ export function dedupePipelineSources(sources: PipelineSource[]): PipelineSource
 
 function uniqueStrings(values: string[]): string[] {
     return Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
+}
+
+function ragResultsToPipelineSources(results: RagSearchResult[]): PipelineSource[] {
+    return results.map((result) => {
+        const chunk = result.chunk;
+        return {
+            id: `rag-${chunk.id}`,
+            type: 'rag' as const,
+            sourceId: chunk.sourceId,
+            chunkId: chunk.id,
+            quote: chunk.text.slice(0, 500),
+            text: chunk.text,
+            page: chunk.metadata.pageNumber,
+            url: chunk.metadata.url,
+        };
+    });
 }

@@ -9,7 +9,7 @@
 
 /** 来源引用——每个概念、关系、卡片都可追溯到原始材料 */
 export interface SourceRef {
-    type: 'opennotebook' | 'siyuan' | 'manual' | 'file' | 'pdf' | 'url';
+    type: 'opennotebook' | 'siyuan' | 'manual' | 'file' | 'pdf' | 'url' | 'rag';
     sourceId?: string;
     blockId?: string;
     chunkId?: string;
@@ -51,6 +51,8 @@ export interface Relation {
     type: RelationType;
     sourceRefs: SourceRef[];
     confidence?: number;
+    created: number;
+    modified: number;
 }
 
 /** AI 流水线产出的概念候选（待确认） */

@@ -8,7 +8,7 @@
 import type { CardType, SourceRef } from './types/concept';
 
 /** 卡片状态 */
-export type CardStatus = 'new' | 'learning' | 'review' | 'buried' | 'drill';
+export type CardStatus = 'new' | 'learning' | 'review' | 'buried' | 'drill' | 'relearning';
 export type ReviewScheduler = 'sm2' | 'fsrs';
 
 export interface FSRSCardState {
@@ -130,8 +130,6 @@ export interface AppConfig {
     mindmapProviderId: string;
     /** 思维导图功能使用的模型名 */
     mindmapModel: string;
-    /** Open Notebook 搜索端点（独立于 Provider 体系） */
-    notebookEndpoint: string;
     /** 每日新卡片上限 */
     cardsPerDay: number;
     /** 复习调度算法：SM-2 兼容默认，FSRS 可选。 */
@@ -140,4 +138,19 @@ export interface AppConfig {
     defaultDeck: string;
     /** 用户自定义 agent 列表 */
     agents: AgentConfig[];
+    // ── Local RAG ──────────────────────────
+    /** 启用本地 RAG 语义搜索 */
+    ragEnabled: boolean;
+    /** RAG 对话使用的 Provider id */
+    ragProviderId: string;
+    /** RAG 对话使用的模型名 */
+    ragModel: string;
+    /** RAG 分块大小（估算 token 数） */
+    ragChunkSize: number;
+    /** RAG 分块重叠比例 (0-1) */
+    ragChunkOverlap: number;
+    /** RAG 检索返回数 */
+    ragTopK: number;
+    /** RAG 嵌入模型名（HuggingFace） */
+    ragEmbeddingModel: string;
 }

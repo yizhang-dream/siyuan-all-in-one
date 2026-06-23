@@ -6,19 +6,18 @@
   import Mindmap from './panels/Mindmap.svelte';
   import Stats from './panels/Stats.svelte';
   import Import from './panels/Import.svelte';
-  import Notebook from './panels/Notebook.svelte';
-  import Models from './panels/Models.svelte';
   import Concepts from './panels/Concepts.svelte';
-  import Diagnostics from './panels/Diagnostics.svelte';
+  import Rag from './panels/Rag.svelte';
   import { getT } from './libs/i18n';
   import { activateSourceRef, getSourceAction } from './libs/source-actions';
-  import type { NotebookConceptRequest } from './libs/notebook-bridge';
+  import type { RagConceptRequest } from './libs/rag';
   import type { SourceRef } from './libs/types/concept';
 
   export let plugin: any;
   export let cardStore: any;
   export let mindmapStore: any;
   export let conceptStore: any;
+  export let vectorStore: any;
   export let config: any;
 
   const t = getT(plugin);
@@ -26,10 +25,11 @@
   let activeTab = 'review';
   let jumpTarget: { mindmapId?: string } = {};
   let notebookTarget: Partial<SourceRef> | null = null;
-  let conceptSourceTarget: NotebookConceptRequest | null = null;
+  let conceptSourceTarget: any = null;
   let conceptSourceTargetSeq = 0;
   let reviewQueue: { ids: string[]; title: string; key: number } | null = null;
   let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
+  let ragTarget: RagConceptRequest | null = null;
 
   /** 跳转到思维导图面板并加载指定导图 */
   function jumpToMindmap(mindmapId: string) {
@@ -38,19 +38,7 @@
   }
 
   async function openSourceRef(ref: Partial<SourceRef>) {
-    const action = getSourceAction(ref);
-    if (action.kind === 'open-opennotebook') {
-      notebookTarget = { ...ref };
-      activeTab = 'notebook';
-      return true;
-    }
     return activateSourceRef(ref, plugin?.app);
-  }
-
-  function openConceptsFromNotebook(request: NotebookConceptRequest) {
-    conceptSourceTargetSeq += 1;
-    conceptSourceTarget = { ...request, key: `${request.key}#${conceptSourceTargetSeq}` };
-    activeTab = 'concepts';
   }
 
   function openConceptsFromMindmapGaps(gapSourceText: string, label: string) {
@@ -60,17 +48,21 @@
     activeTab = 'concepts';
   }
 
+  function openConceptsFromRag(request: RagConceptRequest) {
+    ragTarget = request;
+    conceptSourceTarget = null;
+    activeTab = 'concepts';
+  }
+
   const tabs = [
-    { id: 'review', label: '复习', icon: 'iconRefresh' },
-    { id: 'browse', label: '浏览', icon: 'iconList' },
-    { id: 'generate', label: '制卡', icon: 'iconAdd' },
-    { id: 'import', label: '导入', icon: 'iconDownload' },
-    { id: 'notebook', label: '问答', icon: 'iconBookmark' },
-    { id: 'models', label: '模型', icon: 'iconSettings' },
-    { id: 'concepts', label: '图谱生成', icon: 'iconGraph' },
-    { id: 'mindmap', label: '导图', icon: 'iconGraph' },
-    { id: 'diagnostics', label: '诊断', icon: 'iconInfo' },
-    { id: 'stats', label: '统计', icon: 'iconBarChart' },
+    { id: 'review', label: '复习', icon: 'iconAioRiffCard' },
+    { id: 'browse', label: '浏览', icon: 'iconAioList' },
+    { id: 'generate', label: '制卡', icon: 'iconAioSparkles' },
+    { id: 'import', label: '导入', icon: 'iconAioUpload' },
+    { id: 'rag', label: 'RAG', icon: 'iconAioSearch' },
+    { id: 'concepts', label: '图谱生成', icon: 'iconAioGraph' },
+    { id: 'mindmap', label: '导图', icon: 'iconAioListTree' },
+    { id: 'stats', label: '统计', icon: 'iconAioBoard' },
   ];
 
   function switchTab(id: string) {
@@ -94,14 +86,6 @@
 <div class="all-in-one-app">
   <!-- 左侧导航：纯图标按钮 + 悬停 tooltip（仿 SiYuan 侧栏） -->
   <nav class="aio-nav">
-    <button
-      class="aio-nav-item aio-nav-logo"
-      title={t('pluginName') || '知识闪卡'}
-      on:click={() => switchTab('review')}
-    >
-      <svg><use xlink:href="#iconList"></use></svg>
-    </button>
-    <div class="aio-nav-divider"></div>
     {#each tabs as tab}
       <button
         class="aio-nav-item"
@@ -118,7 +102,7 @@
       title={t('settingsTab') || '设置'}
       on:click={() => plugin.openSetting()}
     >
-      <svg><use xlink:href="#iconSettings"></use></svg>
+      <svg><use xlink:href="#iconAioSettings"></use></svg>
     </button>
   </nav>
 
@@ -132,16 +116,12 @@
       <Generate {plugin} {cardStore} {config} {openConceptsPanel} />
     {:else if activeTab === 'import'}
       <Import {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
-    {:else if activeTab === 'notebook'}
-      <Notebook {plugin} sourceTarget={notebookTarget} {openConceptsFromNotebook} />
-    {:else if activeTab === 'models'}
-      <Models {plugin} />
+    {:else if activeTab === 'rag'}
+      <Rag {plugin} {vectorStore} {config} sourceTarget={notebookTarget} {openConceptsFromRag} />
     {:else if activeTab === 'concepts'}
-      <Concepts {plugin} {conceptStore} {cardStore} {mindmapStore} {config} {openSourceRef} {jumpToMindmap} notebookTarget={conceptSourceTarget} mindmapGapTarget={mindmapGapTarget} />
+      <Concepts {plugin} {conceptStore} {cardStore} {mindmapStore} {config} {openSourceRef} {jumpToMindmap} mindmapGapTarget={mindmapGapTarget} {ragTarget} />
     {:else if activeTab === 'mindmap'}
       <Mindmap {plugin} {cardStore} {mindmapStore} {conceptStore} {config} {jumpTarget} {startFilteredReview} openConceptsFromMindmapGaps={openConceptsFromMindmapGaps} />
-    {:else if activeTab === 'diagnostics'}
-      <Diagnostics {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
     {:else if activeTab === 'stats'}
       <Stats {cardStore} {openImportPanel} />
     {/if}
@@ -171,12 +151,6 @@
     line-height: 1;
   }
 
-  .aio-nav-divider {
-    width: 24px; height: 1px;
-    background: var(--b3-theme-surface-lighter);
-    margin: 2px 0;
-  }
-
   .aio-nav-spacer { flex: 1; }
 
   .aio-nav-item {
@@ -203,12 +177,6 @@
       background: var(--b3-theme-primary-lightest);
       color: var(--b3-theme-primary);
     }
-  }
-
-  .aio-nav-logo {
-    color: var(--b3-theme-primary);
-    margin-bottom: 2px;
-    svg { width: 18px; height: 18px; }
   }
 
   .aio-content {

@@ -8,11 +8,13 @@
 import { Plugin, getFrontend, openTab, Dialog } from 'siyuan';
 import './index.scss';
 
+import { AIO_ICONS } from './icons';
 import App from './App.svelte';
 import SettingsPanel from './panels/Settings.svelte';
 import { CardStore } from './libs/store';
 import { MindmapStore } from './libs/mindmap-store';
 import { ConceptStore } from './libs/store/concept-store';
+import { VectorStore } from './libs/rag';
 import type { AppConfig } from './libs/types';
 import { DEFAULT_CONFIG, cleanConfig } from './libs/config';
 
@@ -23,6 +25,7 @@ export default class SiYuanAllInOne extends Plugin {
     private cardStore!: CardStore;
     private mindmapStore!: MindmapStore;
     private conceptStore!: ConceptStore;
+    private vectorStore!: VectorStore;
     private appInstance: any = null;
     private settingsDialog: Dialog | null = null;
     private settingsApp: any = null;
@@ -32,6 +35,7 @@ export default class SiYuanAllInOne extends Plugin {
 
     async onload() {
         console.debug('[all-in-one] loading...');
+        (this as any).addIcons(AIO_ICONS);
 
         this.cardStore = new CardStore(this);
         await this.cardStore.load();
@@ -39,6 +43,8 @@ export default class SiYuanAllInOne extends Plugin {
         await this.mindmapStore.load();
         this.conceptStore = new ConceptStore(this);
         await this.conceptStore.load();
+        this.vectorStore = new VectorStore(this);
+        await this.vectorStore.load();
         await this.loadConfig();
 
         // 同步 SiYuan 字号/字体到插件 CSS 变量
@@ -63,6 +69,7 @@ export default class SiYuanAllInOne extends Plugin {
                             cardStore: plugin.cardStore,
                             mindmapStore: plugin.mindmapStore,
                             conceptStore: plugin.conceptStore,
+                            vectorStore: plugin.vectorStore,
                             config: plugin.getConfig(),
                         },
                     });
@@ -76,7 +83,7 @@ export default class SiYuanAllInOne extends Plugin {
 
         // 顶栏图标
         this.addTopBar({
-            icon: 'iconList',
+            icon: 'iconAioRiffCard',
             title: this.i18n.pluginName || '知识闪卡 All-in-One',
             position: 'right',
             callback: () => {
@@ -154,6 +161,7 @@ export default class SiYuanAllInOne extends Plugin {
 
         await this.cardStore.save();
         await this.conceptStore.save();
+        await this.vectorStore.save();
         this.appInstance?.$destroy();
         this.appInstance = null;
         this.settingsApp?.$destroy();
@@ -168,7 +176,7 @@ export default class SiYuanAllInOne extends Plugin {
             app: this.app,
             custom: {
                 id: tabId,
-                icon: 'iconList',
+                icon: 'iconAioRiffCard',
                 title: this.i18n.pluginName || '知识闪卡',
                 data: {},
             },

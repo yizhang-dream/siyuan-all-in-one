@@ -86,11 +86,17 @@ export const DEFAULT_CONFIG: AppConfig = {
     flashcardModel: '',
     mindmapProviderId: 'deepseek',
     mindmapModel: '',
-    notebookEndpoint: 'http://localhost:5055',
     cardsPerDay: 30,
     scheduler: 'sm2',
     defaultDeck: '默认',
     agents: [],
+    ragEnabled: false,
+    ragProviderId: '',
+    ragModel: '',
+    ragChunkSize: 500,
+    ragChunkOverlap: 0.1,
+    ragTopK: 5,
+    ragEmbeddingModel: 'Xenova/all-MiniLM-L6-v2',
 };
 
 /** 生成唯一 id（用于自定义 Provider） */
@@ -179,10 +185,16 @@ export function cleanConfig(cfg: any): AppConfig {
         flashcardModel: String(cfg?.flashcardModel ?? (hasOldLlmConfig ? cfg.llmModel : d.flashcardModel)),
         mindmapProviderId,
         mindmapModel: String(cfg?.mindmapModel ?? (hasOldLlmConfig ? cfg.llmModel : d.mindmapModel)),
-        notebookEndpoint: cfg?.notebookEndpoint ?? d.notebookEndpoint,
         cardsPerDay: cfg?.cardsPerDay ?? d.cardsPerDay,
         scheduler: cfg?.scheduler === 'fsrs' ? 'fsrs' : 'sm2',
         defaultDeck: cfg?.defaultDeck ?? d.defaultDeck,
         agents: rawAgents.map(cleanAgent),
+        ragEnabled: Boolean(cfg?.ragEnabled ?? d.ragEnabled),
+        ragProviderId: String(cfg?.ragProviderId || d.ragProviderId),
+        ragModel: String(cfg?.ragModel || d.ragModel),
+        ragChunkSize: Number(cfg?.ragChunkSize) || d.ragChunkSize,
+        ragChunkOverlap: Number(cfg?.ragChunkOverlap) ?? d.ragChunkOverlap,
+        ragTopK: Number(cfg?.ragTopK) || d.ragTopK,
+        ragEmbeddingModel: String(cfg?.ragEmbeddingModel || d.ragEmbeddingModel),
     };
 }

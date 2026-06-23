@@ -6,6 +6,7 @@
  */
 
 import type { Card } from './types';
+import type { SourceRef, CardType } from './types/concept';
 import { createCard, cleanCard, isDue } from './srs';
 
 export class CardStore {
@@ -94,9 +95,12 @@ export class CardStore {
         hint = '',
         deck = '默认',
         tags: string[] = [],
-        agentId?: string
+        agentId?: string,
+        cardType: CardType = 'qa',
+        conceptId?: string,
+        sourceRefs: SourceRef[] = []
     ): Card {
-        const card = createCard(question, answer, hint, deck, tags, agentId);
+        const card = createCard(question, answer, hint, deck, tags, agentId, cardType, conceptId, sourceRefs);
         this.add(card);
         return card;
     }

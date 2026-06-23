@@ -3,7 +3,6 @@
   import type { SourceConfig, DocItem } from '../libs/sources';
 
   export let config: SourceConfig;
-  export let notebookEndpoint: string = '';
 
   let docQuery = '';
   let docResults: DocItem[] = [];
@@ -22,7 +21,13 @@
   }
 
   function selectDoc(doc: DocItem) {
-    config = { ...config, siyuanDocId: doc.id };
+    const ids = config.siyuanDocIds || [];
+    const idx = ids.indexOf(doc.id);
+    if (idx >= 0) {
+      config = { ...config, siyuanDocIds: ids.filter((id) => id !== doc.id) };
+    } else {
+      config = { ...config, siyuanDocIds: [...ids, doc.id] };
+    }
     config = config;
   }
 </script>
@@ -31,22 +36,9 @@
   <div class="source-label">知识来源</div>
   <div class="source-tabs">
     <button class="b3-button b3-button--small" class:b3-button--outline={config.type !== 'none'} on:click={() => setType('none')}>无</button>
-    <button class="b3-button b3-button--small" class:b3-button--outline={config.type !== 'notebook'} on:click={() => setType('notebook')} disabled={!notebookEndpoint}>知识库</button>
     <button class="b3-button b3-button--small" class:b3-button--outline={config.type !== 'siyuan'} on:click={() => setType('siyuan')}>思源文档</button>
     <button class="b3-button b3-button--small" class:b3-button--outline={config.type !== 'manual'} on:click={() => setType('manual')}>手动输入</button>
   </div>
-
-  {#if config.type === 'notebook'}
-    <input
-      class="b3-text-field"
-      type="text"
-      placeholder="输入搜索关键词..."
-      bind:value={config.notebookQuery}
-    />
-    {#if !notebookEndpoint}
-      <p class="source-hint source-hint--warn">请先在设置中配置 Open Notebook 端点</p>
-    {/if}
-  {/if}
 
   {#if config.type === 'siyuan'}
     <div class="source-row">
@@ -66,7 +58,7 @@
         {#each docResults.slice(0, 10) as doc}
           <button
             class="source-doc-item"
-            class:selected={config.siyuanDocId === doc.id}
+            class:selected={(config.siyuanDocIds || []).includes(doc.id)}
             on:click={() => selectDoc(doc)}
           >
             <svg><use xlink:href="#iconFiles"></use></svg>
@@ -75,7 +67,7 @@
         {/each}
       </div>
     {/if}
-    {#if config.siyuanDocId}
+    {#if config.siyuanDocIds?.length > 0}
       <p class="source-hint source-hint--ok">
         <svg><use xlink:href="#iconCheck"></use></svg>
         <span>已选择文档</span>
@@ -125,6 +117,5 @@
     font-size: var(--aio-fs-sm); opacity: 0.7; margin: 0;
     svg { width: 14px; height: 14px; flex: 0 0 14px; }
     &.source-hint--ok { color: var(--b3-card-success-color); opacity: 1; }
-    &.source-hint--warn { color: var(--b3-card-warning-color); opacity: 1; }
   }
 </style>

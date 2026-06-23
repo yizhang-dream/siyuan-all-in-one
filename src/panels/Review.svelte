@@ -295,7 +295,7 @@
 
 <style lang="scss">
   .review-panel {
-    display: flex; flex-direction: column; align-items: center; padding: 24px; height: 100%; gap: 12px; overflow-y: auto;
+    display: flex; flex-direction: column; align-items: center; padding: 24px; height: 100%; gap: 12px; overflow-y: auto; box-sizing: border-box;
   }
 
   .review-settings {
@@ -315,7 +315,7 @@
   .review-empty {
     display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; color: var(--b3-theme-on-surface); gap: 8px;
     .review-empty-icon { width: 48px; height: 48px; opacity: 0.4; }
-    .review-empty-text { font-size: var(--aio-fs-md); font-weight: 500; }
+    .review-empty-text { font-size: var(--aio-fs-md); line-height: 1.3; font-weight: 500; }
     .review-empty-hint { font-size: var(--aio-fs-base); opacity: 0.6; }
   }
 
@@ -355,7 +355,7 @@
   }
   .review-drill-chip {
     padding: 2px 8px; border-radius: 4px;
-    background: var(--b3-theme-warning); color: #fff;
+    background: var(--b3-theme-warning); color: var(--b3-theme-on-warning);
     font-size: var(--aio-fs-xs); vertical-align: middle;
   }
 

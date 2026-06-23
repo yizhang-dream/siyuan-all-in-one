@@ -87,7 +87,7 @@ export function exportPayloadToSiyuanMarkdown(filename: string, content: string)
 
 export function cardsToCSV(cards: Card[]): string {
     const rows = [
-        ['id', 'deck', 'question', 'answer', 'hint', 'tags', 'cardType', 'conceptId', 'scheduler', 'fsrs', 'due', 'interval', 'ease', 'reps', 'lapses', 'status', 'created', 'modified'],
+        ['id', 'deck', 'question', 'answer', 'hint', 'tags', 'cardType', 'conceptId', 'agentId', 'linkedMindmapIds', 'sourceRefs', 'scheduler', 'fsrs', 'due', 'interval', 'ease', 'reps', 'lapses', 'consecutiveLapses', 'status', 'occlusion', 'created', 'modified'],
         ...cards.map((card) => [
             card.id,
             card.deck,
@@ -97,6 +97,9 @@ export function cardsToCSV(cards: Card[]): string {
             (card.tags || []).join(' '),
             card.cardType || 'qa',
             card.conceptId || '',
+            card.agentId || '',
+            (card.linkedMindmapIds || []).join(' '),
+            (card.sourceRefs || []).length > 0 ? JSON.stringify(card.sourceRefs) : '',
             card.scheduler || 'sm2',
             card.fsrs ? JSON.stringify(card.fsrs) : '',
             String(card.due || 0),
@@ -104,7 +107,9 @@ export function cardsToCSV(cards: Card[]): string {
             String(card.ease || 0),
             String(card.reps || 0),
             String(card.lapses || 0),
+            String(card.consecutiveLapses ?? ''),
             card.status || 'new',
+            card.occlusion ? JSON.stringify(card.occlusion) : '',
             String(card.created || 0),
             String(card.modified || 0),
         ]),

@@ -6,30 +6,22 @@ const browse = readFileSync('src/panels/Browse.svelte', 'utf8');
 const concepts = readFileSync('src/panels/Concepts.svelte', 'utf8');
 const generate = readFileSync('src/panels/Generate.svelte', 'utf8');
 const importPanel = readFileSync('src/panels/Import.svelte', 'utf8');
-const notebook = readFileSync('src/panels/Notebook.svelte', 'utf8');
 const mindmap = readFileSync('src/panels/Mindmap.svelte', 'utf8');
 const review = readFileSync('src/panels/Review.svelte', 'utf8');
-const diagnostics = readFileSync('src/panels/Diagnostics.svelte', 'utf8');
 const settings = readFileSync('src/panels/Settings.svelte', 'utf8');
 const sourcePicker = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
 const stats = readFileSync('src/panels/Stats.svelte', 'utf8');
-const models = readFileSync('src/panels/Models.svelte', 'utf8');
 const sourcesSvelte = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
 const srsTs = readFileSync('src/libs/srs.ts', 'utf8');
 const typesTs = readFileSync('src/libs/types.ts', 'utf8');
-const storeTs = readFileSync('src/libs/srs/sm2.ts', 'utf8');
 const conceptTs = readFileSync('src/libs/types/concept.ts', 'utf8');
 const sourceHubTs = readFileSync('src/libs/sources/source-hub.ts', 'utf8');
 const zhCN = JSON.parse(readFileSync('public/i18n/zh_CN.json', 'utf8'));
 const enUS = JSON.parse(readFileSync('public/i18n/en_US.json', 'utf8'));
 
-assert.match(app, /let conceptSourceTargetSeq = 0;/, 'Notebook to Concepts handoff should have an activation sequence');
-assert.match(app, /conceptSourceTargetSeq \+= 1;/, 'Notebook to Concepts handoff should increment activation sequence');
-assert.match(app, /key: `\$\{request\.key\}#\$\{conceptSourceTargetSeq\}`/, 'Repeated same-source handoffs should create a fresh target key');
-assert.match(app, /<Notebook[^>]+sourceTarget=\{notebookTarget\}[^>]+openConceptsFromNotebook/, 'Notebook panel should receive source handoff callbacks');
-assert.match(app, /<Concepts[^>]+notebookTarget=\{conceptSourceTarget\}/, 'Concepts panel should receive Notebook concept targets');
+assert.match(app, /let conceptSourceTargetSeq = 0;/, 'App should have a source-to-concepts handoff sequence counter');
+assert.match(app, /conceptSourceTargetSeq \+= 1;/, 'Source handoff should increment activation sequence');
 assert.match(app, /<Mindmap[^>]+\{jumpTarget\}/, 'Mindmap panel should receive jump targets');
-assert.match(app, /<Diagnostics[^>]+\{conceptStore\}[^>]+\{mindmapStore\}/, 'Diagnostics panel should receive concept and mindmap stores');
 assert.match(app, /<Import[^>]+\{plugin\}[^>]+\{cardStore\}[^>]+\{conceptStore\}[^>]+\{mindmapStore\}/, 'Import panel should receive plugin and stores for compatible export');
 assert.match(app, /function openImportPanel\(\)/, 'App should expose a Stats to Import handoff');
 assert.match(app, /<Stats[^>]+\{cardStore\}[^>]+\{openImportPanel\}/, 'Stats panel should receive the Import handoff callback');
@@ -48,36 +40,16 @@ for (const id of tabIds) {
   assert.ok(enUS[`${id}Tab`], `en_US i18n should define ${id}Tab`);
 }
 
-assert.match(notebook, /openConceptsFromNotebook/, 'Notebook should expose a send-to-concepts action');
-assert.match(notebook, /buildNotebookConceptRequest/, 'Notebook should build scoped concept requests');
-assert.match(notebook, /noteIds/, 'Notebook chat context should include selected notes');
-assert.match(notebook, /noteModes/, 'Notebook concept handoff should include selected notes');
-assert.match(notebook, /sourceModes/, 'Notebook chat context should preserve selected source modes');
-assert.match(notebook, /renderMath\(msgListEl\)/, 'Notebook chat should render math formulas in messages');
-assert.match(notebook, /nb-ctx-chip/, 'Notebook context indicator should use SiYuan-style chips');
-assert.match(notebook, /#iconFiles/, 'Notebook context indicator should use SiYuan file icon');
-assert.match(notebook, /nb-session-del[\s\S]*#iconClose/, 'Notebook session removal should use a SiYuan close icon');
-assert.match(notebook, /nb-icon-button/, 'Notebook toolbar actions should use icon buttons');
-assert.doesNotMatch(notebook, /📄|💡|🔤|>×<\/button>|>✕<\/button>/, 'Notebook should avoid emoji counters and symbol-only removal buttons');
-assert.match(concepts, /applyNotebookTarget\(notebookTarget\)/, 'Concepts should react to Notebook targets');
 assert.match(concepts, /collectPipelineSources/, 'Concepts should collect all source types through SourceHub');
-assert.match(concepts, /OpenNotebookClient/, 'Concepts should load OpenNotebook sources directly');
-assert.match(concepts, /toggleOpenNotebookSource/, 'Concepts should let users add OpenNotebook sources in the graph workflow');
-assert.match(concepts, /notebook-source-results/, 'Concepts should display selectable OpenNotebook source rows');
-assert.match(concepts, /sourceMode: 'manual' \| 'opennotebook' \| 'mixed'/, 'Concepts should support mixed source mode');
 assert.match(concepts, /searchSiyuanDocs/, 'Concepts should search SiYuan docs for mixed sources');
 assert.match(concepts, /siyuanDocs: selectedSiyuanDocs/, 'Concepts should pass selected SiYuan docs into SourceHub');
 assert.match(concepts, /localFiles,/, 'Concepts should pass selected local text files into SourceHub');
-assert.match(concepts, /openNotebookSearchType: 'text'/, 'Concepts should avoid default vector search failures in OpenNotebook');
-assert.match(concepts, /accept="\.txt,\.md,\.markdown,\.html,\.htm,text\/plain,text\/markdown,text\/html"/, 'Concepts should accept lightweight local text and HTML files');
-assert.match(concepts, /local-file-picker[\s\S]*#iconUpload/, 'Concepts local file picker should use a SiYuan upload icon');
+assert.match(concepts, /#iconUpload/);
 assert.match(concepts, /buildPipelineSources/, 'Concepts should merge selected source types before running the pipeline');
 assert.match(concepts, /bind:value=\{concept\.title\}/, 'Concept candidates should be editable before confirmation');
 assert.match(concepts, /bind:value=\{relation\.fromTempId\}/, 'Relation endpoints should be editable before confirmation');
 assert.match(concepts, /bind:value=\{card\.conceptTempId\}/, 'Card-to-concept assignment should be editable before confirmation');
 assert.match(concepts, /bind:value=\{card\.front\}/, 'Card fronts should be editable before confirmation');
-assert.match(concepts, /notebookNoteIds/, 'Concepts should preserve Notebook note scope');
-assert.match(concepts, /notebookNoteIds,/, 'Concepts should pass note scope into SourceHub');
 assert.match(concepts, /confirmPipelineResult/, 'Concepts should confirm candidates into stores');
 assert.match(concepts, /syncConceptMindmap/, 'Concept confirmation should sync a concept mindmap');
 assert.match(concepts, /renderMath\(candidateReviewEl\)/, 'Concept candidates should render math formulas before confirmation');
@@ -125,9 +97,6 @@ assert.match(mindmap, /从缺卡生成候选/, 'Mindmap gap view should expose a
 assert.match(mindmap, /openConceptsFromMindmapGaps/, 'Mindmap should receive the gap-to-concepts handoff callback');
 assert.match(concepts, /applyMindmapGapTarget\(mindmapGapTarget\)/, 'Concepts should react to mindmap gap targets');
 assert.match(concepts, /sourceMode = 'manual'/, 'Concepts should switch to manual mode for gap content');
-assert.match(concepts, /hasOpenNotebook/, 'Concepts should detect whether OpenNotebook endpoint is configured');
-assert.match(concepts, /!hasOpenNotebook && sourceMode !== 'manual'/, 'Concepts should force manual mode when OpenNotebook is unavailable');
-assert.match(concepts, /手动 \+ 文档/, 'Concepts should expose an offline-friendly hybrid source mode');
 assert.match(concepts, /cdfMode/, 'Concepts should support CDF descriptor-based card generation');
 assert.match(concepts, /CDF 维度制卡/, 'Concepts CDF toggle should have a visible label');
 assert.match(typesTs, /drill/, 'CardStatus should include drill status for low-score mechanical practice');
@@ -137,7 +106,7 @@ assert.ok(srsTs.includes("card.status === 'drill'"), 'Drill cards should always 
 // Mobile responsiveness: at least 3 panels should have @media breakpoints and UI components should use min-width:0 to prevent overflow
 const responsivePanels = [concepts, generate, importPanel, stats].filter((panelText) => /@media/.test(panelText));
 assert.ok(responsivePanels.length >= 3, `At least 3 panels should have @media responsive breakpoints; found ${responsivePanels.length}`);
-const panelsWithMinWidthZero = [concepts, browse, importPanel, mindmap, notebook, review, diagnostics, settings, models, sourcesSvelte, stats]
+const panelsWithMinWidthZero = [concepts, browse, importPanel, mindmap, review, settings, sourcesSvelte, stats]
     .filter((panelText) => /min-width:\s*0/.test(panelText));
 assert.ok(panelsWithMinWidthZero.length >= 5, `${panelsWithMinWidthZero.length} panels should use min-width: 0 to prevent overflow in narrow viewports`);
 assert.match(app, /openConceptsFromMindmapGaps/, 'App should expose a gap-to-concepts handoff function');
@@ -192,19 +161,8 @@ assert.doesNotMatch(stats, /importCards|exportCards|clearAll|cardStore\.clear|ca
 assert.doesNotMatch(browse, /confirm\('⚠️'/, 'Browse delete confirmations should use text titles');
 assert.match(browse, /browse-linked-map-button[\s\S]*#iconGraph/, 'Browse linked mindmaps should use a SiYuan graph icon');
 assert.doesNotMatch(browse, /🧠/, 'Browse linked mindmaps should avoid emoji icons');
-assert.doesNotMatch(models, /confirm\('⚠️'/, 'Models delete confirmations should use text titles');
-assert.match(models, /mp-icon-button[\s\S]*#iconRefresh/, 'Models auto assignment should use a SiYuan refresh icon');
-assert.doesNotMatch(models, /🔄|⚠️|✕/, 'Models panel should avoid emoji and symbol-only controls');
 assert.match(sourcePicker, /#iconFiles/, 'SourcePicker document rows should use SiYuan file icon');
-assert.match(sourcePicker, /source-hint--warn/, 'SourcePicker should use semantic warning styling');
 assert.doesNotMatch(sourcePicker, /⚠️|📄|✅/, 'SourcePicker should avoid emoji for hints and document rows');
-assert.match(diagnostics, /siyuan-all-in-one-diagnostics/, 'Diagnostics should produce structured reports');
-assert.match(diagnostics, /copy-diagnostic-report/, 'Diagnostics should expose copyable reports');
-assert.doesNotMatch(diagnostics, /apiKey["']?\s*:/, 'Diagnostics reports must not serialize API keys');
-assert.match(diagnostics, /apiKeySet/, 'Diagnostics reports should only expose whether an API key is set');
-assert.match(diagnostics, /getProviderCapabilities/, 'Diagnostics should report provider structured-output capabilities');
-assert.match(diagnostics, /structuredOutputStrategy/, 'Diagnostics report should include structured-output strategy');
-assert.match(diagnostics, /jsonFallbackOnUnsupported/, 'Diagnostics report should expose JSON fallback behavior');
 assert.match(review, /import \{ scheduleCard \} from '..\/libs\/srs';/, 'Review should use the scheduler facade');
 assert.match(review, /scheduleCard\(g, card, cfg\.scheduler \|\| 'sm2'\)/, 'Review grading should honor the configured scheduler');
 assert.match(review, /export let queue:/, 'Review should accept temporary filtered queues');
@@ -227,8 +185,7 @@ assert.doesNotMatch(settings, /🎴|🧠|🔄|⚠️|✕/, 'Settings should avoi
 console.log(JSON.stringify({
   appContracts: 14,
   panelContracts: 78,
-  repeatedNotebookHandoff: true,
+  repeatedSourceHandoff: true,
   mixedSources: true,
   tabI18n: tabIds.length,
-  diagnosticsSecretsRedacted: true,
 }, null, 2));

@@ -17,7 +17,6 @@ export {
 };
 
 export interface SourceActivationOptions {
-    onOpenNotebook?: (ref: Partial<SourceRef>) => void | Promise<void>;
 }
 
 export async function activateSourceRef(
@@ -40,13 +39,9 @@ export async function activateSourceRef(
         return true;
     }
 
-    if (action.kind === 'open-opennotebook') {
-        if (options.onOpenNotebook) {
-            await options.onOpenNotebook(ref);
-        } else {
-            await copyText(action.copyText || sourceLocatorText(ref));
-            showMessage('已复制 OpenNotebook 来源定位');
-        }
+    if (action.kind === 'open-rag') {
+        await copyText(action.copyText || sourceLocatorText(ref));
+        showMessage('已复制 RAG 来源定位');
         return true;
     }
 

@@ -30,8 +30,8 @@ import { profileMindmapMarkdown } from '../src/libs/markmap-render';
 import { CardStore } from '../src/libs/store';
 import { ConceptStore } from '../src/libs/store/concept-store';
 import { MindmapStore, genMindmapId } from '../src/libs/mindmap-store';
-import { createCard } from '../src/libs/srs/sm2';
-import type { Card } from '../src/libs/types/card';
+import { createCard } from '../src/libs/srs';
+import type { Card } from '../src/libs/types';
 
 class MemoryPlugin {
   data = new Map<string, any>();
@@ -248,7 +248,7 @@ const mapFirst = await mindmapStore.upsert({
 
 const mapGeneratedIds: string[] = [];
 for (const draft of drafts) {
-  const card = createCard(draft.front, draft.back, draft.hint || '', 'map-first', ['mindmap'], 'qa', undefined, [
+  const card = createCard(draft.front, draft.back, draft.hint || '', 'map-first', ['mindmap'], undefined, 'qa', undefined, [
     {
       type: 'manual',
       sourceId: mapFirst.id,

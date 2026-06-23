@@ -8,6 +8,7 @@
 
 import { createEmptyCard, fsrs, Rating, State, type Card as FSRSCard, type Grade } from 'ts-fsrs';
 import type { Card, CardStatus, ReviewScheduler } from './types';
+import type { SourceRef, CardType } from './types/concept';
 
 /**
  * 生成唯一 id（优先 crypto.randomUUID，回退时间戳+随机）。
@@ -29,7 +30,10 @@ export function createCard(
     hint = '',
     deck = '默认',
     tags: string[] = [],
-    agentId?: string
+    agentId?: string,
+    cardType: CardType = 'qa',
+    conceptId?: string,
+    sourceRefs: SourceRef[] = []
 ): Card {
     const now = Date.now();
     return {
@@ -40,6 +44,9 @@ export function createCard(
         deck,
         agentId,
         tags,
+        cardType,
+        conceptId,
+        sourceRefs,
         scheduler: 'sm2',
         due: now,
         interval: 0,
@@ -140,6 +147,23 @@ export function scheduleFSRS(grade: number, card: Card, now = Date.now()): Card 
     card.lapses = Number(next.lapses) || card.lapses;
     card.status = toPluginStatus(next.state);
     card.modified = now;
+
+    // Track consecutive lapses for drill detection (mirrors SM-2 logic)
+    if (rating === Rating.Again) {
+        card.consecutiveLapses = (card.consecutiveLapses || 0) + 1;
+    } else {
+        card.consecutiveLapses = 0;
+    }
+
+    // Drill: enter drill if 2+ consecutive lapses; exit if Easy
+    if (card.consecutiveLapses !== undefined && card.consecutiveLapses >= 2) {
+        card.status = 'drill';
+    }
+    if (card.status === 'drill' && grade >= 3) {
+        card.status = 'review';
+        card.consecutiveLapses = 0;
+    }
+
     return card;
 }
 
@@ -153,7 +177,7 @@ export function isDue(card: Card, now = Date.now()): boolean {
 /** 清洗/补全导入的卡片对象，防止缺字段导致崩溃。旧数据的 type 字段在此被丢弃。 */
 export function cleanCard(raw: any): Card {
     const now = Date.now();
-    const validStatuses: CardStatus[] = ['new', 'learning', 'review', 'buried', 'drill'];
+    const validStatuses: CardStatus[] = ['new', 'learning', 'review', 'buried', 'drill', 'relearning'];
     const status = validStatuses.includes(raw?.status) ? raw.status : 'new';
     return {
         id: String(raw?.id || genId()),
@@ -175,6 +199,7 @@ export function cleanCard(raw: any): Card {
         reps: Number(raw?.reps) || 0,
         lapses: Number(raw?.lapses) || 0,
         consecutiveLapses: Number.isFinite(Number(raw?.consecutiveLapses)) ? Number(raw.consecutiveLapses) : undefined,
+        occlusion: raw?.occlusion && typeof raw.occlusion === 'object' && raw.occlusion.imageDataUrl ? raw.occlusion : undefined,
         status,
         created: Number(raw?.created) || now,
         modified: Number(raw?.modified) || now,
@@ -226,6 +251,7 @@ function fromFSRSState(state: State): 'new' | 'learning' | 'review' | 'relearnin
 function toPluginStatus(state: State): CardStatus {
     if (state === State.New) return 'new';
     if (state === State.Review) return 'review';
+    if (state === State.Relearning) return 'relearning';
     return 'learning';
 }
 

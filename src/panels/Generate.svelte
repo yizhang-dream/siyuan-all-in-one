@@ -188,7 +188,7 @@
   }
 
   // 来源选择
-  let sourceConfig: SourceConfig = { type: 'none' };
+  let sourceConfig: SourceConfig = { type: 'none', siyuanDocIds: [] };
 
   $: {
     if (!manualDeck) manualDeck = config?.defaultDeck || '默认';
@@ -247,7 +247,7 @@
       if (sourceConfig.type !== 'none') {
         aiStatus = sourceConfig.type === 'notebook' ? '正在搜索知识库...' :
                    sourceConfig.type === 'siyuan' ? '正在读取文档...' : '正在准备上下文...';
-        context = await fetchContext(sourceConfig, cfg.notebookEndpoint);
+        context = await fetchContext(sourceConfig);
         if (context) {
           aiStatus = `已获取 ${context.length} 字上下文，AI 生成中...`;
           aiStatusKind = 'info';
@@ -311,7 +311,7 @@
 
 <div class="gen-panel">
   <div class="gen-workflow-note">
-    <div>
+    <div class="gen-workflow-text">
       <strong>快速制卡</strong>
       <p>这里适合手动添加或用 Agent 生成独立卡片；需要保留概念、关系和导图联动时，进入来源制卡与图谱。</p>
     </div>
@@ -409,7 +409,7 @@
         </div>
 
         <!-- 来源选择 -->
-        <SourcePicker bind:config={sourceConfig} notebookEndpoint={config?.notebookEndpoint || ''} />
+        <SourcePicker bind:config={sourceConfig} />
 
         <button class="b3-button b3-button--outline" on:click={generateAI} disabled={isGenerating || !selectedAgent}>
           {isGenerating ? '生成中...' : 'AI 生成'}
@@ -467,7 +467,7 @@
 </div>
 
 <style lang="scss">
-  .gen-panel { padding: 24px; height: 100%; overflow-y: auto; }
+  .gen-panel { padding: 24px; height: 100%; overflow-y: auto; box-sizing: border-box; }
   .gen-workflow-note {
     display: flex;
     align-items: center;
@@ -481,8 +481,9 @@
 
     strong {
       display: block;
-      margin-bottom: 4px;
+      margin: 0;
       font-size: var(--aio-fs-base);
+      line-height: 1.4;
     }
 
     p {
@@ -491,7 +492,16 @@
       font-size: var(--aio-fs-sm);
       line-height: 1.5;
       opacity: 0.72;
+      word-break: break-word;
     }
+  }
+
+  .gen-workflow-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .gen-workflow-button {

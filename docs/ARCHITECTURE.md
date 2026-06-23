@@ -80,12 +80,11 @@ flowchart LR
 
 关键文件：
 
+- `src/libs/types.ts`：`Card`、`CardStatus`、`Provider`、`AgentConfig`、`AppConfig` 等正源类型定义。
 - `src/libs/types/concept.ts`：`ConceptNode`、`Relation`、`SourceRef`、`CardCandidate`、`PipelineResult`。
-- `src/libs/types/card.ts`：新 `Card` 类型包含 `conceptId`、`cardType`、`sourceRefs`。
 - `src/libs/store/concept-store.ts`：概念和关系 CRUD、卡片关联、sourceRefs 清洗。
 - `src/libs/store.ts`：卡片 CRUD、去重、统计、导入导出。
-- `src/libs/srs.ts`：复习调度入口，SM-2 默认兼容，FSRS 通过 `ts-fsrs` 可选启用。
-- `src/libs/srs/sm2.ts`：适配新 Card 类型的 SM-2 兼容工具。
+- `src/libs/srs.ts`：复习调度入口，SM-2 和 FSRS 双调度器，含 drill 机制、consecutiveLapses 追踪。
 - `src/libs/siyuan-riff.ts`：思源内置 Riff 闪卡 API 的薄适配层。
 - `src/libs/riff-sync.ts`：插件卡片同步到思源文档块和 Riff 卡包的编排层，使用 `riff-sync` 持久化映射避免重复写入，并在卡片编辑后更新原思源块。
 

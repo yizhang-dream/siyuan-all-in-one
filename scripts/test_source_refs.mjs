@@ -14,7 +14,7 @@ await mkdir(tempDir, { recursive: true });
 
 await writeFile(entry, `
 import assert from 'node:assert/strict';
-import { buildOpenNotebookLocator, formatSourceLabel, formatSourceText, getSourceAction, sourceLocatorText } from '../src/libs/source-refs';
+import { formatSourceLabel, formatSourceText, getSourceAction, sourceLocatorText } from '../src/libs/source-refs';
 
 const urlRef = { type: 'url' as const, url: 'https://example.test/page', quote: '网页证据' };
 assert.equal(formatSourceLabel(urlRef), 'URL · https://example.test/page');
@@ -26,35 +26,24 @@ const siyuanRef = { type: 'siyuan' as const, blockId: '20260620123456-abcdefg', 
 assert.equal(getSourceAction(siyuanRef).kind, 'open-siyuan-block');
 assert.equal(getSourceAction(siyuanRef).target, '20260620123456-abcdefg');
 
-const openNotebookRef = {
-  type: 'opennotebook' as const,
-  sourceId: 'source-1',
+const ragRef = {
+  type: 'rag' as const,
+  sourceId: 'rag-1',
   chunkId: 'chunk-2',
   page: 8,
-  quote: 'OpenNotebook 片段',
+  quote: 'RAG 搜索片段',
 };
-const action = getSourceAction(openNotebookRef);
-assert.equal(action.kind, 'open-opennotebook');
-assert.match(action.copyText || '', /sourceId=source-1/);
+const action = getSourceAction(ragRef);
+assert.equal(action.kind, 'open-rag');
+assert.match(action.copyText || '', /sourceId=rag-1/);
 assert.match(action.copyText || '', /chunkId=chunk-2/);
-assert.match(action.copyText || '', /page=8/);
-assert.match(sourceLocatorText(openNotebookRef), /quote=OpenNotebook 片段/);
-
-const locator = buildOpenNotebookLocator(openNotebookRef);
-assert.ok(locator);
-assert.equal(locator.sourceId, 'source-1');
-assert.equal(locator.chunkId, 'chunk-2');
-assert.equal(locator.page, 8);
-assert.equal(locator.locatorText, 'sourceId=source-1 chunkId=chunk-2 page=8');
-assert.match(locator.prompt, /OpenNotebook/);
-assert.match(locator.prompt, /sourceId=source-1/);
-assert.equal(buildOpenNotebookLocator({ type: 'manual' as const, sourceId: 'manual-1' }), null);
+assert.match(sourceLocatorText(ragRef), /quote=RAG 搜索片段/);
 
 console.log(JSON.stringify({
   urlAction: getSourceAction(urlRef).kind,
   siyuanAction: getSourceAction(siyuanRef).kind,
   openNotebookAction: action.kind,
-  openNotebookLocator: locator.label,
+  openNotebookLocator: 'rag-source',
 }, null, 2));
 `, 'utf8');
 

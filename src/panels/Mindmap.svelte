@@ -260,12 +260,12 @@
         currentTree = result.tree || null;
       } else {
         if (sourceConfig.type === 'none') { showMessage('请选择知识来源'); isWorking = false; return; }
-        if (selectedDocCount === 0 && sourceConfig.type !== 'manual' && sourceConfig.type !== 'notebook') { showMessage('请选择文档'); isWorking = false; return; }
+        if (selectedDocCount === 0 && sourceConfig.type !== 'manual') { showMessage('请选择文档'); isWorking = false; return; }
         if (sourceConfig.type === 'manual' && !sourceConfig.manualText?.trim()) { showMessage('请输入内容'); isWorking = false; return; }
 
         status = '步骤 1/3：获取来源内容...';
         sourceConfig.siyuanDocIds = [...selectedDocIds];
-        const content = await fetchContext(sourceConfig, cfg.notebookEndpoint);
+        const content = await fetchContext(sourceConfig);
         if (!content) { showMessage('未能获取内容'); isWorking = false; return; }
 
         status = '步骤 2/3：AI 生成知识结构...';
@@ -666,7 +666,6 @@
     {:else}
       <div class="source-tabs">
         <button class="b3-button b3-button--small" class:b3-button--outline={sourceConfig.type !== 'siyuan'} on:click={() => sourceConfig = { type: 'siyuan', siyuanDocIds: [...selectedDocIds] }}>思源文档</button>
-        <button class="b3-button b3-button--small" class:b3-button--outline={sourceConfig.type !== 'notebook'} on:click={() => sourceConfig = { type: 'notebook', siyuanDocIds: [] }} disabled={!config?.notebookEndpoint}>知识库</button>
         <button class="b3-button b3-button--small" class:b3-button--outline={sourceConfig.type !== 'manual'} on:click={() => sourceConfig = { type: 'manual', siyuanDocIds: [] }}>手动输入</button>
       </div>
     {/if}
@@ -675,7 +674,7 @@
         <svg><use xlink:href="#iconGraph"></use></svg>
         <span>{isWorking ? '同步中...' : '同步图谱'}</span>
       {:else}
-        <svg class:is-spinning={isWorking}><use xlink:href="#iconRefresh"></use></svg>
+        <svg class:is-spinning={isWorking}><use xlink:href="#iconSparkles"></use></svg>
         <span>{isWorking ? '生成中...' : '生成'}</span>
       {/if}
     </button>
@@ -708,8 +707,6 @@
             {/each}
           </div>
         {/if}
-      {:else if sourceConfig.type === 'notebook'}
-        <input class="b3-text-field" type="text" placeholder="搜索关键词..." bind:value={sourceConfig.notebookQuery} />
       {:else if sourceConfig.type === 'manual'}
         <textarea class="b3-text-field" rows="3" placeholder="粘贴内容..." bind:value={sourceConfig.manualText}></textarea>
       {/if}
@@ -773,7 +770,7 @@
         </button>
       {/if}
       <button class="b3-button b3-button--small b3-button--outline mindmap-review-visible" on:click={reviewVisibleMindmapCards} disabled={visibleReviewCardIds.length === 0}>
-        <svg><use xlink:href="#iconRefresh"></use></svg>
+        <svg><use xlink:href="#iconPlay"></use></svg>
         <span>复习可见卡片 ({visibleReviewCardIds.length})</span>
       </button>
     </div>
@@ -781,10 +778,10 @@
       <svg bind:this={svgEl} class="mindmap-svg"></svg>
     </div>
     <div class="mindmap-legend">
-      <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>已掌握</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#eab308"></span>学习中</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>未学/薄弱</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#9ca3af"></span>暂埋</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--mastered"></span>已掌握</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--learning"></span>学习中</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--weak"></span>未学/薄弱</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--buried"></span>暂埋</span>
     </div>
   {:else if !isWorking}
     <div class="mindmap-placeholder">
@@ -827,7 +824,7 @@
 {/if}
 
 <style lang="scss">
-  .mindmap-panel { padding: 16px; height: 100%; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .mindmap-panel { padding: 16px; height: 100%; display: flex; flex-direction: column; gap: 12px; overflow: hidden; box-sizing: border-box; }
 
   .mindmap-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; }
   .mindmap-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -1062,6 +1059,10 @@
   .mindmap-legend { display: flex; gap: 12px; font-size: var(--aio-fs-xs); opacity: 0.7; }
   .legend-item { display: flex; align-items: center; gap: 4px; }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .legend-dot--mastered { background: var(--b3-card-success-color); }
+  .legend-dot--learning { background: var(--b3-card-warning-color); }
+  .legend-dot--weak { background: var(--b3-card-error-color); }
+  .legend-dot--buried { background: var(--b3-theme-on-surface-light); }
 
   .mindmap-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; opacity: 0.4;
     p { margin: 0; font-size: var(--aio-fs-base); text-align: center; }
@@ -1078,11 +1079,11 @@
   .review-hint { font-size: var(--aio-fs-sm); opacity: 0.6; margin-top: 12px; }
   .review-flip-hint { text-align: center; font-size: var(--aio-fs-xs); opacity: 0.4; }
   .review-grades { display: flex; gap: 8px; }
-  .review-grade-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: var(--aio-fs-sm); color: white; font-weight: 500; }
-  .grade-again { background: #ef4444; }
-  .grade-hard { background: #f97316; }
-  .grade-good { background: #22c55e; }
-  .grade-easy { background: #3b82f6; }
+  .review-grade-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: var(--aio-fs-sm); color: var(--b3-theme-on-primary, #fff); font-weight: 500; }
+  .grade-again { background: var(--b3-card-error-color); }
+  .grade-hard { background: var(--b3-card-warning-color); }
+  .grade-good { background: var(--b3-card-success-color); }
+  .grade-easy { background: var(--b3-card-info-color); }
 
   @keyframes aio-mindmap-spin {
     to { transform: rotate(360deg); }

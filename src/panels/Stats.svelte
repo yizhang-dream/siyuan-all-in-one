@@ -58,9 +58,9 @@
 </div>
 
 <style lang="scss">
-  .stats-panel { padding: 24px; height: 100%; overflow-y: auto;
+  .stats-panel { padding: 24px; height: 100%; overflow-y: auto; box-sizing: border-box;
     display: flex; flex-direction: column; gap: 16px;
-    h2 { font-size: var(--aio-fs-lg); margin: 0; }
+    h2 { font-size: var(--aio-fs-lg); line-height: 1.25; margin: 0; }
     h3 { font-size: var(--aio-fs-base); margin: 8px 0 0; padding-bottom: 4px; border-bottom: 1px solid var(--b3-theme-surface-lighter); color: var(--b3-theme-primary); }
   }
 

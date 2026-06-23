@@ -467,7 +467,7 @@
     <!-- 文件选择 -->
     <div class="import-file-area">
       <label class="b3-button b3-button--outline import-file-btn">
-        <svg><use xlink:href="#iconDownload"></use></svg>
+        <svg><use xlink:href="#iconUpload"></use></svg>
         选择文件
         <input type="file" accept=".apkg,.txt,.csv,.json,.md,.markdown" on:change={onFileChange} hidden />
       </label>
@@ -492,7 +492,7 @@
       <div class="import-actions">
         <button class="b3-button b3-button--text" on:click={() => restorePayload = null}>取消</button>
         <button class="b3-button" on:click={confirmPluginImport}>
-          <svg><use xlink:href="#iconDownload"></use></svg>
+          <svg><use xlink:href="#iconRefresh"></use></svg>
           恢复导入
         </button>
       </div>
@@ -568,10 +568,10 @@
 </div>
 
 <style lang="scss">
-  .import-panel { padding: 24px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .import-panel { padding: 24px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
 
   .import-intro {
-    h2 { font-size: var(--aio-fs-lg); margin: 0 0 8px; }
+    h2 { font-size: var(--aio-fs-lg); line-height: 1.25; margin: 0 0 8px; }
     p { font-size: var(--aio-fs-base); color: var(--b3-theme-on-surface); line-height: 1.6; margin: 0 0 8px;
       code { background: var(--b3-theme-surface-lighter); padding: 1px 4px; border-radius: 3px; font-size: var(--aio-fs-xs); }
     }
@@ -604,6 +604,7 @@
     h3 {
       margin: 0 0 4px;
       font-size: var(--aio-fs-md);
+      line-height: 1.3;
     }
 
     p {

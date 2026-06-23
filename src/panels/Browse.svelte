@@ -158,6 +158,8 @@
 
   function getNextReview(status: string, due: number): string {
     if (status === 'new') return '立即';
+    if (status === 'drill') return '机械练习';
+    if (status === 'relearning') return '重新学习';
     const diff = due - Date.now();
     if (diff <= 0) return '逾期';
     const h = Math.round(diff / 3600000);
@@ -388,7 +390,7 @@
     flex-shrink: 0;
     svg { width: 14px; height: 14px; }
   }
-  .browse-list { flex: 1; overflow-y: auto; padding: 0 24px 24px; }
+  .browse-list { flex: 1; overflow-y: auto; padding: 0 24px 24px; box-sizing: border-box; }
   .browse-empty { text-align: center; padding: 32px; opacity: 0.4; }
 
   .browse-item {
@@ -418,6 +420,8 @@
   .badge-status-learning { background: var(--b3-card-warning-background); color: var(--b3-card-warning-color); }
   .badge-status-review { background: var(--b3-card-success-background); color: var(--b3-card-success-color); }
   .badge-status-buried { background: var(--b3-card-error-background); color: var(--b3-card-error-color); }
+  .badge-status-drill { background: var(--b3-theme-warning-lightest); color: var(--b3-theme-warning); }
+  .badge-status-relearning { background: var(--b3-card-warning-background); color: var(--b3-card-warning-color); }
   .badge-tag { background: var(--b3-theme-surface-lighter); }
   .badge-concept { background: var(--b3-theme-primary-lightest); color: var(--b3-theme-primary); }
 

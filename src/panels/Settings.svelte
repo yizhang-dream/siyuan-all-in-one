@@ -13,11 +13,17 @@
   let flashcardModel = '';
   let mindmapProviderId = '';
   let mindmapModel = '';
-  let notebookEndpoint = '';
   let cardsPerDay = 30;
   let scheduler: 'sm2' | 'fsrs' = 'sm2';
   let defaultDeck = '';
   let agents: AgentConfig[] = [];
+  let ragEnabled = false;
+  let ragChunkSize = 500;
+  let ragChunkOverlap = 0.1;
+  let ragTopK = 5;
+  let ragEmbeddingModel = 'Xenova/all-MiniLM-L6-v2';
+  let ragProviderId = '';
+  let ragModel = '';
 
   // Provider 编辑状态
   let editingProvider: Provider | null = null;
@@ -33,11 +39,17 @@
     flashcardModel = config.flashcardModel || '';
     mindmapProviderId = config.mindmapProviderId || '';
     mindmapModel = config.mindmapModel || '';
-    notebookEndpoint = config.notebookEndpoint || '';
     cardsPerDay = config.cardsPerDay ?? 30;
     scheduler = config.scheduler === 'fsrs' ? 'fsrs' : 'sm2';
     defaultDeck = config.defaultDeck || '';
     agents = config.agents || [];
+    ragEnabled = config.ragEnabled ?? false;
+    ragChunkSize = config.ragChunkSize ?? 500;
+    ragChunkOverlap = config.ragChunkOverlap ?? 0.1;
+    ragTopK = config.ragTopK ?? 5;
+    ragEmbeddingModel = config.ragEmbeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    ragProviderId = config.ragProviderId || '';
+    ragModel = config.ragModel || '';
   });
 
   async function save() {
@@ -47,11 +59,17 @@
       flashcardModel,
       mindmapProviderId,
       mindmapModel,
-      notebookEndpoint,
       cardsPerDay: Number(cardsPerDay),
       scheduler,
       defaultDeck,
       agents,
+      ragEnabled,
+      ragChunkSize: Number(ragChunkSize),
+      ragChunkOverlap: Number(ragChunkOverlap),
+      ragTopK: Number(ragTopK),
+      ragEmbeddingModel,
+      ragProviderId,
+      ragModel,
     });
     showMessage('设置已保存');
   }
@@ -318,15 +336,27 @@
           </select>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Open Notebook（独立） -->
-  <div class="settings-group">
-    <h3>知识库搜索（Open Notebook）</h3>
-    <p class="settings-hint">Open Notebook 有独立的 REST API，不走上面的 Provider。留空则禁用。</p>
-    <label for="settings-notebook-endpoint">搜索端点</label>
-    <input id="settings-notebook-endpoint" class="b3-text-field" type="text" bind:value={notebookEndpoint} placeholder="http://localhost:5055" />
+      <div class="feature-block">
+        <div class="feature-label">
+          <svg><use xlink:href="#iconSearch"></use></svg>
+          <span>RAG 对话</span>
+        </div>
+        <div class="feature-row">
+          <select class="b3-select" value={ragProviderId} on:change={(e) => { ragProviderId = e.target.value; ragModel = getProviderModels(ragProviderId)[0] || ''; }} aria-label="RAG Provider">
+            <option value="">跟随制卡</option>
+            {#each providers as p}<option value={p.id}>{p.name}</option>{/each}
+          </select>
+          <select class="b3-select" bind:value={ragModel} aria-label="RAG 模型">
+            <option value="">跟随制卡</option>
+            {#each getProviderModels(ragProviderId) as m}<option value={m}>{m}</option>{/each}
+            {#if ragModel && !getProviderModels(ragProviderId).includes(ragModel)}
+              <option value={ragModel}>{ragModel}</option>
+            {/if}
+          </select>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 复习设置 -->
@@ -349,6 +379,42 @@
         <input id="settings-default-deck" class="b3-text-field" type="text" bind:value={defaultDeck} placeholder="默认" />
       </div>
     </div>
+  </div>
+
+  <!-- Local RAG 设置 -->
+  <div class="settings-group">
+    <h3>本地 RAG 设置</h3>
+    <p class="settings-hint">启用后可使用本地语义搜索，上传文档即可检索问答，无需 Open Notebook。</p>
+    <div class="feature-row">
+      <div>
+        <label>
+          <input type="checkbox" bind:checked={ragEnabled} />
+          启用本地 RAG
+        </label>
+      </div>
+    </div>
+    {#if ragEnabled}
+      <div class="feature-row">
+        <div>
+          <label for="settings-rag-chunk-size">分块大小（token）</label>
+          <input id="settings-rag-chunk-size" class="b3-text-field" type="number" bind:value={ragChunkSize} min="100" max="2000" step="50" />
+        </div>
+        <div>
+          <label for="settings-rag-chunk-overlap">分块重叠比例</label>
+          <input id="settings-rag-chunk-overlap" class="b3-text-field" type="number" bind:value={ragChunkOverlap} min="0" max="0.5" step="0.05" />
+        </div>
+        <div>
+          <label for="settings-rag-top-k">检索数量（Top-K）</label>
+          <input id="settings-rag-top-k" class="b3-text-field" type="number" bind:value={ragTopK} min="1" max="20" step="1" />
+        </div>
+      </div>
+      <div class="feature-row">
+        <div>
+          <label for="settings-rag-embedding-model">嵌入模型</label>
+          <input id="settings-rag-embedding-model" class="b3-text-field" type="text" bind:value={ragEmbeddingModel} placeholder="Xenova/all-MiniLM-L6-v2" />
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Agent 管理 -->
@@ -516,7 +582,7 @@
 {/if}
 
 <style lang="scss">
-  .settings-panel { padding: 24px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+  .settings-panel { padding: 24px; height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box; }
   .settings-group {
     display: flex; flex-direction: column; gap: 6px;
     h3 { font-size: var(--aio-fs-base); margin: 0; color: var(--b3-theme-primary); }

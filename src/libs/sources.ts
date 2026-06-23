@@ -2,12 +2,10 @@
  * Copyright (c) 2026 siyuan-all-in-one
  * MIT License
  *
- * 知识来源管理：从 Open Notebook / 思源文档 / 手动输入 获取上下文内容。
+ * 知识来源管理：思源文档 / 手动输入。
  */
 
 import { fetchSyncPost } from 'siyuan';
-import { OpenNotebookClient } from './notebook';
-import { openNotebookResultsToPipelineSources } from './ai/source-adapters';
 import type { PipelineSource } from './ai/pipeline';
 import { siyuanDocsToPipelineSources, type SiyuanDocContent } from './ai/siyuan-source-adapters';
 
@@ -15,13 +13,11 @@ export { siyuanDocsToPipelineSources };
 export type { SiyuanDocContent };
 
 /** 来源类型 */
-export type SourceType = 'none' | 'notebook' | 'siyuan' | 'manual';
+export type SourceType = 'none' | 'siyuan' | 'manual';
 
 /** 来源配置 */
 export interface SourceConfig {
     type: SourceType;
-    notebookQuery?: string;
-    notebookSourceIds?: string[];
     /** 思源文档 ID 列表（支持多选） */
     siyuanDocIds: string[];
     manualText?: string;
@@ -77,24 +73,9 @@ export async function readSiyuanDocsAsPipelineSources(
  * 根据来源配置获取上下文文本。
  */
 export async function fetchContext(
-    config: SourceConfig,
-    notebookEndpoint?: string
+    config: SourceConfig
 ): Promise<string> {
     switch (config.type) {
-        case 'notebook':
-            if (!notebookEndpoint || !config.notebookQuery?.trim()) return '';
-            try {
-                const client = new OpenNotebookClient(notebookEndpoint);
-                if (config.notebookSourceIds && config.notebookSourceIds.length > 0) {
-                    const results = await client.searchInSources(config.notebookQuery, config.notebookSourceIds, { limit: 10 });
-                    return openNotebookResultsToContext(results, config.notebookQuery);
-                }
-                const results = await client.search(config.notebookQuery, { limit: 10 });
-                return openNotebookResultsToContext(results, config.notebookQuery);
-            } catch {
-                return '';
-            }
-
         case 'siyuan': {
             const ids = config.siyuanDocIds || [];
             if (ids.length === 0) return '';
@@ -109,15 +90,4 @@ export async function fetchContext(
         default:
             return '';
     }
-}
-
-function openNotebookResultsToContext(results: any[], query: string): string {
-    return openNotebookResultsToPipelineSources(results, query, { maxCharsPerSource: 2500 })
-        .map((source, index) => [
-            `[OpenNotebook ${index + 1}] sourceId=${source.sourceId || ''} chunkId=${source.chunkId || ''}`,
-            source.url ? `url=${source.url}` : '',
-            source.page !== undefined ? `page=${source.page}` : '',
-            source.text,
-        ].filter(Boolean).join('\n'))
-        .join('\n\n---\n\n');
 }

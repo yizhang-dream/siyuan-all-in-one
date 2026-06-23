@@ -73,10 +73,10 @@ function injectScript(script: JSItem) {
  */
 export function statusToColor(status: 'mastered' | 'learning' | 'weak' | 'buried'): string {
     switch (status) {
-        case 'mastered': return '#22c55e'; // 绿
-        case 'learning': return '#eab308'; // 黄
-        case 'weak': return '#ef4444';     // 红
-        case 'buried': return '#9ca3af';   // 灰
+        case 'mastered': return 'var(--b3-card-success-color)';
+        case 'learning': return 'var(--b3-card-warning-color)';
+        case 'weak': return 'var(--b3-card-error-color)';
+        case 'buried': return 'var(--b3-theme-on-surface-light)';
     }
 }
 

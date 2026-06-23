@@ -49,36 +49,19 @@ const calls: Array<{ url: string; body?: any }> = [];
 const mixed = await collectPipelineSources({
   mode: 'mixed',
   manualText: 'Manual evidence about active recall.',
-  notebookEndpoint: 'http://localhost:5055',
-  notebookQuery: 'active recall',
-  notebookSourceIds: ['source-1', 'source-1'],
-  notebookNoteIds: ['note-1'],
   siyuanDocs: [{ id: 'doc-1', title: 'SiYuan Doc' }],
   localFiles: [{
     name: 'local.html',
     type: 'text/html',
     text: '<h1>Local source</h1><p>Local HTML should become a file source.</p>',
   }],
-  openNotebookLimit: 12,
-  openNotebookSearchType: 'text',
 });
 
 assert.equal(mixed.stats.manual, 1);
-assert.equal(mixed.stats.openNotebook, 1);
 assert.equal(mixed.stats.siyuan, 1);
 assert.equal(mixed.stats.file, 1);
-assert.equal(mixed.stats.total, 4);
+assert.equal(mixed.stats.total, 3);
 assert.ok(mixed.sources.some((source) => source.type === 'file' && source.sourceId === 'local.html'));
-const searchCalls = calls.filter((call) => call.url.endsWith('/api/search'));
-assert.equal(searchCalls.length, 1);
-assert.equal(searchCalls[0].body.type, 'text');
-assert.equal(searchCalls[0].body.query, 'active recall');
-
-const openOnlyWithoutEndpoint = await collectPipelineSources({
-  mode: 'opennotebook',
-  notebookQuery: 'no endpoint',
-});
-assert.equal(openOnlyWithoutEndpoint.sources.length, 0);
 
 const manualOnlyIgnoresSiyuan = await collectPipelineSources({
   mode: 'manual',
@@ -93,8 +76,6 @@ console.log(JSON.stringify({
   dedupe: deduped.length,
   mixedSources: mixed.stats.total,
   fileSources: mixed.stats.file,
-  openNotebookSearchType: searchCalls[0].body.type,
-  noEndpoint: openOnlyWithoutEndpoint.sources.length,
 }, null, 2));
 `, 'utf8');
 
@@ -104,6 +85,7 @@ await esbuild.build({
   platform: 'node',
   format: 'esm',
   outfile,
+  external: ['onnxruntime-node', 'onnxruntime-web', '@xenova/transformers'],
   plugins: [{
     name: 'stub-siyuan',
     setup(build) {

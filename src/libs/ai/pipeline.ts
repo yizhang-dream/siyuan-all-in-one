@@ -1,6 +1,6 @@
 import { callLLM, LLMError, parseLLMJSON } from '../llm';
 import type { ChatMessage, LLMConfig } from '../llm';
-import { createCard } from '../srs/sm2';
+import { createCard } from '../srs';
 import type {
     CardCandidate,
     CardType,
@@ -10,7 +10,7 @@ import type {
     RelationType,
     SourceRef,
 } from '../types/concept';
-import type { Card } from '../types/card';
+import type { Card } from '../types';
 import {
     buildAssignCardsPrompt,
     buildExtractConceptsPrompt,
@@ -303,6 +303,7 @@ export async function confirmPipelineResult(
             candidate.hint || '',
             deck,
             tags,
+            undefined,
             candidate.cardType,
             conceptId,
             candidate.sourceRefs
@@ -754,7 +755,7 @@ function withLowTemperature(config?: LLMConfig, temperature?: number): LLMConfig
 }
 
 function isValidSourceType(value: string): value is SourceRef['type'] {
-    return ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url'].includes(value);
+    return ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url', 'rag'].includes(value);
 }
 
 function clampConfidence(value: any): number {

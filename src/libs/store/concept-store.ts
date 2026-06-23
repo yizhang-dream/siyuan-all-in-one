@@ -17,7 +17,7 @@ const VALID_RELATION_TYPES: RelationType[] = [
     'related',
 ];
 
-const VALID_SOURCE_TYPES: SourceRef['type'][] = ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url'];
+const VALID_SOURCE_TYPES: SourceRef['type'][] = ['opennotebook', 'siyuan', 'manual', 'file', 'pdf', 'url', 'rag'];
 
 function genId(prefix: string): string {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -154,8 +154,9 @@ export class ConceptStore {
         const rel: Relation = {
             id: genId('r'),
             fromId, toId, type, sourceRefs,
-            created: Date.now() as any,
-        } as Relation;
+            created: Date.now(),
+            modified: Date.now(),
+        };
         this.relations.push(rel);
         // 同步更新 parent_child 关系的 parentIds/childIds
         if (type === 'parent_child') {
@@ -309,6 +310,7 @@ function cleanConceptNode(raw: any): ConceptNode {
 }
 
 function cleanRelation(raw: any): Relation {
+    const now = Date.now();
     return {
         id: String(raw?.id || genId('r')),
         fromId: String(raw?.fromId || raw?.from || ''),
@@ -316,6 +318,8 @@ function cleanRelation(raw: any): Relation {
         type: normalizeRelationType(raw?.type || raw?.relationType || raw?.relation_type),
         sourceRefs: cleanSourceRefs(raw?.sourceRefs || raw?.references || raw?.sources),
         confidence: toOptionalNumber(raw?.confidence),
+        created: Number(raw?.created) || now,
+        modified: Number(raw?.modified) || now,
     };
 }
 
