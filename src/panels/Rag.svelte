@@ -24,6 +24,8 @@
   function mdToHtml(text: string): string {
     if (!text) return '';
     try {
+      // Fix: merge list numbers split across lines (e.g., "1.\n**text**" → "1. **text**")
+      const fixed = text.replace(/(^|\n)(\d+)\.\s*\n\s*(\S)/gm, '$1$2. $3');
       const lute = (window as any).Lute.New();
       lute.SetInlineMath(true);
       lute.SetInlineMathAllowDigitAfterOpenMarker(true);
@@ -34,7 +36,7 @@
       lute.SetCallout(true);
       lute.SetSuperBlock(true);
       lute.SetSanitize(true);
-      return lute.Md2HTML(text);
+      return lute.Md2HTML(fixed);
     } catch {
       return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
