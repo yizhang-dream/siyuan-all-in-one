@@ -266,6 +266,44 @@
     isNewProvider = false;
   }
 
+  async function testProviderConnection(provider: any) {
+    if (!provider?.baseUrl) {
+      showMessage('请先配置 Provider 的端点地址');
+      return;
+    }
+    if (!provider?.apiKey) {
+      showMessage('请先填写 API Key');
+      return;
+    }
+    try {
+      const { getEndpoints } = await import('../libs/llm');
+      const endpoints = getEndpoints(provider.id);
+      const base = provider.baseUrl.replace(/\/+$/, '');
+      // Build the models endpoint URL
+      let modelUrl: string;
+      if (provider.id === 'gemini') {
+        modelUrl = `${base}${endpoints.models}?key=${encodeURIComponent(provider.apiKey)}`;
+      } else {
+        modelUrl = endpoints.models.startsWith('http') ? endpoints.models : `${base}${endpoints.models}`;
+      }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (provider.id === 'gemini') {
+        // API key is in query param for Gemini
+      } else {
+        headers['Authorization'] = `Bearer ${provider.apiKey}`;
+      }
+      const resp = await fetch(modelUrl, { method: 'GET', headers });
+      if (resp.ok) {
+        showMessage(`✅ ${provider.name || provider.id} 连接成功`);
+      } else {
+        const text = await resp.text().catch(() => '');
+        showMessage(`❌ 连接失败 (${resp.status}): ${text.slice(0, 200)}`);
+      }
+    } catch (e: any) {
+      showMessage(`❌ 连接失败: ${e?.message || '网络无法访问，请检查端点地址和网络连接'}`);
+    }
+  }
+
   function handleProviderOverlayKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') cancelProviderEdit();
   }
@@ -414,6 +452,7 @@
               </div>
               <div class="provider-actions">
                 <button class="b3-button b3-button--small" on:click={() => editProvider(p)}>编辑</button>
+                <button class="b3-button b3-button--small" on:click={() => testProviderConnection(p)} title="测试连接">测试</button>
                 {#if !p.isBuiltIn}
                   <button class="b3-button b3-button--small provider-del" on:click={() => deleteProvider(p)}>删除</button>
                 {/if}
@@ -800,6 +839,7 @@
             </div>
             <div class="provider-actions">
               <button class="b3-button b3-button--small" on:click={() => editProvider(p)}>编辑</button>
+              <button class="b3-button b3-button--small" on:click={() => testProviderConnection(p)} title="测试连接">测试</button>
               {#if !p.isBuiltIn}
                 <button class="b3-button b3-button--small provider-del" on:click={() => deleteProvider(p)}>删除</button>
               {/if}

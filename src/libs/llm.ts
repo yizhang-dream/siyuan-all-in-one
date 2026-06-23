@@ -61,7 +61,7 @@ export function buildApiUrl(baseUrl: string, endpoint: string): string {
  * 根据 provider id 返回聊天端点和模型列表端点。
  * 不同 provider 的端点路径不同。
  */
-function getEndpoints(providerId: string): { chat: string; models: string } {
+export function getEndpoints(providerId: string): { chat: string; models: string } {
     switch (providerId) {
         case 'gemini':
             return { chat: '/v1beta/models/{model}:generateContent', models: '/v1beta/models' };
