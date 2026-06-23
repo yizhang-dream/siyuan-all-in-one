@@ -2,6 +2,12 @@
  * Lazy PaddleOCR wrapper for offline formula/text OCR.
  * paddleocr-js is 112MB+ — must NOT be bundled. Loaded via require() at runtime.
  * Uses a fallback chain for require resolution to handle different module loading contexts.
+ *
+ * Models (~112MB) are bundled separately at dist/models/paddleocr/ via viteStaticCopy.
+ * They must be in TF.js GraphModel format (model.json + .bin weight shards) because
+ * paddleocr-js defaults to TensorFlow.js backend.  If ONNX format is used instead,
+ * set useTensorflow: false / useONNX: true below.
+ *
  * Copyright (c) 2026 siyuan-all-in-one
  * MIT License
  */
@@ -74,6 +80,22 @@ function resolvePaddleOcrAbsolutePath(): string | null {
     return null;
 }
 
+/**
+ * Resolve the absolute path to the bundled PaddleOCR model directory.
+ * Models are bundled at dist/models/paddleocr/ via viteStaticCopy.
+ * Returns null if path/fs modules are unavailable (e.g. browser context without node).
+ */
+function resolveModelPath(): string | null {
+    try {
+        const pathMod = getNodeRequire()?.('path');
+        if (!pathMod) return null;
+        // __dirname points to the plugin's dist/ directory at runtime
+        return pathMod.join(__dirname, 'models', 'paddleocr');
+    } catch {
+        return null;
+    }
+}
+
 async function loadPaddleOcr(): Promise<any> {
     if (paddleOcrInstance) return paddleOcrInstance;
 
@@ -114,7 +136,28 @@ async function loadPaddleOcr(): Promise<any> {
             );
         }
 
-        paddleOcrInstance = new PaddleOCR({ language: 'ch', useWasm: true });
+        // Resolve absolute path to bundled model directory
+        const modelPath = resolveModelPath();
+
+        // Use TensorFlow.js backend by default (expected model format: model.json + .bin).
+        // Set useTensorflow=false / useONNX=true if bundling ONNX (.onnx) models instead.
+        paddleOcrInstance = new PaddleOCR({
+            language: 'ch',
+            useWasm: true,
+            useTensorflow: true,
+            useONNX: false,
+            // Pass absolute modelPath so paddleocr-js finds models regardless of CWD.
+            // The modelPath is set here and overrides the default "./models" or "/models".
+            // Expected subdirectory structure under modelPath:
+            //   text/det_db/model.json            — text detection (DB)
+            //   text/rec_crnn/ch/model.json       — text recognition (CRNN, Chinese)
+            //   layout/model.json                 — layout analysis
+            //   table/structure/model.json         — table structure
+            //   table/cell/model.json              — table cell detection
+            //   formula/latex/model.json           — formula recognition
+            //   barcode/detect.json                — barcode detection
+            ...(modelPath ? { modelPath } : {}),
+        });
         await paddleOcrInstance.init();
         return paddleOcrInstance;
     } catch (e: any) {
@@ -124,6 +167,7 @@ async function loadPaddleOcr(): Promise<any> {
                 message: e?.message || e,
                 hasRequire: !!getNodeRequire(),
                 hasPaddleDir: !!resolvePaddleOcrAbsolutePath(),
+                modelPath: resolveModelPath(),
                 cwd: typeof process !== 'undefined' ? process.cwd?.() : 'N/A',
                 __dirname: typeof __dirname !== 'undefined' ? __dirname : 'N/A',
             });

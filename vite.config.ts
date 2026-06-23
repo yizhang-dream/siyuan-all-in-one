@@ -67,6 +67,10 @@ export default defineConfig({
                 // canvas — stub native addon so paddleocr-js require('canvas') doesn't fail
                 { src: "src/stubs/canvas-package/index.js", dest: "./node_modules/canvas" },
                 { src: "src/stubs/canvas-package/package.json", dest: "./node_modules/canvas" },
+                // Bundle PaddleOCR model files (~112MB) for offline OCR
+                // These must be in TensorFlow.js GraphModel format (model.json + .bin weight files)
+                // Download and convert using: scripts/download-paddleocr-models.ps1
+                { src: "src/models/paddleocr/**/*", dest: "./models/paddleocr/" },
             ],
         }),
     ],
