@@ -166,6 +166,41 @@
     return tools.some(t => isToolEnabled(t));
   }
 
+  // Tool list helpers
+  let expandedTools: Record<string, boolean> = {};
+
+  function toggleExpandTool(name: string) {
+    expandedTools = { ...expandedTools, [name]: !expandedTools[name] };
+  }
+
+  function getAllToolNames(): string[] {
+    return Object.values(TOOL_CATEGORIES).flatMap(cat => cat.tools);
+  }
+
+  function calcSelectedCount(): number {
+    const cfg = getCurrentToolConfig();
+    return getAllToolNames().filter(t => {
+      const tc = cfg[t];
+      return tc === undefined || tc.enabled;
+    }).length;
+  }
+
+  function calcTotalCount(): number {
+    return getAllToolNames().length;
+  }
+
+  // Select/deselect all tools
+  function selectAllTools() {
+    const names = getAllToolNames();
+    const allSelected = names.every(t => isToolEnabled(t));
+    const cfg = getCurrentToolConfig();
+    for (const name of names) {
+      const existing = cfg[name] || { enabled: true, autoApprove: true };
+      cfg[name] = { ...existing, enabled: !allSelected };
+    }
+    saveAgentToolsConfig();
+  }
+
   $: currentModel = plugin?.getConfig()?.ragModel || plugin?.getConfig()?.flashcardModel || '未配置模型';
 
   // Poll store while sending to detect background completion (survives tab switch)
@@ -912,43 +947,72 @@ ${ctx}`
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="tool-dialog" on:click|stopPropagation>
       <div class="tool-dialog-header">
-        <span>工具选择 {agentMode ? '(Agent 模式)' : '(Ask 模式)'}</span>
-        <button class="b3-button" on:click={() => showToolDialog = false}>✕</button>
+        <span class="tool-dialog-title">工具选择</span>
+        <div class="tool-dialog-header-actions">
+          <button class="tool-header-btn" on:click={selectAllTools}>全选</button>
+          <button class="tool-header-btn tool-close-btn" on:click={() => showToolDialog = false}>关闭</button>
+        </div>
+      </div>
+      <div class="tool-info-banner">
+        选择AI可用工具会额外消耗token，请按需选择。
       </div>
       <div class="tool-dialog-body">
         {#each Object.entries(TOOL_CATEGORIES) as [catKey, cat]}
           <div class="tool-category">
-            <div class="tool-category-title">
-              <span>{cat.label}</span>
-              <button class="b3-button b3-button--small"
+            <div class="tool-category-header">
+              <span class="tool-category-title">{cat.label}</span>
+              <button class="tool-category-select-all"
                       on:click={() => toggleCategory(catKey, !isCategoryAllEnabled(catKey))}>
                 {isCategoryAllEnabled(catKey) ? '取消全选' : '全选'}
               </button>
             </div>
-            {#each cat.tools as toolName}
-              {@const allTools = getAllTools()}
-              {@const def = allTools.find(t => t.function.name === toolName)}
-              {#if def}
-                <div class="tool-item">
-                  <label class="tool-check-label">
-                    <input type="checkbox" checked={isToolEnabled(toolName)}
-                           on:change={() => toggleTool(toolName)} />
-                    <span class="tool-name">{def.function.name}</span>
-                    <span class="tool-desc">{def.function.description}</span>
-                  </label>
-                  <label class="tool-approve-label" title="自动执行（无需确认）">
-                    <span class="tool-approve-text">自动</span>
-                    <label class="b3-switch">
-                      <input type="checkbox" checked={getToolAutoApprove(toolName)}
-                             on:change={() => toggleToolAutoApprove(toolName)} />
-                      <span class="b3-switch-slider"></span>
-                    </label>
-                  </label>
-                </div>
-              {/if}
-            {/each}
+            <div class="tool-category-cards">
+              {#each cat.tools as toolName}
+                {@const allTools = getAllTools()}
+                {@const def = allTools.find(t => t.function.name === toolName)}
+                {#if def}
+                  {@const displayName = def.function.displayName || def.function.name}
+                  <div class="tool-item-card" class:tool-item-expanded={expandedTools[toolName]}>
+                    <div class="tool-item-main">
+                      <div class="tool-item-left">
+                        <input type="checkbox" checked={isToolEnabled(toolName)}
+                               on:change={() => toggleTool(toolName)} />
+                        <div class="tool-item-info" on:click={() => toggleExpandTool(toolName)} role="button" tabindex="0"
+                             on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpandTool(toolName); } }}>
+                          <span class="tool-item-name">{displayName}</span>
+                          <span class="tool-item-desc">{def.function.description}</span>
+                        </div>
+                      </div>
+                      <div class="tool-item-right">
+                        <label class="tool-approve-label" title="自动批准工具执行结果">
+                          <span class="tool-approve-text">自动批准</span>
+                          <label class="b3-switch">
+                            <input type="checkbox" checked={getToolAutoApprove(toolName)}
+                                   on:change={() => toggleToolAutoApprove(toolName)} />
+                            <span class="b3-switch-slider"></span>
+                          </label>
+                        </label>
+                        <span class="tool-item-arrow" class:expanded={expandedTools[toolName]}
+                              on:click={() => toggleExpandTool(toolName)} role="button" tabindex="0"
+                              on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpandTool(toolName); } }}>▶</span>
+                      </div>
+                    </div>
+                    {#if expandedTools[toolName]}
+                      <div class="tool-item-detail">
+                        <div class="tool-detail-label">参数说明：</div>
+                        <pre class="tool-detail-params">{JSON.stringify(def.function.parameters, null, 2)}</pre>
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              {/each}
+            </div>
           </div>
         {/each}
+      </div>
+      <div class="tool-dialog-footer">
+        <span class="tool-footer-hint">可为每个工具单独设置是否自动批准</span>
+        <span class="tool-footer-count">已选择: {calcSelectedCount()}/{calcTotalCount()}</span>
       </div>
     </div>
   </div>
@@ -1259,23 +1323,49 @@ ${ctx}`
   }
   .tool-dialog {
     background: var(--b3-theme-background);
-    border-radius: 8px;
+    border-radius: 10px;
     box-shadow: var(--b3-dialog-shadow);
-    width: 480px;
+    width: 520px;
     max-width: 90vw;
-    max-height: 80vh;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
   .tool-dialog-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px;
+    padding: 14px 18px;
     border-bottom: 1px solid var(--b3-border-color);
-    font-weight: 600;
   }
+  .tool-dialog-title {
+    font-weight: 600;
+    font-size: var(--aio-fs-base);
+  }
+  .tool-dialog-header-actions {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .tool-header-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: var(--aio-fs-sm);
+    color: var(--b3-theme-primary);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .tool-header-btn:hover { background: var(--b3-theme-surface-lighter); }
+  .tool-close-btn { color: var(--b3-theme-on-surface); }
+
+  /* Info banner */
+  .tool-info-banner {
+    padding: 8px 18px;
+    background: var(--b3-theme-surface-lighter);
+    border-bottom: 1px solid var(--b3-border-color);
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface-light);
+    line-height: 1.5;
+  }
+
   .tool-dialog-body {
-    padding: 12px 16px;
+    padding: 12px 18px;
     overflow-y: auto;
     flex: 1;
   }
@@ -1283,39 +1373,72 @@ ${ctx}`
     margin-bottom: 16px;
   }
   .tool-category:last-child { margin-bottom: 0; }
-  .tool-category-title {
+  .tool-category-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 0;
-    margin-bottom: 4px;
+    padding: 8px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--b3-border-color);
+  }
+  .tool-category-header .tool-category-title {
     font-weight: 500;
     font-size: var(--aio-fs-sm);
     color: var(--b3-theme-on-surface);
-    border-bottom: 1px solid var(--b3-border-color);
   }
-  .tool-item {
+  .tool-category-select-all {
+    background: none; border: none; cursor: pointer;
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-primary);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .tool-category-select-all:hover { background: var(--b3-theme-surface-lighter); }
+
+  .tool-category-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tool-item-card {
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--b3-theme-surface);
+    transition: border-color 0.15s;
+  }
+  .tool-item-card:hover { border-color: var(--b3-theme-primary-light); }
+  .tool-item-card.tool-item-expanded { border-color: var(--b3-theme-primary-light); }
+
+  .tool-item-main {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 8px;
-    border-radius: 4px;
+    padding: 8px 10px;
     gap: 8px;
   }
-  .tool-item:hover { background: var(--b3-theme-surface-lighter); }
-  .tool-check-label {
-    display: flex; align-items: center; gap: 8px;
-    cursor: pointer; flex: 1; min-width: 0;
+  .tool-item-left {
+    display: flex; align-items: center; gap: 10px;
+    flex: 1; min-width: 0;
   }
-  .tool-check-label input[type="checkbox"] { margin: 0; cursor: pointer; }
-  .tool-name {
+  .tool-item-left input[type="checkbox"] { margin: 0; cursor: pointer; }
+  .tool-item-info {
+    display: flex; flex-direction: column;
+    cursor: pointer; flex: 1; min-width: 0;
+    gap: 1px;
+  }
+  .tool-item-name {
     font-weight: 500;
     font-size: var(--aio-fs-sm);
-    font-family: var(--b3-font-family-code);
     white-space: nowrap;
   }
-  .tool-desc {
+  .tool-item-desc {
     font-size: 11px;
     color: var(--b3-theme-on-surface-light);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .tool-item-right {
+    display: flex; align-items: center; gap: 6px;
+    flex-shrink: 0;
   }
   .tool-approve-label {
     display: flex; align-items: center; gap: 4px;
@@ -1323,7 +1446,57 @@ ${ctx}`
     font-size: 11px;
     color: var(--b3-theme-on-surface-light);
   }
-  .tool-approve-text { margin-right: 2px; }
+  .tool-approve-text { white-space: nowrap; }
+  .tool-item-arrow {
+    font-size: 10px;
+    color: var(--b3-theme-on-surface-light);
+    cursor: pointer;
+    padding: 4px 2px;
+    transition: transform 0.15s;
+    user-select: none;
+  }
+  .tool-item-arrow.expanded {
+    transform: rotate(90deg);
+  }
+  .tool-item-arrow:hover { color: var(--b3-theme-primary); }
+
+  .tool-item-detail {
+    border-top: 1px solid var(--b3-border-color);
+    padding: 8px 12px;
+    background: var(--b3-theme-surface-lighter);
+    font-size: var(--aio-fs-xs);
+  }
+  .tool-detail-label {
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--b3-theme-on-surface-light);
+  }
+  .tool-detail-params {
+    margin: 0;
+    font-family: var(--b3-font-family-code);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 150px;
+    overflow: auto;
+  }
+
+  /* Bottom bar */
+  .tool-dialog-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 18px;
+    border-top: 1px solid var(--b3-border-color);
+    background: var(--b3-theme-surface);
+  }
+  .tool-footer-hint {
+    font-size: var(--aio-fs-xs);
+    color: var(--b3-theme-on-surface-light);
+  }
+  .tool-footer-count {
+    font-size: var(--aio-fs-sm);
+    font-weight: 500;
+    color: var(--b3-theme-on-surface);
+  }
 
   @media (max-width: 640px) {
     .chat-messages { padding: 10px; }

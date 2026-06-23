@@ -15,6 +15,7 @@ export interface ToolDefinition {
     type: 'function';
     function: {
         name: string;
+        displayName?: string;
         description: string;
         parameters: object;  // JSON Schema
     };
@@ -72,7 +73,8 @@ const ALL_TOOL_DEFINITIONS: ToolDefinition[] = [
         type: 'function',
         function: {
             name: 'rag_search',
-            description: 'Search the imported document knowledge base for relevant information',
+            displayName: '知识检索搜索',
+            description: '在已导入文档的知识库中搜索相关内容',
             parameters: {
                 type: 'object',
                 properties: {
@@ -94,7 +96,8 @@ const ALL_TOOL_DEFINITIONS: ToolDefinition[] = [
         type: 'function',
         function: {
             name: 'sql_query',
-            description: 'Run a SQL query on the SiYuan note database. Use to find blocks, documents, or metadata.',
+            displayName: 'SQL查询',
+            description: '对思源笔记数据库执行 SQL 查询，用于查找块、文档或元数据',
             parameters: {
                 type: 'object',
                 properties: {
@@ -112,7 +115,8 @@ const ALL_TOOL_DEFINITIONS: ToolDefinition[] = [
         type: 'function',
         function: {
             name: 'get_block_content',
-            description: 'Get the Markdown content of a SiYuan block by its ID',
+            displayName: '获取块内容',
+            description: '通过块 ID 获取思源笔记块的 Markdown 内容',
             parameters: {
                 type: 'object',
                 properties: {
@@ -130,7 +134,8 @@ const ALL_TOOL_DEFINITIONS: ToolDefinition[] = [
         type: 'function',
         function: {
             name: 'create_note',
-            description: 'Create a new note in the SiYuan notebook. Returns the new document ID.',
+            displayName: '新建笔记',
+            description: '在思源笔记本中创建新笔记，返回新文档 ID',
             parameters: {
                 type: 'object',
                 properties: {
