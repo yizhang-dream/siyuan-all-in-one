@@ -242,6 +242,16 @@ export function cleanConfig(cfg: any): AppConfig {
     let vpId = cfg?.visionProviderId || 'glm';
     if (vpId === 'zhipu') vpId = 'glm';
 
+    // Merge: ensure all built-in providers exist in the saved config.
+    // New built-ins (qwen, hunyuan, stepfun, lingyiwanwu, moonshot-coding, volcano-coding)
+    // are appended so users see them in the dropdown without losing their customizations.
+    const savedIds = new Set(providers.map(p => p.id));
+    for (const builtin of BUILTIN_PROVIDERS) {
+        if (!savedIds.has(builtin.id)) {
+            providers.push({ ...builtin });
+        }
+    }
+
     const rawAgents = Array.isArray(cfg?.agents) ? cfg.agents : [];
     return {
         providers,
