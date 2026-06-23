@@ -13,6 +13,7 @@ export class BuiltinEmbedder implements EmbeddingProvider {
     private inner: RagEmbedder;
 
     constructor(pluginDirPath?: string) {
+        console.log('[all-in-one] BuiltinEmbedder pluginDirPath:', pluginDirPath);
         this.inner = new RagEmbedder(undefined, pluginDirPath);
     }
 

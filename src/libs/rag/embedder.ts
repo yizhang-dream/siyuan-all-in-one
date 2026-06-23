@@ -36,6 +36,7 @@ export class RagEmbedder {
     constructor(modelName?: string, pluginDirPath?: string) {
         this.modelName = modelName || 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
         this.pluginDirPath = pluginDirPath || '';
+        console.log('[all-in-one] RagEmbedder pluginDirPath:', this.pluginDirPath);
         this.cache = new Map();
     }
 
@@ -65,17 +66,24 @@ export class RagEmbedder {
     }
 
     private async _init(): Promise<void> {
+        // Hoist env so it's accessible in the catch block for diagnostics
+        let env: any;
         try {
             // Dynamic import of @huggingface/transformers — Vite bundles it into index.js
             // so it resolves correctly in Electron's renderer process.
             const mod = await import('@huggingface/transformers');
-            const { pipeline, env } = mod;
+            const pipeline = mod.pipeline;
+            env = mod.env;
             this.configureLocalModelPath(env);
             env.remoteHost = 'https://hf-mirror.com';
             this.pipeline = await pipeline('feature-extraction', this.modelName, { dtype: 'q8' });
             this.ready = true;
+            console.log('[all-in-one] embedder _init OK, modelName:', this.modelName);
+            console.log('[all-in-one] embedder env.localModelPath:', env.localModelPath);
         } catch (err: any) {
             this.initError = err?.message || String(err);
+            console.error('[all-in-one] embedder _init FAILED:', err?.message || err);
+            console.error('[all-in-one] env.localModelPath at failure:', env.localModelPath);
             console.warn('[siyuan-all-in-one] RAG embedder init failed:', this.initError);
         }
     }
@@ -134,6 +142,15 @@ export class RagEmbedder {
             }
             env.localModelPath = baseDir + 'models' + sep;
             env.allowLocalModels = true;
+        }
+        console.log('[all-in-one] localModelPath:', env.localModelPath);
+        // Verify the ONNX file exists
+        try {
+            const fs: typeof import('fs') = eval('require')('fs');
+            const onnxPath = env.localModelPath + 'Xenova/paraphrase-multilingual-MiniLM-L12-v2/onnx/model_quantized.onnx';
+            console.log('[all-in-one] ONNX exists:', fs.existsSync(onnxPath), onnxPath);
+        } catch (e) {
+            console.warn('[all-in-one] ONNX check unavailable (non-Node context):', e);
         }
     }
 
