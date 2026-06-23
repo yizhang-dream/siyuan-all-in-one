@@ -141,6 +141,7 @@
 
     const userMsg: ChatMessage = { id: 'u' + Date.now(), role: 'user', content: text };
     conversationStore.addMessage(activeSessionId, userMsg);
+    activeSessionId = activeSessionId;
     inputText = '';
     sending = true;
     sessions = conversationStore.getAll();
@@ -191,18 +192,19 @@
 
       const aiContent = await callLLM(llmMessages, llmConfig);
 
+      // Auto-title: if this is the first message, generate title
+      if (messages.length === 1) {
+        const title = text.trim().split('\n')[0].substring(0, 30) || '新对话';
+        renameSession(activeSessionId, title);
+      }
+
       conversationStore.addMessage(activeSessionId, {
         id: 'a' + Date.now(),
         role: 'assistant',
         content: aiContent,
         sources: results,
       });
-
-      // Auto-title: if this is the first message, generate title
-      if (messages.length === 1) {
-        const title = text.trim().split('\n')[0].substring(0, 30) || '新对话';
-        renameSession(activeSessionId, title);
-      }
+      activeSessionId = activeSessionId;
 
       sessions = conversationStore.getAll();
     } catch (e: any) {
@@ -211,6 +213,7 @@
         role: 'assistant',
         content: `错误：${e?.message || e}`,
       });
+      activeSessionId = activeSessionId;
       sessions = conversationStore.getAll();
     }
 

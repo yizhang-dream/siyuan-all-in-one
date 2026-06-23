@@ -92,7 +92,7 @@ export class ConversationStore {
   addMessage(id: string, message: ChatMessage): void {
     const session = this.sessions.find(s => s.id === id);
     if (session) {
-      session.messages.push(message);
+      session.messages = [...session.messages, message];
       session.updatedAt = Date.now();
       this.save();
     }
