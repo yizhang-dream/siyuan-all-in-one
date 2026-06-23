@@ -53,6 +53,12 @@
   // 视觉提取（公式/扫描件）设置
   let visionExtracting = new Set<string>();
 
+  // 自动重建索引（嵌入模型变更时触发）
+  let autoReindexing = false;
+  let autoReindexTotal = 0;
+  let autoReindexDone = 0;
+  let autoReindexingIds = new Set<string>();
+
   // 各扩展名文件输入框引用（每个按钮一个）
   let fileInputRefs: Record<string, HTMLInputElement> = {};
 
@@ -71,11 +77,49 @@
     { label: '.epub', accept: '.epub' },
   ];
 
-  onMount(() => {
+  // ── 嵌入配置哈希（用于检测变更） ──────────────────────
+
+  function hashEmbeddingConfig(cfg: any): string {
+    const obj = {
+      provider: cfg?.ragEmbeddingProvider || '',
+      model: cfg?.ragEmbeddingConfig?.model || '',
+      endpoint: cfg?.ragEmbeddingConfig?.endpoint || '',
+    };
+    const str = JSON.stringify(obj);
+    // djb2 hash
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash) + str.charCodeAt(i);
+      hash = hash & hash; // convert to 32-bit integer
+    }
+    return 'h' + Math.abs(hash).toString(36);
+  }
+
+  onMount(async () => {
     loadSources();
     // Pre-select specified IDs
     if (preSelectedIds.length > 0) {
       selectedIds = [...preSelectedIds.filter(id => sources.some(s => s.id === id))];
+    }
+
+    // Check if embedding config changed → auto-reindex all done sources
+    const cfg = plugin.getConfig();
+    const currentHash = hashEmbeddingConfig(cfg);
+    let meta: any;
+    try {
+      meta = await plugin.loadData('source-meta') || {};
+    } catch {
+      meta = {};
+    }
+    const storedHash = meta.lastEmbeddingHash || '';
+
+    if (currentHash !== storedHash && currentHash && currentHash !== 'h0') {
+      const toReindex = sources.filter(s => s.chunkStatus === 'done' && s.content);
+      if (toReindex.length > 0) {
+        await autoReindexAll(toReindex);
+      }
+      // Save new hash after reindex completes
+      await plugin.saveData('source-meta', { lastEmbeddingHash: currentHash });
     }
   });
 
@@ -592,6 +636,32 @@
     }
   }
 
+  /**
+   * Auto-reindex all sources in batch (triggered by embedding config change).
+   */
+  async function autoReindexAll(toReindex: SourceRecord[]) {
+    autoReindexing = true;
+    autoReindexTotal = toReindex.length;
+    autoReindexDone = 0;
+    await tick();
+
+    for (const source of toReindex) {
+      autoReindexingIds.add(source.id);
+      autoReindexingIds = autoReindexingIds; // trigger reactivity
+      await tick();
+      try {
+        await reIndex(source.id);
+        autoReindexDone++;
+      } catch (e) {
+        console.warn('[all-in-one] auto-reindex failed:', source.id, e);
+      }
+      autoReindexingIds.delete(source.id);
+      autoReindexingIds = autoReindexingIds;
+    }
+    autoReindexing = false;
+    sources = sourceStore.getAll();
+  }
+
   /** Remove vectors whose sourceId does not match any known source. */
   async function cleanupOrphanedVectors() {
     const knownIds = new Set(sources.map(s => s.id));
@@ -654,6 +724,7 @@
   }
 
   function statusLabel(s: SourceRecord): string {
+    if (autoReindexingIds.has(s.id)) return '🔄 重建中...';
     if (s.chunkStatus === 'done') return '✓ 完成';
     if (s.chunkStatus === 'error') return '✗ 错误';
     if (visionExtracting.has(s.id)) return '⏳ 提取中...';
@@ -763,7 +834,16 @@
       </label>
     </div>
 
-    {#if visibleSources.length === 0}
+    {#if autoReindexing}
+    <div class="reindex-banner">
+      <span>🔄 重建索引中... {autoReindexDone}/{autoReindexTotal}</span>
+      <div class="reindex-progress-bar">
+        <div class="reindex-progress-fill" style="width: {autoReindexTotal ? (autoReindexDone / autoReindexTotal * 100) : 0}%"></div>
+      </div>
+    </div>
+    {/if}
+
+    {#if visibleSources.length === 0 && !autoReindexing}
       <div class="source-empty">
         {#if sources.length === 0}
           <p>暂无来源，点击「导入」添加</p>
@@ -1011,6 +1091,30 @@
     padding: 6px 12px;
     border-bottom: 1px solid var(--b3-theme-surface-lighter);
     flex-shrink: 0;
+  }
+
+  .reindex-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--b3-theme-primary-lightest, rgba(var(--b3-theme-primary-rgb), 0.08));
+    border-bottom: 1px solid var(--b3-border-color);
+    font-size: var(--aio-fs-sm);
+    flex-shrink: 0;
+  }
+  .reindex-progress-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--b3-theme-surface);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .reindex-progress-fill {
+    height: 100%;
+    background: var(--b3-theme-primary);
+    border-radius: 2px;
+    transition: width 0.3s ease;
   }
 
   .source-empty {
