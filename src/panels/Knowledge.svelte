@@ -10,7 +10,28 @@
   export let appStore: any = null;
   export let mindmapStore: any = null;
 
+  // ── Cross-panel wiring props (pass-through from App) ──
+  export let jumpToMindmap: (mindmapId: string) => void = () => {};
+  export let startFilteredReview: (ids: string[], title?: string) => void = () => {};
+  export let openConceptsFromMindmapGaps: (gapSourceText: string, label: string) => void = () => {};
+
+  // External targets that trigger mode switching
+  export let mindmapJumpTarget: { mindmapId?: string } = {};
+  export let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
+  export let ragConceptTarget: any = null;
+
   let mode: 'graph' | 'mindmap' = 'graph';
+
+  // React to external jump/gap/RAG signals: switch mode accordingly
+  $: if (mindmapJumpTarget?.mindmapId) {
+    mode = 'mindmap';
+  }
+  $: if (mindmapGapTarget) {
+    mode = 'graph';
+  }
+  $: if (ragConceptTarget) {
+    mode = 'graph';
+  }
 </script>
 
 <div class="knowledge-panel">
@@ -27,11 +48,11 @@
 
   {#if mode === 'graph'}
     <div class="knowledge-graph-view">
-      <Concepts {plugin} {cardStore} {conceptStore} {mindmapStore} {config} {sourceStore} {appStore} />
+      <Concepts {plugin} {cardStore} {conceptStore} {mindmapStore} {config} {sourceStore} {appStore} {jumpToMindmap} mindmapGapTarget={mindmapGapTarget} ragConceptTarget={ragConceptTarget} />
     </div>
   {:else}
     <div class="knowledge-mindmap-view">
-      <Mindmap {plugin} {cardStore} {conceptStore} {mindmapStore} {config} />
+      <Mindmap {plugin} {cardStore} {conceptStore} {mindmapStore} {config} jumpTarget={mindmapJumpTarget} {startFilteredReview} {openConceptsFromMindmapGaps} />
     </div>
   {/if}
 </div>

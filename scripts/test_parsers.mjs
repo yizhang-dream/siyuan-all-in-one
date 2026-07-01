@@ -17,7 +17,8 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { ParserRegistry, TxtMdHtmlParser } from '../src/libs/parsers/index';
+import { ParserRegistry } from '../src/libs/parsers/registry';
+import { TxtMdHtmlParser } from '../src/libs/parsers/txt-md-html-parser';
 
 const registry = new ParserRegistry();
 registry.register(new TxtMdHtmlParser());
@@ -58,7 +59,7 @@ await esbuild.build({
   platform: 'node',
   format: 'esm',
   outfile,
-  external: ['siyuan', 'tesseract.js'],
+   external: ['siyuan', 'tesseract.js'],
   logLevel: 'silent',
 });
 

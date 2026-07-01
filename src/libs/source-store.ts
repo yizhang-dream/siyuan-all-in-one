@@ -7,6 +7,13 @@ import type { Card } from './types';
 
 export type SourceRecordType = 'file' | 'url' | 'paste' | 'pdf' | 'siyuan-doc';
 
+export interface WhereUsed {
+    rag: boolean;
+    generate: boolean;
+    concepts: boolean;
+    usageCount: number;
+}
+
 export interface SourceRecord {
     id: string;
     title: string;
@@ -25,6 +32,7 @@ export interface SourceRecord {
     chunkStatus: 'pending' | 'done' | 'error';
     errorMessage?: string;
     retryCount: number;
+    whereUsed?: WhereUsed;
 }
 
 export class SourceStore {
@@ -81,4 +89,13 @@ export class SourceStore {
         this.sources = this.sources.filter(s => s.id !== id);
     }
 
+    trackUsage(sourceId: string, panel: 'rag' | 'generate' | 'concepts'): void {
+        const s = this.getById(sourceId);
+        if (!s) return;
+        if (!s.whereUsed) {
+            s.whereUsed = { rag: false, generate: false, concepts: false, usageCount: 0 };
+        }
+        s.whereUsed[panel] = true;
+        s.whereUsed.usageCount = (s.whereUsed.usageCount ?? 0) + 1;
+    }
 }

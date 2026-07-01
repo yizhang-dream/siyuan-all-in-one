@@ -19,15 +19,47 @@
   export let config: any;
 
   import { VectorStore } from './libs/rag';
+  import type { RagConceptRequest } from './libs/rag';
   let vectorStore = new VectorStore(plugin);
 
   let activeTab = 'sources';
   let activeSubTab = 'generate';
 
+  // ── Cross-panel handoff signals ──
+
+  // Filtered review queue (Browse/Mindmap → Review)
+  let reviewQueue: { ids: string[]; title: string; key: number } | null = null;
+  let reviewQueueKey = 0;
+  function startFilteredReview(ids: string[], title?: string) {
+    reviewQueueKey++;
+    reviewQueue = { ids, title: title || '筛选复习', key: reviewQueueKey };
+    activeTab = 'make';
+    activeSubTab = 'review';
+  }
+
+  // Mindmap jump (Browse/Concepts → Knowledge/mindmap mode)
+  let mindmapJumpTarget: { mindmapId?: string } = {};
+  let mindmapJumpKey = 0;
+  function jumpToMindmap(id: string) {
+    mindmapJumpKey++;
+    mindmapJumpTarget = { mindmapId: id };
+    activeTab = 'knowledge';
+  }
+
+  // Mindmap gap → Concepts handoff (Mindmap → Knowledge/graph mode)
+  let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
+  let mindmapGapKey = 0;
+  function openConceptsFromMindmapGaps(gapSourceText: string, label: string) {
+    mindmapGapKey++;
+    mindmapGapTarget = { manualText: gapSourceText, label, key: mindmapGapKey };
+    activeTab = 'knowledge';
+  }
+
+  // RAG → Concepts handoff
+  let ragConceptTarget: RagConceptRequest | null = null;
   function openConceptsFromRag(request: RagConceptRequest) {
-    ragTarget = request;
-    conceptSourceTarget = null;
-    activeTab = 'concepts';
+    ragConceptTarget = request;
+    activeTab = 'knowledge';
   }
 
   const tabs = [
@@ -60,6 +92,10 @@
     } else {
       activeTab = id;
     }
+  }
+
+  function openConceptsPanel() {
+    activeTab = 'knowledge';
   }
 </script>
 
@@ -99,19 +135,19 @@
     {/if}
 
     {#if activeTab === 'make' && activeSubTab === 'generate'}
-      <Generate {plugin} {cardStore} {conceptStore} {sourceStore} {config} />
+      <Generate {plugin} {cardStore} {conceptStore} {sourceStore} {config} {appStore} {openConceptsPanel} />
     {:else if activeTab === 'make' && activeSubTab === 'review'}
-      <Review {plugin} {cardStore} {config} />
+      <Review {plugin} {cardStore} {config} queue={reviewQueue} />
     {:else if activeTab === 'make' && activeSubTab === 'browse'}
-      <Browse {plugin} {cardStore} {conceptStore} {config} />
+      <Browse {plugin} {cardStore} {conceptStore} {mindmapStore} {config} {jumpToMindmap} {startFilteredReview} />
     {:else if activeTab === 'make' && activeSubTab === 'import'}
       <Import {plugin} {cardStore} {conceptStore} {mindmapStore} />
     {:else if activeTab === 'rag'}
-      <Rag {plugin} {cardStore} {vectorStore} {sourceStore} {config} bind:appStore />
+      <Rag {plugin} {cardStore} {vectorStore} {sourceStore} {config} bind:appStore openConceptsFromRag={openConceptsFromRag} />
     {:else if activeTab === 'sources'}
       <SourceLibrary {plugin} {sourceStore} {vectorStore} bind:appStore />
     {:else if activeTab === 'knowledge'}
-      <Knowledge {plugin} {cardStore} {conceptStore} {sourceStore} {config} {mindmapStore} bind:appStore />
+      <Knowledge {plugin} {cardStore} {conceptStore} {sourceStore} {config} {mindmapStore} bind:appStore {jumpToMindmap} {startFilteredReview} {openConceptsFromMindmapGaps} {mindmapJumpTarget} {mindmapGapTarget} {ragConceptTarget} />
     {:else if activeTab === 'settings'}
       <SettingsPanel showAsTab={true} {plugin} {config} />
     {/if}

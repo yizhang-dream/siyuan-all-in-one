@@ -70,6 +70,7 @@ export function getEndpoints(providerId: string): { chat: string; models: string
         case 'anthropic':
             return { chat: '/v1/messages', models: '/v1/models' };
         case 'glm':
+        case 'zhipu':
             // 智谱 BigModel（标准/直充）：baseUrl 已含 /api/paas/v4，端点直接拼 /chat/completions
             return { chat: '/chat/completions', models: '/models' };
         case 'glm-coding':

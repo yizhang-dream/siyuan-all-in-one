@@ -15,7 +15,7 @@
 | **仓库** | `C:\Users\zyz\ZCodeProject\siyuan-flashcards\` |
 | **部署** | 仅支持 PC 客户端 Electron 环境（Docker/移动端不可用 Pandoc 功能） |
 | **入口** | `src/index.ts` — Plugin.onload() 注册 Tab + TopBar |
-| **构建** | `npm run build` → `dist/index.js` (~4.5MB) + `dist/index.css` (~60KB) |
+| **构建** | `npm run build` → `dist/index.js` (~5.3MB / ~1,644KB gzip) + `dist/index.css` (~83KB / ~11KB gzip) |
 | **部署** | `Copy-Item dist/* → C:\Users\zyz\SiYuan\data\plugins\siyuan-all-in-one\`（需先 Remove-Item 强制覆盖，SiYuan 会锁定文件） |
 
 ---

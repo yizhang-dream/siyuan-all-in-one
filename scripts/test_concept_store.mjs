@@ -65,7 +65,7 @@ const plugin = new MemoryPlugin({
       fromId: '42',
       toId: 'child',
       type: 'parent_child',
-      sourceRefs: [{ type: 'url', url: 'https://example.test', page: '2' }],
+      sourceRefs: [{ type: 'source', sourceId: 'https://example.test', page: 2 }],
     },
   ],
 });
@@ -100,7 +100,7 @@ assert.equal(relations[0].type, 'related');
 assert.equal(relations[0].sourceRefs[0].sourceId, 'source-a');
 assert.equal(relations[0].confidence, 0.81);
 assert.equal(relations[1].type, 'parent_child');
-assert.equal(relations[1].sourceRefs[0].url, 'https://example.test');
+assert.equal(relations[1].sourceRefs[0].sourceId, 'https://example.test');
 assert.equal(relations[1].sourceRefs[0].page, 2);
 
 store.addRelation('42', 'child', 'parent_child', [{ type: 'manual', sourceId: 'new-source' }]);

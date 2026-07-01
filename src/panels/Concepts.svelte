@@ -6,7 +6,6 @@
   import { buildConfirmationOptions, createCandidateSelection, trimSelectionForAcceptedConcepts } from '../libs/ai/selection';
   import { syncConceptMindmap } from '../libs/concept-mindmap-sync';
   import { resolveLLMConfig } from '../libs/llm';
-  import type { NotebookConceptRequest } from '../libs/notebook-bridge';
   import { buildConceptGraph, type ConceptGraphNode } from '../libs/render/concept-graph';
   import { renderToHTML, renderMath } from '../libs/render';
   import { activateSourceRef, formatSourceLabel, formatSourceText, getSourceAction } from '../libs/source-actions';
@@ -20,13 +19,13 @@
   export let openSourceRef: (ref: Partial<SourceRef>) => Promise<boolean> = (ref) => activateSourceRef(ref);
   export let jumpToMindmap: (mindmapId: string) => void = () => {};
   export let mindmapGapTarget: { manualText: string; label: string; key: number } | null = null;
+  export let ragConceptTarget: { key: string; query: string; ragContext: string; sourceLabel?: string; autoRun?: boolean } | null = null;
   export let appStore: any = null;
   export let sourceStore: any = null;
 
   let query = '';
   let refreshKey = 0;
   let sourceText = '';
-  let appliedNotebookTargetKey = '';
   let appliedMindmapGapTargetKey = 0;
   let appliedRagTargetKey = '';
   let targetCardCount = 8;
@@ -83,6 +82,7 @@
   $: if (selectedGraphNodeId && !graphNodeIds.has(selectedGraphNodeId)) selectedGraphNodeId = '';
   $: selectedGraphNode = conceptGraph.nodes.find((node) => node.id === selectedGraphNodeId) || null;
   $: applyMindmapGapTarget(mindmapGapTarget);
+  $: applyRagTarget(ragConceptTarget);
 
   afterUpdate(() => {
     if (candidateReviewEl) renderMath(candidateReviewEl);
@@ -152,14 +152,14 @@
     }
   }
 
-  function applyNotebookTarget(target: NotebookConceptRequest | null) {
-    if (!target || target.key === appliedNotebookTargetKey) return;
-    appliedNotebookTargetKey = target.key;
-    sourceText = target.query || sourceText;
-    status = target.sourceLabel ? `已接收 Notebook 来源：${target.sourceLabel}` : '已接收 Notebook 来源';
+  function applyRagTarget(target: { key: string; query: string; ragContext: string; sourceLabel?: string; autoRun?: boolean } | null) {
+    if (!target || target.key === appliedRagTargetKey) return;
+    appliedRagTargetKey = target.key;
+    sourceText = target.ragContext || target.query;
+    status = target.sourceLabel ? `已接收 RAG 来源：${target.sourceLabel}` : '已接收 RAG 来源';
     if (target.autoRun) {
       setTimeout(() => {
-        if (!isRunning && appliedNotebookTargetKey === target.key) runPipeline();
+        if (!isRunning && appliedRagTargetKey === target.key) runPipeline();
       }, 0);
     }
   }

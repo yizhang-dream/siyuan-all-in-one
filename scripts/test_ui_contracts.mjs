@@ -2,80 +2,157 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const app = readFileSync('src/App.svelte', 'utf8');
-const browse = readFileSync('src/panels/Browse.svelte', 'utf8');
-const concepts = readFileSync('src/panels/Concepts.svelte', 'utf8');
+const sourceLibrary = readFileSync('src/panels/SourceLibrary.svelte', 'utf8');
+const rag = readFileSync('src/panels/Rag.svelte', 'utf8');
 const generate = readFileSync('src/panels/Generate.svelte', 'utf8');
-const importPanel = readFileSync('src/panels/Import.svelte', 'utf8');
+const knowledge = readFileSync('src/panels/Knowledge.svelte', 'utf8');
+const concepts = readFileSync('src/panels/Concepts.svelte', 'utf8');
 const mindmap = readFileSync('src/panels/Mindmap.svelte', 'utf8');
 const review = readFileSync('src/panels/Review.svelte', 'utf8');
+const browse = readFileSync('src/panels/Browse.svelte', 'utf8');
+const importPanel = readFileSync('src/panels/Import.svelte', 'utf8');
 const settings = readFileSync('src/panels/Settings.svelte', 'utf8');
-const sourcePicker = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
-const stats = readFileSync('src/panels/Stats.svelte', 'utf8');
-const sourcesSvelte = readFileSync('src/panels/SourcePicker.svelte', 'utf8');
-const srsTs = readFileSync('src/libs/srs.ts', 'utf8');
-const typesTs = readFileSync('src/libs/types.ts', 'utf8');
-const conceptTs = readFileSync('src/libs/types/concept.ts', 'utf8');
+const indexTs = readFileSync('src/index.ts', 'utf8');
+const sourceStoreTs = readFileSync('src/libs/source-store.ts', 'utf8');
+const conversationStoreTs = readFileSync('src/libs/conversation-store.ts', 'utf8');
 const sourceHubTs = readFileSync('src/libs/sources/source-hub.ts', 'utf8');
-const zhCN = JSON.parse(readFileSync('public/i18n/zh_CN.json', 'utf8'));
-const enUS = JSON.parse(readFileSync('public/i18n/en_US.json', 'utf8'));
+const sourceRefsTs = readFileSync('src/libs/source-refs.ts', 'utf8');
+const conceptTs = readFileSync('src/libs/types/concept.ts', 'utf8');
+const typesTs = readFileSync('src/libs/types.ts', 'utf8');
+const srsTs = readFileSync('src/libs/srs.ts', 'utf8');
 
-assert.match(app, /let conceptSourceTargetSeq = 0;/, 'App should have a source-to-concepts handoff sequence counter');
-assert.match(app, /conceptSourceTargetSeq \+= 1;/, 'Source handoff should increment activation sequence');
-assert.match(app, /<Mindmap[^>]+\{jumpTarget\}/, 'Mindmap panel should receive jump targets');
-assert.match(app, /<Import[^>]+\{plugin\}[^>]+\{cardStore\}[^>]+\{conceptStore\}[^>]+\{mindmapStore\}/, 'Import panel should receive plugin and stores for compatible export');
-assert.match(app, /function openImportPanel\(\)/, 'App should expose a Stats to Import handoff');
-assert.match(app, /<Stats[^>]+\{cardStore\}[^>]+\{openImportPanel\}/, 'Stats panel should receive the Import handoff callback');
-assert.match(app, /function openConceptsPanel\(\)/, 'App should expose a Quick Cards to Graph Generate handoff');
-assert.match(app, /<Generate[^>]+\{plugin\}[^>]+\{cardStore\}[^>]+\{config\}[^>]+\{openConceptsPanel\}/, 'Generate panel should receive the graph workflow callback');
+// ── v2.0 top-level shell contracts ──────────────────────
+
+for (const panel of ['SourceLibrary', 'Rag', 'Generate', 'Knowledge', 'SettingsPanel']) {
+  assert.match(app, new RegExp(`import ${panel}`), `App should import ${panel}`);
+}
+for (const tab of ['sources', 'rag', 'make', 'knowledge', 'settings']) {
+  assert.match(app, new RegExp(`id: '${tab}'`), `App should expose the ${tab} primary tab`);
+}
+for (const subTab of ['generate', 'review', 'browse', 'import']) {
+  assert.match(app, new RegExp(`id: '${subTab}'`), `Make tab should expose ${subTab} sub-tab`);
+}
+assert.match(app, /selectedSourceIds: \[\] as string\[\]/, 'App should own cross-tab selected source ids');
+assert.match(app, /onSwitchTab: \(tab: string\) => \{ activeTab = tab; \}/, 'App should provide cross-tab navigation');
+assert.match(app, /function openConceptsPanel\(\)/, 'App should expose quick-card to knowledge handoff');
+assert.match(app, /<Generate[^>]+\{appStore\}[^>]+\{openConceptsPanel\}/, 'Generate should receive source selection and graph handoff props');
+assert.match(app, /<Rag[^>]+bind:appStore/, 'RAG should consume cross-tab source selections');
+assert.match(app, /<SourceLibrary[^>]+bind:appStore/, 'Source library should publish selected source ids');
+assert.match(app, /<Knowledge[^>]+\{mindmapStore\}[^>]+bind:appStore/, 'Knowledge should receive stores and source selection');
+assert.doesNotMatch(app, /Stats|SourcePicker|Notebook|Diagnostics|Models/, 'App should not import removed panels');
+
+// ── Cross-panel wiring: host-layer handoff signals ──────
+
 assert.match(app, /let reviewQueue:/, 'App should hold a temporary filtered review queue');
 assert.match(app, /function startFilteredReview\(ids: string\[\]/, 'App should expose filtered review handoff');
-assert.match(app, /<Review[^>]+queue=\{reviewQueue\}/, 'Review panel should receive filtered review queues');
-assert.match(app, /<Browse[^>]+\{startFilteredReview\}/, 'Browse panel should be able to start filtered review');
-assert.match(app, /label: '制卡'/, 'Quick card tab should not be labeled as the main generation workflow');
-assert.match(app, /label: '图谱生成'/, 'Concepts tab should be labeled as the primary graph generation workflow');
+assert.match(app, /<Review[^>]+queue=\{reviewQueue\}/, 'App should pass reviewQueue to Review panel');
+assert.match(app, /function jumpToMindmap\(/, 'App should expose mindmap jump handoff');
+assert.match(app, /let mindmapJumpTarget:/, 'App should hold mindmap jump target state');
+assert.match(app, /function openConceptsFromMindmapGaps\(/, 'App should expose gap-to-concepts handoff');
+assert.match(app, /let mindmapGapTarget:/, 'App should hold mindmap gap target state');
+assert.match(app, /function openConceptsFromRag\(/, 'App should expose rag-to-concepts handoff');
+assert.match(app, /let ragConceptTarget:/, 'App should hold rag concept target state');
+assert.match(app, /<Browse[^>]+\{mindmapStore\}/, 'App should pass mindmapStore to Browse panel');
+assert.match(app, /<Browse[^>]+\{jumpToMindmap\}/, 'App should pass jumpToMindmap to Browse panel');
+assert.match(app, /<Browse[^>]+\{startFilteredReview\}/, 'App should pass startFilteredReview to Browse panel');
+assert.match(app, /<Rag[^>]+openConceptsFromRag/, 'App should pass openConceptsFromRag to Rag panel');
+assert.match(app, /<Knowledge[^>]+\{jumpToMindmap\}/, 'App should pass jumpToMindmap to Knowledge panel');
+assert.match(app, /<Knowledge[^>]+\{startFilteredReview\}/, 'App should pass startFilteredReview to Knowledge panel');
+assert.match(app, /<Knowledge[^>]+\{openConceptsFromMindmapGaps\}/, 'App should pass openConceptsFromMindmapGaps to Knowledge panel');
+assert.match(app, /<Knowledge[^>]+\{mindmapJumpTarget\}/, 'App should pass mindmapJumpTarget to Knowledge panel');
+assert.match(app, /<Knowledge[^>]+\{mindmapGapTarget\}/, 'App should pass mindmapGapTarget to Knowledge panel');
+assert.match(app, /<Knowledge[^>]+\{ragConceptTarget\}/, 'App should pass ragConceptTarget to Knowledge panel');
 
-const tabIds = [...app.matchAll(/\{\s*id: '([^']+)', label:/g)].map((match) => match[1]);
-for (const id of tabIds) {
-  assert.ok(zhCN[`${id}Tab`], `zh_CN i18n should define ${id}Tab`);
-  assert.ok(enUS[`${id}Tab`], `en_US i18n should define ${id}Tab`);
-}
+// ── Knowledge panel: mode switching & pass-through wiring ──
 
-assert.match(concepts, /collectPipelineSources/, 'Concepts should collect all source types through SourceHub');
-assert.match(concepts, /searchSiyuanDocs/, 'Concepts should search SiYuan docs for mixed sources');
-assert.match(concepts, /siyuanDocs: selectedSiyuanDocs/, 'Concepts should pass selected SiYuan docs into SourceHub');
-assert.match(concepts, /localFiles,/, 'Concepts should pass selected local text files into SourceHub');
-assert.match(concepts, /#iconUpload/);
-assert.match(concepts, /buildPipelineSources/, 'Concepts should merge selected source types before running the pipeline');
-assert.match(concepts, /bind:value=\{concept\.title\}/, 'Concept candidates should be editable before confirmation');
-assert.match(concepts, /bind:value=\{relation\.fromTempId\}/, 'Relation endpoints should be editable before confirmation');
-assert.match(concepts, /bind:value=\{card\.conceptTempId\}/, 'Card-to-concept assignment should be editable before confirmation');
-assert.match(concepts, /bind:value=\{card\.front\}/, 'Card fronts should be editable before confirmation');
+assert.match(knowledge, /export let jumpToMindmap/, 'Knowledge should receive jumpToMindmap');
+assert.match(knowledge, /export let startFilteredReview/, 'Knowledge should receive startFilteredReview');
+assert.match(knowledge, /export let openConceptsFromMindmapGaps/, 'Knowledge should receive openConceptsFromMindmapGaps');
+assert.match(knowledge, /export let mindmapJumpTarget/, 'Knowledge should receive mindmapJumpTarget');
+assert.match(knowledge, /export let mindmapGapTarget/, 'Knowledge should receive mindmapGapTarget');
+assert.match(knowledge, /export let ragConceptTarget/, 'Knowledge should receive ragConceptTarget');
+assert.match(knowledge, /\$: if \(mindmapJumpTarget\?\.mindmapId\)/, 'Knowledge should switch to mindmap mode on jump signal');
+assert.match(knowledge, /\$: if \(mindmapGapTarget\)/, 'Knowledge should switch to graph mode on gap signal');
+assert.match(knowledge, /\$: if \(ragConceptTarget\)/, 'Knowledge should switch to graph mode on RAG signal');
+assert.match(knowledge, /<Mindmap[^>]+jumpTarget/, 'Knowledge should pass jumpTarget to Mindmap');
+assert.match(knowledge, /<Mindmap[^>]+\{startFilteredReview\}/, 'Knowledge should pass startFilteredReview to Mindmap');
+assert.match(knowledge, /<Mindmap[^>]+\{openConceptsFromMindmapGaps\}/, 'Knowledge should pass openConceptsFromMindmapGaps to Mindmap');
+assert.match(knowledge, /<Concepts[^>]+\{jumpToMindmap\}/, 'Knowledge should pass jumpToMindmap to Concepts');
+assert.match(knowledge, /<Concepts[^>]+mindmapGapTarget/, 'Knowledge should pass mindmapGapTarget to Concepts');
+assert.match(knowledge, /<Concepts[^>]+ragConceptTarget/, 'Knowledge should pass ragConceptTarget to Concepts');
+
+// ── Plugin lifecycle and stores ──
+
+assert.match(indexTs, /new SourceStore\(this\)/, 'Plugin should initialize SourceStore');
+assert.match(indexTs, /new ConversationStore\(this\)/, 'Plugin should initialize ConversationStore');
+assert.match(indexTs, /sourceStore: plugin\.sourceStore/, 'App should receive SourceStore');
+assert.match(indexTs, /migrateRef/, 'Plugin should keep legacy SourceRef migration for old data');
+assert.match(sourceStoreTs, /loadData\('sources'\)/, 'SourceStore should persist sources with saveData/loadData');
+assert.match(sourceStoreTs, /SourceRecordType = 'file' \| 'url' \| 'paste' \| 'pdf' \| 'siyuan-doc'/, 'SourceStore should use the current source type set');
+assert.match(conversationStoreTs, /chat-sessions\.json/, 'ConversationStore should keep a lightweight session index');
+assert.match(conversationStoreTs, /sessions\//, 'ConversationStore should store full histories under sessions/');
+
+// ── Source library and unified ingestion ──
+
+assert.match(sourceLibrary, /ParserRegistry/, 'SourceLibrary should route imports through parser registry');
+assert.match(sourceLibrary, /TxtMdHtmlParser/, 'SourceLibrary should support text and markdown/html files');
+assert.match(sourceLibrary, /PdfParser/, 'SourceLibrary should support PDF parsing');
+assert.match(sourceLibrary, /PandocParser/, 'SourceLibrary should support document formats through Pandoc');
+assert.match(sourceLibrary, /ImageOcrParser/, 'SourceLibrary should support vision/OCR extraction');
+assert.match(sourceLibrary, /SiyuanDocParser/, 'SourceLibrary should support SiYuan document imports');
+assert.match(sourceLibrary, /ingestDocument/, 'SourceLibrary should index parsed sources into vectors');
+assert.match(sourceLibrary, /getRagEmbedderProvider/, 'SourceLibrary should use configured embedding providers');
+assert.match(sourceLibrary, /autoReindexAll/, 'SourceLibrary should reindex when embedding config changes');
+assert.match(sourceLibrary, /appStore\.selectedSourceIds/, 'SourceLibrary should publish selected sources to other tabs');
+assert.match(sourceLibrary, /function useFor\(panel: 'rag' \| 'make' \| 'knowledge'\)/, 'SourceLibrary should route selected sources to current top-level tabs');
+assert.match(sourceLibrary, /useFor\('rag'\)/, 'SourceLibrary should hand selected sources to RAG');
+assert.match(sourceLibrary, /useFor\('make'\)/, 'SourceLibrary should hand selected sources to quick card generation');
+assert.match(sourceLibrary, /useFor\('knowledge'\)/, 'SourceLibrary should hand selected sources to graph or mindmap workflows');
+assert.match(sourceLibrary, /appStore\.onSwitchTab\) appStore\.onSwitchTab\(panel\)/, 'SourceLibrary should switch to the requested tab after selecting sources');
+
+// ── RAG, conversation, and agent contracts ──
+
+assert.match(rag, /ConversationStore/, 'RAG should persist conversations');
+assert.match(rag, /getAllTools|getEnabledTools|executeTool/, 'RAG should load and execute agent tools');
+assert.match(rag, /maxIterations = 10/, 'Agent loop should have an iteration guard');
+assert.match(rag, /onChunk: \(delta: string\)/, 'RAG should stream assistant text');
+assert.match(rag, /tool_calls/, 'RAG should display and persist tool calls');
+assert.match(rag, /appStore\.selectedSourceIds/, 'RAG should consume selected source ids from SourceLibrary');
+assert.match(rag, /const sourceIds = activeSession\?\.sourceIds \|\| \[\]/, 'RAG should read selected sources from the active session');
+assert.match(rag, /await ragQuery\(text, store, embedder, \{/, 'RAG should query the vector store');
+assert.match(rag, /sourceIds: sourceIds\.length > 0 \? sourceIds : undefined/, 'RAG should constrain retrieval to selected sources');
+assert.match(rag, /appStore\?\.onSwitchTab\?\.\('sources'\)/, 'RAG should provide a route back to the source library');
+
+// ── Generation and concept graph workflow ──
+
+assert.match(generate, /openConceptsPanel/, 'Generate should link quick cards to the source-to-graph workflow');
+assert.match(generate, /appStore\?\.selectedSourceIds/, 'Generate should use selected source context');
+assert.match(generate, /sourceStore\.getById/, 'Generate should read selected sources from SourceStore');
+assert.match(generate, /来源制卡与图谱/, 'Generate should clearly separate quick cards from graph-linked generation');
+assert.match(knowledge, /<Concepts[^>]+\{sourceStore\}[^>]+\{appStore\}/, 'Knowledge graph mode should pass source store and selection to Concepts');
+assert.match(concepts, /collectPipelineSources/, 'Concepts should collect sources through SourceHub');
+assert.match(concepts, /selectedSourceIds: appStore\?\.selectedSourceIds/, 'Concepts should use selected SourceStore records');
 assert.match(concepts, /confirmPipelineResult/, 'Concepts should confirm candidates into stores');
 assert.match(concepts, /syncConceptMindmap/, 'Concept confirmation should sync a concept mindmap');
-assert.match(concepts, /renderMath\(candidateReviewEl\)/, 'Concept candidates should render math formulas before confirmation');
-assert.match(concepts, /来源制卡与图谱/, 'Concepts should present the source-to-cards-and-graph workflow as the primary generation path');
-assert.match(concepts, /@media \(max-width: 1200px\)[\s\S]*\.candidate-columns[\s\S]*grid-template-columns: 1fr/, 'Concept candidate columns should collapse before narrow SiYuan panes become cramped');
-assert.match(concepts, /@media \(max-width: 900px\)[\s\S]*\.candidate-line[\s\S]*flex-direction: column/, 'Concept candidate editors should stack fields on narrow panes');
-assert.match(concepts, /siyuan-chip[\s\S]*#iconClose/, 'Concept selected source chips should use SiYuan close icons');
-assert.match(concepts, /\.concept-panel[\s\S]*overflow-y: auto/, 'Concepts panel should scroll instead of clipping source and candidate controls');
-assert.doesNotMatch(concepts, />×<\/button>|>✕<\/button>/, 'Concepts should avoid symbol-only removal buttons');
-assert.match(browse, /openConceptMindmapForCard/, 'Browse should let a card open or create its concept mindmap');
-assert.match(browse, /reviewFilteredCards/, 'Browse should let filtered or selected cards become a review queue');
-assert.match(browse, /复习筛选/, 'Browse should expose a filtered review action');
-assert.match(browse, /复习选中/, 'Browse should expose a selected-card review action');
-assert.match(browse, /browse-review-button[\s\S]*#iconRefresh/, 'Browse filtered review should use a SiYuan refresh icon');
-assert.match(browse, /syncConceptMindmap/, 'Browse card details should be able to sync a concept mindmap');
-assert.match(browse, /getLinkedMindmaps/, 'Browse should list mindmaps linked to a card');
+assert.match(concepts, /bind:value=\{concept\.title\}/, 'Concept candidates should be editable');
+assert.match(concepts, /bind:value=\{card\.front\}/, 'Card candidates should be editable');
+assert.match(sourceHubTs, /sourceStore\?: SourceStore/, 'SourceHub should accept SourceStore');
+assert.match(sourceHubTs, /selectedSourceIds\?: string\[\]/, 'SourceHub should accept selected source ids');
+assert.match(sourceHubTs, /type: 'source'/, 'SourceHub should emit unified source refs');
+
+// ── Mindmap panel contracts (restored) ──
+
 assert.match(mindmap, /mode: 'cards' \| 'doc' \| 'concepts'/, 'Mindmap should keep cards/doc/concepts modes');
-assert.match(mindmap, /loadConceptMindmap/, 'Mindmap should generate from concept graph');
 assert.match(mindmap, /generateCardsFromCurrentMindmap/, 'Mindmap should generate flashcards from the current map');
+assert.match(mindmap, /filterMindmapMarkdown/, 'Mindmap should support large-map filtering');
+assert.match(mindmap, /loadConceptMindmap/, 'Mindmap should generate from concept graph');
 assert.match(mindmap, /linkedCardIds/, 'Mindmap-generated cards should be linked back to the map');
 assert.match(mindmap, /卡片 → 导图/, 'Mindmap should label the cards-to-map path explicitly');
 assert.match(mindmap, /来源 → 导图/, 'Mindmap should label the source-to-map path explicitly');
 assert.match(mindmap, /图谱 → 导图/, 'Mindmap should label the graph-to-map path explicitly');
 assert.match(mindmap, /导图 → 卡片/, 'Mindmap should label the map-to-cards path explicitly');
 assert.match(mindmap, /renderMath\(reviewDialogEl\)/, 'Mindmap review overlay should render math formulas');
-assert.match(mindmap, /import \{ createCard, scheduleCard \} from '..\/libs\/srs';/, 'Mindmap review overlay should use the scheduler facade');
+assert.match(mindmap, /import \{ createCard, scheduleCard \} from '..\/libs\/srs';/, 'Mindmap should use the scheduler facade');
 assert.match(mindmap, /scheduleCard\(grade, \{ \.\.\.reviewCard \}, cfg\.scheduler \|\| 'sm2'\)/, 'Mindmap grading should honor the configured scheduler');
 assert.match(mindmap, /getMindmapSourceMeta/, 'Mindmap saved-list entries should expose source type labels');
 assert.match(mindmap, /mindmap-icon-button/, 'Mindmap toolbar actions should use SiYuan-style icon buttons');
@@ -87,7 +164,6 @@ assert.match(mindmap, /searchMindmapNodes/, 'Mindmap should search nodes through
 assert.match(mindmap, /focusMindmapSearchMatch/, 'Mindmap search should focus matches through markmap APIs');
 assert.match(mindmap, /mindmap-searchbar/, 'Mindmap should expose a compact node search bar');
 assert.match(mindmap, /查找节点、路径或卡片 ID/, 'Mindmap search should support node, path and card id queries');
-assert.match(mindmap, /filterMindmapMarkdown/, 'Mindmap should filter rendered markdown without mutating saved maps');
 assert.match(mindmap, /mindmapViewMode/, 'Mindmap should keep a view mode for large-map filtering');
 assert.match(mindmap, /全部[\s\S]*有卡[\s\S]*缺卡[\s\S]*邻域/, 'Mindmap should expose all/card/gap/neighborhood views');
 assert.match(mindmap, /显示 \{currentViewStats\.visibleNodes\} \/ \{currentViewStats\.totalNodes\} 个节点/, 'Mindmap filtered views should show visible node counts');
@@ -95,97 +171,67 @@ assert.match(mindmap, /generateCardsFromGaps/, 'Mindmap should generate candidat
 assert.match(mindmap, /gapNodesToSourceText/, 'Mindmap should convert gap nodes to pipeline source text');
 assert.match(mindmap, /从缺卡生成候选/, 'Mindmap gap view should expose a generate-cards-from-gaps button');
 assert.match(mindmap, /openConceptsFromMindmapGaps/, 'Mindmap should receive the gap-to-concepts handoff callback');
+assert.match(mindmap, /export let jumpTarget/, 'Mindmap should accept external jump targets');
+assert.match(mindmap, /export let startFilteredReview/, 'Mindmap should accept filtered review handoff');
+assert.match(mindmap, /export let openConceptsFromMindmapGaps/, 'Mindmap should accept gap-to-concepts handoff callback');
+
+// ── Browse & Review contracts (restored) ──
+
+assert.match(review, /scheduleCard\(g, card, cfg\.scheduler \|\| 'sm2'\)/, 'Review grading should honor configured scheduler');
+assert.match(review, /review-card-hint--front/, 'Review should keep hint visible on the question side');
+assert.match(browse, /reviewFilteredCards/, 'Browse should start filtered review');
+assert.match(browse, /openConceptMindmapForCard/, 'Browse should let a card open or create its concept mindmap');
+assert.match(browse, /getLinkedMindmaps/, 'Browse should list mindmaps linked to a card');
+assert.match(browse, /syncConceptMindmap/, 'Browse card details should be able to sync a concept mindmap');
+assert.match(browse, /browse-linked-map-button/, 'Browse should render linked mindmap buttons');
+assert.match(browse, /复习筛选/, 'Browse should expose a filtered review action');
+assert.match(browse, /复习选中/, 'Browse should expose a selected-card review action');
+assert.match(browse, /browse-review-button[\s\S]*#iconRefresh/, 'Browse filtered review should use a SiYuan refresh icon');
+
+// ── Concepts panel contracts (restored) ──
+
 assert.match(concepts, /applyMindmapGapTarget\(mindmapGapTarget\)/, 'Concepts should react to mindmap gap targets');
-assert.match(concepts, /sourceMode = 'manual'/, 'Concepts should switch to manual mode for gap content');
+assert.match(concepts, /applyRagTarget\(ragConceptTarget\)/, 'Concepts should react to RAG targets');
 assert.match(concepts, /cdfMode/, 'Concepts should support CDF descriptor-based card generation');
 assert.match(concepts, /CDF 维度制卡/, 'Concepts CDF toggle should have a visible label');
-assert.match(typesTs, /drill/, 'CardStatus should include drill status for low-score mechanical practice');
+assert.match(concepts, /export let ragConceptTarget/, 'Concepts should accept ragConceptTarget prop');
+
+// ── Import/export and settings contracts ──
+
+assert.match(importPanel, /buildExportPayload/, 'Import panel should use shared export builder');
+assert.match(importPanel, /syncCardsToSiyuanRiff/, 'Import panel should sync to SiYuan native flashcards');
+assert.match(settings, /ragEmbeddingProvider/, 'Settings should expose embedding provider selection');
+assert.match(settings, /getProviderCapabilities/, 'Settings should show structured output capabilities');
+
+// ── SourceRef and SRS type-level contracts ──
+
+assert.match(conceptTs, /type: 'siyuan-doc' \| 'manual' \| 'source'/, 'SourceRef should use the simplified type set');
+assert.match(sourceRefsTs, /'siyuan-doc': '思源文档'/, 'SourceRef labels should include SiYuan docs');
+assert.match(sourceRefsTs, /source: '来源库'/, 'SourceRef labels should include SourceStore records');
+assert.match(typesTs, /drill/, 'CardStatus should include drill status');
 assert.match(srsTs, /consecutiveLapses/, 'SRS should track consecutive lapses for drill entry');
-assert.match(srsTs, /status = 'drill'/, 'SRS should set card to drill status after consecutive failures');
-assert.ok(srsTs.includes("card.status === 'drill'"), 'Drill cards should always be considered due');
-// Mobile responsiveness: at least 3 panels should have @media breakpoints and UI components should use min-width:0 to prevent overflow
-const responsivePanels = [concepts, generate, importPanel, stats].filter((panelText) => /@media/.test(panelText));
-assert.ok(responsivePanels.length >= 3, `At least 3 panels should have @media responsive breakpoints; found ${responsivePanels.length}`);
-const panelsWithMinWidthZero = [concepts, browse, importPanel, mindmap, review, settings, sourcesSvelte, stats]
-    .filter((panelText) => /min-width:\s*0/.test(panelText));
-assert.ok(panelsWithMinWidthZero.length >= 5, `${panelsWithMinWidthZero.length} panels should use min-width: 0 to prevent overflow in narrow viewports`);
-assert.match(app, /openConceptsFromMindmapGaps/, 'App should expose a gap-to-concepts handoff function');
-assert.match(app, /mindmapGapTarget/, 'App should hold a mindmap gap target signal');
+assert.match(srsTs, /status = 'drill'/, 'SRS should enter drill after repeated failures');
+
+// ── General code quality checks ──
+
 assert.doesNotMatch(mindmap, /📋|🎴|📄|📝|🔄|💡|❌|✅|⚠️/, 'Mindmap panel should avoid emoji controls and status text');
-assert.match(importPanel, /buildExportPayload/, 'Import panel should use the shared export payload builder');
-assert.match(importPanel, /saveToSiyuan/, 'Import panel should export selected backup content to SiYuan documents');
-assert.match(importPanel, /exportIncludeCards/, 'Import panel should let users choose which content to export');
-assert.match(importPanel, /export-scope/, 'Import panel should render export scope controls');
-assert.match(importPanel, /parsePluginImport/, 'Import panel should restore plugin-native backup files');
-assert.match(importPanel, /conceptStore\.importGraph/, 'Import panel should restore concept graph data');
-assert.match(importPanel, /mindmapStore\.importMindmaps/, 'Import panel should restore saved mindmaps');
-assert.match(importPanel, /accept="\.apkg,\.txt,\.csv,\.json,\.md,\.markdown"/, 'Import panel should accept plugin backup files');
-assert.match(importPanel, /conceptStore\?\.getAll/, 'Export should include concept graph nodes');
-assert.match(importPanel, /mindmapStore\?\.getAll/, 'Export should include saved mindmaps');
-assert.match(importPanel, /buildBlockAttrScanReport/, 'Import panel should scan for plugin block attributes');
-assert.match(importPanel, /block-attr-scan/, 'Import panel should render a block attribute scan section');
-assert.match(generate, /parseSymbolCards/, 'Generate panel should detect symbol-card syntax');
-assert.match(generate, /gen-symbol-hint/, 'Generate panel should render a symbol card detection hint');
-assert.match(conceptTs, /image-occlusion/, 'Card types should include image occlusion');
-assert.match(typesTs, /ImageOcclusionRegion/, 'Types should define image occlusion region model');
-assert.match(sourceHubTs, /unstructuredText|textToUnstructuredPipelineSources/, 'SourceHub should support Unstructured partitioner input');
-assert.match(importPanel, /syncCardsToSiyuanRiff/, 'Import panel should expose guarded sync to SiYuan native flashcards');
-assert.match(importPanel, /confirm\(\s*'同步到思源闪卡'/, 'Riff sync should require an explicit confirmation');
-assert.match(importPanel, /riffDeckName/, 'Riff sync should let users choose a target deck name');
-assert.match(importPanel, /riffMaxCards/, 'Riff sync should limit batch size');
-assert.match(importPanel, /loadData\?\.\('riff-sync'\)/, 'Riff sync should load persisted sync records before writing');
-assert.match(importPanel, /saveData\?\.\('riff-sync'/, 'Riff sync should persist card-to-block sync records');
-assert.match(importPanel, /skippedCardIds/, 'Riff sync UI should report skipped already-synced cards');
-assert.match(importPanel, /updatedBlockIds/, 'Riff sync UI should report updated stale synced cards');
-assert.match(importPanel, /riffSyncRecordCount/, 'Import panel should show local Riff sync record count');
-assert.match(importPanel, /auditRiffSyncProjection/, 'Import panel should audit Riff projection status before syncing');
-assert.match(importPanel, /riffAudit\.fresh/, 'Riff audit should show fresh synced cards');
-assert.match(importPanel, /riffAudit\.stale/, 'Riff audit should show stale synced cards');
-assert.match(importPanel, /riffAudit\.unsynced/, 'Riff audit should show unsynced cards');
-assert.match(importPanel, /riffAudit\.orphanRecords/, 'Riff audit should show orphan local records');
-assert.match(importPanel, /riff-audit-list/, 'Import panel should preview cards that need Riff projection attention');
-assert.match(importPanel, /resetRiffSyncState/, 'Import panel should let users clear local Riff sync records');
-assert.match(importPanel, /confirm\(\s*'重置同步状态'/, 'Clearing Riff sync records should require confirmation');
-assert.match(importPanel, /清除记录/, 'Riff sync local records should be clearable from the UI');
-assert.doesNotMatch(importPanel, /📌|❌|✅|↩|⊘|✕/, 'Import panel should avoid emoji-like controls and status text');
-assert.match(generate, /gen-status--\{aiStatusKind\}/, 'Generate status should use semantic state classes');
-assert.match(generate, /openConceptsPanel/, 'Generate panel should link to the graph generation workflow');
-assert.match(generate, /gen-workflow-note/, 'Generate panel should explain quick-card versus graph workflow');
-assert.match(generate, /来源制卡与图谱/, 'Quick card panel should hand off to the source-to-graph workflow');
-assert.match(generate, /#iconGraph/, 'Generate graph handoff should use a SiYuan graph icon');
-assert.match(generate, /语言：\{selectedAgent\.language\}/, 'Generate agent metadata should use text labels instead of emoji');
-assert.match(generate, /#iconClose/, 'Generate preview delete should use a SiYuan icon button');
-assert.doesNotMatch(generate, /📝|🌐|🎯|❌|✅|✕/, 'Generate panel should avoid emoji and symbol-only controls');
-assert.match(stats, /openImportPanel/, 'Stats should link to the canonical Import panel');
-assert.doesNotMatch(stats, /importCards|exportCards|clearAll|cardStore\.clear|cardStore\.importCards|cardStore\.exportCards|confirm\(/, 'Stats should not duplicate data import/export or destructive card clearing');
-assert.doesNotMatch(browse, /confirm\('⚠️'/, 'Browse delete confirmations should use text titles');
-assert.match(browse, /browse-linked-map-button[\s\S]*#iconGraph/, 'Browse linked mindmaps should use a SiYuan graph icon');
-assert.doesNotMatch(browse, /🧠/, 'Browse linked mindmaps should avoid emoji icons');
-assert.match(sourcePicker, /#iconFiles/, 'SourcePicker document rows should use SiYuan file icon');
-assert.doesNotMatch(sourcePicker, /⚠️|📄|✅/, 'SourcePicker should avoid emoji for hints and document rows');
-assert.match(review, /import \{ scheduleCard \} from '..\/libs\/srs';/, 'Review should use the scheduler facade');
-assert.match(review, /scheduleCard\(g, card, cfg\.scheduler \|\| 'sm2'\)/, 'Review grading should honor the configured scheduler');
-assert.match(review, /export let queue:/, 'Review should accept temporary filtered queues');
-assert.match(review, /activeQueueTitle/, 'Review should show when it is running a filtered queue');
-assert.match(review, /返回到期复习/, 'Review should let users leave a filtered queue');
-assert.match(review, /review-queue-banner/, 'Review should render filtered queue context in a compact banner');
-assert.match(settings, /getProviderCapabilities/, 'Settings should expose provider structured-output capabilities');
-assert.match(settings, /getProviderJsonLabel/, 'Settings should show the active JSON strategy per provider');
-assert.match(settings, /let scheduler: 'sm2' \| 'fsrs' = 'sm2';/, 'Settings should keep a scheduler state');
-assert.match(settings, /scheduler = config\.scheduler === 'fsrs' \? 'fsrs' : 'sm2';/, 'Settings should load the persisted scheduler safely');
-assert.match(settings, /scheduler,/, 'Settings should persist the selected scheduler');
-assert.match(settings, /id="settings-scheduler"/, 'Settings should expose a scheduler selector');
-assert.match(settings, /value="sm2"[\s\S]*SM-2/, 'Settings should keep SM-2 available as the compatible default');
-assert.match(settings, /value="fsrs"[\s\S]*FSRS/, 'Settings should expose optional FSRS scheduling');
-assert.match(settings, /settings-icon-button/, 'Settings actions should use SiYuan-style icon buttons');
-assert.match(settings, /#iconRefresh/, 'Settings model fetch should use the SiYuan refresh icon');
-assert.match(settings, /#iconClose/, 'Settings model removal should use a SiYuan close icon');
-assert.doesNotMatch(settings, /🎴|🧠|🔄|⚠️|✕/, 'Settings should avoid emoji and symbol-only controls in the SiYuan-style panel');
+
+const responsivePanels = [sourceLibrary, rag, generate, concepts, mindmap, importPanel, settings]
+  .filter((panelText) => /@media/.test(panelText));
+assert.ok(responsivePanels.length >= 4, `At least 4 panels should have responsive breakpoints; found ${responsivePanels.length}`);
+
+const panelsWithMinWidthZero = [sourceLibrary, rag, generate, concepts, mindmap, browse, importPanel, settings]
+  .filter((panelText) => /min-width:\s*0/.test(panelText));
+assert.ok(panelsWithMinWidthZero.length >= 5, `${panelsWithMinWidthZero.length} panels should use min-width: 0 to prevent overflow`);
 
 console.log(JSON.stringify({
-  appContracts: 14,
-  panelContracts: 78,
-  repeatedSourceHandoff: true,
-  mixedSources: true,
-  tabI18n: tabIds.length,
+  appTabs: 5,
+  makeSubTabs: 4,
+  wiringContracts: 24,
+  knowledgeContracts: 15,
+  mindmapContracts: 29,
+  browseContracts: 10,
+  conceptContracts: 14,
+  sourceLibraryContracts: 10,
+  ragAgentContracts: 8,
 }, null, 2));

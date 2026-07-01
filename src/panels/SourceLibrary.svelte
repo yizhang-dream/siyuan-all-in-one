@@ -680,7 +680,7 @@
 
   // ── 底部操作 ────────────────────────────────────────
 
-  function useFor(panel: 'rag' | 'generate' | 'concepts') {
+  function useFor(panel: 'rag' | 'make' | 'knowledge') {
     if (selectedIds.length === 0) { showMessage('请先选择来源'); return; }
 
     // Filter out errored items — they can't be used
@@ -908,11 +908,11 @@
       <button class="b3-button b3-button--small" on:click={() => useFor('rag')} disabled={selectedIds.length === 0}>
         用于 RAG 对话
       </button>
-      <button class="b3-button b3-button--small" on:click={() => useFor('generate')} disabled={selectedIds.length === 0}>
+      <button class="b3-button b3-button--small" on:click={() => useFor('make')} disabled={selectedIds.length === 0}>
         用于制卡
       </button>
-      <button class="b3-button b3-button--small" on:click={() => useFor('concepts')} disabled={selectedIds.length === 0}>
-        用于导图
+      <button class="b3-button b3-button--small" on:click={() => useFor('knowledge')} disabled={selectedIds.length === 0}>
+        用于图谱/导图
       </button>
     </div>
   </div>

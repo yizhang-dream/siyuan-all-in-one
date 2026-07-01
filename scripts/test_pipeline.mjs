@@ -283,7 +283,7 @@ const wrappedTextOutput = await runPromptPipeline(
         return '[]';
       }
       return {
-        content: '{"cards":[{"conceptTempId":"rag","cardType":"basic","front":"What does RAG ground answers in?","back":"Retrieved source chunks.","confidence":0.9,"sourceRefs":["chunk-1"]}]}',
+        content: '{"cards":[{"conceptTempId":"rag","cardType":"basic","front":"What does RAG ground answers in?","back":"Retrieved source chunks.","confidence":0.9,"sourceRefs":["wrapped-source"]}]}',
       };
     },
   }
@@ -294,7 +294,7 @@ assert.equal(wrappedTextOutput.concepts[0].tempId, 'rag');
 assert.equal(wrappedTextOutput.relations.length, 0);
 assert.equal(wrappedTextOutput.cards.length, 1);
 assert.equal(wrappedTextOutput.cards[0].cardType, 'qa');
-assert.equal(wrappedTextOutput.cards[0].sourceRefs[0].chunkId, 'chunk-1');
+assert.equal(wrappedTextOutput.cards[0].sourceRefs[0].sourceId, 'wrapped-source');
 
 const arrayContentOutput = await runPromptPipeline(
   [

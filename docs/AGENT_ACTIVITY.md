@@ -124,7 +124,7 @@
 
 ## 八、当前状态
 
-- source/dist: ~4,455 KB JS + ~60 KB CSS (gzip: ~1,346 KB + ~8 KB)
+- source/dist: ~5,346 KB JS + ~83 KB CSS (gzip: ~1,644 KB + ~11 KB)
 - tsc --noEmit: 0 errors
 - npm test: 部分通过（test:source-refs 因 SourceRef 类型迁移后测试 fixture 未更新而失败，见下方已知问题）
 - 部署路径: `C:\Users\zyz\SiYuan\data\plugins\siyuan-all-in-one\`
